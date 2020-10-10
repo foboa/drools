@@ -15,27 +15,27 @@
 
 package org.drools.compiler.kie.builder.impl;
 
-import org.drools.compiler.compiler.io.memory.MemoryFileSystem;
-import org.drools.compiler.kproject.models.KieModuleModelImpl;
-import org.drools.core.util.IoUtils;
-import org.kie.api.builder.ReleaseId;
-import org.kie.api.builder.KieFileSystem;
-import org.kie.api.io.ResourceType;
-import org.kie.internal.io.ResourceTypeImpl;
-import org.kie.api.io.Resource;
-import org.kie.api.io.ResourceConfiguration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.io.UncheckedIOException;
 import java.util.Properties;
 
-import static org.drools.core.util.IoUtils.readBytesFromInputStream;
+import org.drools.compiler.compiler.io.memory.MemoryFileSystem;
+import org.drools.compiler.kproject.models.KieModuleModelImpl;
+import org.drools.core.io.internal.InternalResource;
+import org.drools.core.util.IoUtils;
+import org.kie.api.builder.KieFileSystem;
+import org.kie.api.builder.ReleaseId;
+import org.kie.api.io.Resource;
+import org.kie.api.io.ResourceConfiguration;
+import org.kie.api.io.ResourceType;
+import org.kie.internal.io.ResourceTypeImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.drools.compiler.kie.builder.impl.KieBuilderImpl.JAVA_ROOT;
 import static org.drools.compiler.kie.builder.impl.KieBuilderImpl.RESOURCES_ROOT;
@@ -57,24 +57,18 @@ public class KieFileSystemImpl
         this.mfs = mfs;
     }
 
-    public KieFileSystem write(String path,
-                               byte[] content) {
+    public KieFileSystem write(String path, byte[] content) {
         mfs.write( path, content, true );
         return this;
     }
 
-    public KieFileSystem write(String path,
-                               String text) {
+    public KieFileSystem write(String path, String text) {
         return write( path, text.getBytes( IoUtils.UTF8_CHARSET ) );
     }
 
-    public KieFileSystem write(String path,
-                               Resource resource) {
-        try {
-            return write( path, readBytesFromInputStream(resource.getInputStream()) );
-        } catch (IOException e) {
-            throw new RuntimeException("Unable to write Resource: " + resource.toString(), e);
-        }
+    public KieFileSystem write(String path, Resource resource) {
+        mfs.write( path, resource );
+        return this;
     }
 
     public KieFileSystem write(Resource resource) {
@@ -82,20 +76,26 @@ public class KieFileSystemImpl
             String target = resource.getTargetPath() != null ? resource.getTargetPath() : resource.getSourcePath();
             if( target != null ) {
                 String prefix = resource.getResourceType() == ResourceType.JAVA ? JAVA_ROOT : RESOURCES_ROOT;
-                write( prefix + target, readBytesFromInputStream(resource.getInputStream()) );
+                int prefixPos = target.indexOf( prefix );
+                String path = prefixPos >= 0 ? target.substring( prefixPos ) : prefix + target;
+                if (resource.getResourceType() == ResourceType.XSD) {
+                    write( path, (( InternalResource ) resource).getBytes() );
+                } else {
+                    write( path, resource );
+                }
                 ResourceConfiguration conf = resource.getConfiguration();
                 if( conf != null ) {
                     Properties prop = ResourceTypeImpl.toProperties(conf);
                     ByteArrayOutputStream buff = new ByteArrayOutputStream();
                     prop.store( buff, "Configuration properties for resource: " + target );
-                    write( prefix + target + ".properties", buff.toByteArray() );
+                    write( path + ".properties", buff.toByteArray() );
                 }
                 return this;
             } else {
                 throw new RuntimeException( "Resource does not have neither a source nor a target path. Impossible to add it to the bundle. Please set either the source or target name of the resource before adding it." + resource.toString());
             }
         } catch (IOException e) {
-            throw new RuntimeException("Unable to write Resource: " + resource.toString(), e);
+            throw new UncheckedIOException("Unable to write Resource: " + resource.toString(), e);
         }
     }
 
@@ -145,14 +145,9 @@ public class KieFileSystemImpl
     public KieFileSystem clone() {
         try {
             final ByteArrayOutputStream byteArray = writeToByteArray( this );
-            final KieFileSystem kieFileSystem = readFromByteArray( byteArray );
-
-            return kieFileSystem;
-        } catch ( IOException ioe ) {
+            return readFromByteArray( byteArray );
+        } catch ( IOException | ClassNotFoundException ioe ) {
             logger.warn( "Unable to clone KieFileSystemImpl", ioe );
-            return null;
-        } catch ( ClassNotFoundException cnfe ) {
-            logger.warn( "Unable to clone KieFileSystemImpl", cnfe );
             return null;
         }
     }

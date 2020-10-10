@@ -20,7 +20,6 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -33,8 +32,8 @@ import java.util.Set;
 
 import org.drools.core.base.ClassObjectType;
 import org.drools.core.factmodel.AnnotationDefinition;
-import org.drools.core.reteoo.NodeTypeEnums;
-import org.drools.core.rule.constraint.MvelConstraint;
+import org.drools.core.impl.InternalKnowledgeBase;
+import org.drools.core.reteoo.PropertySpecificUtil;
 import org.drools.core.rule.constraint.XpathConstraint;
 import org.drools.core.spi.AcceptsClassObjectType;
 import org.drools.core.spi.Constraint;
@@ -44,11 +43,14 @@ import org.drools.core.spi.ObjectType;
 import org.drools.core.spi.PatternExtractor;
 import org.drools.core.spi.SelfDateExtractor;
 import org.drools.core.spi.SelfNumberExtractor;
+import org.drools.core.util.bitmask.BitMask;
 
-import static org.drools.core.util.ClassUtils.convertFromPrimitiveType;
-import static org.drools.core.util.ClassUtils.isIterable;
-import static org.drools.core.util.ClassUtils.isFinal;
-import static org.drools.core.util.ClassUtils.isInterface;;
+import static org.drools.core.reteoo.PropertySpecificUtil.calculateNegativeMask;
+import static org.drools.core.reteoo.PropertySpecificUtil.calculatePositiveMask;
+import static org.drools.reflective.util.ClassUtils.convertFromPrimitiveType;
+import static org.drools.reflective.util.ClassUtils.isFinal;
+import static org.drools.reflective.util.ClassUtils.isInterface;
+import static org.kie.internal.ruleunit.RuleUnitUtil.isDataSource;
 
 public class Pattern
     implements
@@ -77,6 +79,9 @@ public class Pattern
     private boolean           passive;
     
     private XpathConstraint xPath;
+
+    private BitMask positiveWatchMask;
+    private BitMask negativeWatchMask;
 
     public Pattern() {
         this(0,
@@ -221,7 +226,7 @@ public class Pattern
         if ( this.getSource() != null ) {
             clone.setSource( (PatternSource) this.getSource().clone() );
             if ( source instanceof From ) {
-                ((From)clone.getSource()).setResultPattern( this );
+                ((From)clone.getSource()).setResultPattern( clone );
             }
         }
 
@@ -282,7 +287,7 @@ public class Pattern
     }
 
     public List<Constraint> getConstraints() {
-        return Collections.unmodifiableList( this.constraints );
+        return this.constraints;
     }
 
     public void addConstraint(int index, Constraint constraint) {
@@ -325,25 +330,6 @@ public class Pattern
         this.constraints.remove(constraint);
     }
 
-    public List<MvelConstraint> getCombinableConstraints() {
-        if (constraints.size() < 2) {
-            return null;
-        }
-        List<MvelConstraint> combinableConstraints = new ArrayList<MvelConstraint>();
-        for (Constraint constraint : constraints) {
-            if (constraint instanceof MvelConstraint &&
-                    !((MvelConstraint)constraint).isUnification() && !((MvelConstraint)constraint).isDynamic() &&
-            // at the moment it is not possible to determine the exact type of node which this
-                    // constraint belongs to so use ExistsNode being the less restrictive in terms of index usage
-                    !((MvelConstraint)constraint).isIndexable(NodeTypeEnums.ExistsNode) &&
-                    // don't combine alpha nodes to allow nodes sharing
-                    constraint.getType() == ConstraintType.BETA) {
-                combinableConstraints.add((MvelConstraint)constraint);
-            }
-        }
-        return combinableConstraints;
-    }
-    
     public boolean hasXPath() {
         return xPath != null;
     }
@@ -373,6 +359,10 @@ public class Pattern
             this.declarations = new HashMap<String, Declaration>();
         }        
         this.declarations.put( decl.getIdentifier(), decl );
+    }
+
+    public void resetDeclarations() {
+        this.declarations = Collections.EMPTY_MAP;
     }
 
     public boolean isBound() {
@@ -414,7 +404,7 @@ public class Pattern
     }
 
     public Declaration resolveDeclaration(final String identifier) {
-        return this.declarations.get( identifier );
+        return backRefDeclarations != null ? backRefDeclarations.getDeclarationMap().get( identifier ) : this.declarations.get( identifier );
     }
 
     public String toString() {
@@ -529,6 +519,36 @@ public class Pattern
         this.listenedProperties = listenedProperties;
     }
 
+    public List<String> getAccessibleProperties(InternalKnowledgeBase kBase) {
+        return PropertySpecificUtil.getAccessibleProperties( kBase, getClassType() );
+    }
+
+    public BitMask getPositiveWatchMask( List<String> accessibleProperties ) {
+        if (positiveWatchMask == null) {
+            positiveWatchMask = calculatePositiveMask( getClassType(), listenedProperties, accessibleProperties );
+        }
+        return positiveWatchMask;
+    }
+
+    public void setPositiveWatchMask( BitMask positiveWatchMask ) {
+        this.positiveWatchMask = positiveWatchMask;
+    }
+
+    public BitMask getNegativeWatchMask( List<String> accessibleProperties ) {
+        if (negativeWatchMask == null) {
+            negativeWatchMask = calculateNegativeMask(getClassType(), listenedProperties, accessibleProperties);
+        }
+        return negativeWatchMask;
+    }
+
+    public void setNegativeWatchMask( BitMask negativeWatchMask ) {
+        this.negativeWatchMask = negativeWatchMask;
+    }
+
+    private Class<?> getClassType() {
+        return (( ClassObjectType ) objectType).getClassType();
+    }
+
     public Map<String, AnnotationDefinition> getAnnotations() {
         if ( annotations == null ) {
             annotations = new HashMap<String, AnnotationDefinition>();
@@ -549,18 +569,35 @@ public class Pattern
     }
 
     public boolean isCompatibleWithAccumulateReturnType( Class<?> returnType ) {
-        return returnType == null ||
-               returnType == Object.class ||
-               ( returnType == Comparable.class && objectType instanceof ClassObjectType && Number.class.isAssignableFrom( ((ClassObjectType)objectType).getClassType() ) ) ||
-               objectType.isAssignableFrom( convertFromPrimitiveType(returnType) );
+        return isCompatibleWithAccumulateReturnType( getPatternType(), returnType );
     }
 
     public boolean isCompatibleWithFromReturnType( Class<?> returnType ) {
-        return isCompatibleWithAccumulateReturnType( returnType ) ||
-               isIterable( returnType ) ||
-               ( objectType instanceof ClassObjectType && 
-                       ( returnType.isAssignableFrom( ((ClassObjectType)objectType).getClassType()) || 
-                         ( !isFinal( returnType ) && isInterface(((ClassObjectType)objectType).getClassType()))   
-                         ) );
+        return isCompatibleWithFromReturnType( getPatternType(), returnType );
+    }
+
+    public static boolean isCompatibleWithAccumulateReturnType( Class<?> patternType, Class<?> returnType ) {
+        return returnType == null ||
+                returnType == Object.class ||
+                ( returnType == Number.class && patternType != null && Number.class.isAssignableFrom( patternType ) ||
+                        (patternType != null && patternType.isAssignableFrom( convertFromPrimitiveType(returnType) )) );
+    }
+
+    public static boolean isCompatibleWithFromReturnType( Class<?> patternType, Class<?> returnType ) {
+        return isCompatibleWithAccumulateReturnType( patternType, returnType ) ||
+                isIterable( returnType ) ||
+                isDataSource( returnType ) ||
+                ( patternType != null &&
+                        ( returnType.isAssignableFrom( patternType ) ||
+                                ( !isFinal( returnType ) && isInterface(patternType))
+                        ) );
+    }
+
+    private Class<?> getPatternType() {
+        return objectType instanceof ClassObjectType ? ((ClassObjectType)objectType).getClassType() : null;
+    }
+
+    private static boolean isIterable(Class<?> clazz) {
+        return Iterable.class.isAssignableFrom( clazz ) || clazz.isArray();
     }
 }

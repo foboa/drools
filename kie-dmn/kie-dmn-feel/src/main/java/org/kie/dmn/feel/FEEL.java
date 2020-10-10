@@ -46,12 +46,30 @@ public interface FEEL {
     }
 
     /**
+     * Factory method to create a new FEEL engine instance, using the specified classloader.
+     *
+     * @return a newly instantiated FEEL engine instance
+     */
+    static FEEL newInstance(ClassLoader cl) {
+        return new FEELImpl(cl);
+    }
+
+    /**
      * Factory method to create a new FEEL engine instance using custom FEELProfile(s)
      *
      * @return a newly instantiated FEEL engine instance
      */
     static FEEL newInstance(List<FEELProfile> profiles) {
         return new FEELImpl(profiles);
+    }
+
+    /**
+     * Factory method to create a new FEEL engine instance using custom FEELProfile(s), using the specified classloader.
+     *
+     * @return a newly instantiated FEEL engine instance
+     */
+    static FEEL newInstance(ClassLoader cl, List<FEELProfile> profiles) {
+        return new FEELImpl(cl, profiles);
     }
 
     /**
@@ -70,6 +88,16 @@ public interface FEEL {
      * @return the compiled expression
      */
     CompiledExpression compile(String expression, CompilerContext ctx);
+
+    /**
+     * Compiles the string expression using the given
+     * compiler context.
+     *
+     * @param expression a FEEL expression for unary tests
+     * @param ctx a compiler context
+     * @return the compiled unary tests
+     */
+    CompiledExpression compileUnaryTests(String expression, CompilerContext ctx);
 
     /**
      * Evaluates the given FEEL expression and returns

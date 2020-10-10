@@ -46,7 +46,11 @@ public interface Tuple extends Serializable, Entry<Tuple> {
 
     Object getObject(Declaration declaration);
 
-    Object[] toObjects();
+    default Object[] toObjects() {
+        return toObjects(false);
+    }
+
+    Object[] toObjects(boolean reverse);
 
     /**
      * Returns the <code>FactHandle</code> for the given pattern index. If the pattern is empty
@@ -110,6 +114,10 @@ public interface Tuple extends Serializable, Entry<Tuple> {
     short getStagedType();
     void setStagedType(short stagedType);
 
+    default boolean isDeleted() {
+        return getStagedType() == DELETE || getStagedType() == NORMALIZED_DELETE;
+    }
+
     Tuple getStagedPrevious();
     void setStagedPrevious( Tuple stagePrevious );
 
@@ -157,5 +165,4 @@ public interface Tuple extends Serializable, Entry<Tuple> {
     <N extends NetworkNode> N getTupleSource();
 
     boolean isExpired();
-    void setExpired( boolean expired );
 }

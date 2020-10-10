@@ -16,21 +16,30 @@
 
 package org.kie.dmn.core.impl;
 
-import org.kie.dmn.api.core.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.kie.dmn.api.core.DMNContext;
+import org.kie.dmn.api.core.DMNDecisionResult;
+import org.kie.dmn.api.core.DMNMessage;
+import org.kie.dmn.api.core.DMNMessageType;
+import org.kie.dmn.api.core.DMNModel;
+import org.kie.dmn.api.core.DMNResult;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 import org.kie.dmn.core.api.DMNMessageManager;
 import org.kie.dmn.core.util.DefaultDMNMessagesManager;
-import org.kie.dmn.model.v1_1.DMNElement;
-import org.kie.dmn.model.v1_1.DMNModelInstrumentedBase;
-
-import java.util.*;
+import org.kie.dmn.model.api.DMNModelInstrumentedBase;
 
 public class DMNResultImpl implements DMNResult, DMNMessageManager {
     private DMNContext context;
     private DMNMessageManager messages;
     private Map<String, DMNDecisionResult> decisionResults;
+    private final DMNModel model;
 
-    public DMNResultImpl() {
+    public DMNResultImpl(DMNModel model) {
+        this.model = model;
         messages = new DefaultDMNMessagesManager();
         decisionResults = new HashMap<>(  );
     }
@@ -50,7 +59,7 @@ public class DMNResultImpl implements DMNResult, DMNMessageManager {
     }
 
     @Override
-    public void addAll(List<DMNMessage> messages) {
+    public void addAll(List<? extends DMNMessage> messages) {
         this.messages.addAll( messages );
     }
 
@@ -89,15 +98,15 @@ public class DMNResultImpl implements DMNResult, DMNMessageManager {
     }
 
     public DMNDecisionResult getDecisionResultByName( String name ) {
-        return decisionResults.values().stream().filter( dr -> dr.getDecisionName().equals( name ) ).findFirst().get();
+        return decisionResults.values().stream().filter(dr -> dr.getDecisionName().equals(name)).findFirst().orElse(null);
     }
 
     public DMNDecisionResult getDecisionResultById( String id ) {
         return decisionResults.get( id );
     }
 
-    public void setDecisionResult( String id, DMNDecisionResult result ) {
-        this.decisionResults.put( id, result );
+    public void addDecisionResult(DMNDecisionResult result) {
+        this.decisionResults.put(result.getDecisionId(), result);
     }
 
     @Override
@@ -108,4 +117,14 @@ public class DMNResultImpl implements DMNResult, DMNMessageManager {
                '}';
     }
 
+    /**
+     * Returns the model this DMNResult belongs to.
+     */
+    public DMNModel getModel() {
+        return model;
+    }
+    @Override
+    public void addAllUnfiltered(List<? extends DMNMessage> messages) {
+        this.messages.addAllUnfiltered(messages);
+    }
 }

@@ -165,16 +165,9 @@ public class PhreakAccumulateNode {
                 if (constraints.isAllowedCachedLeft(contextEntry,
                                                     rightTuple.getFactHandleForEvaluation())) {
                     // add a match
-                    addMatch(accNode,
-                             accumulate,
-                             leftTuple,
-                             rightTuple,
-                             null,
-                             null,
-                             wm,
-                             am,
-                             accresult,
-                             useLeftMemory);
+                    addMatch(accNode, accumulate, leftTuple, rightTuple,
+                             null, null, wm, am,
+                             accresult, useLeftMemory, true);
 
                     if (!useLeftMemory && accNode.isRightInputIsRiaNode()) {
                         // RIAN with no left memory must have their right tuples removed
@@ -227,16 +220,9 @@ public class PhreakAccumulateNode {
                     if ( constraints.isAllowedCachedRight( contextEntry,
                                                            leftTuple ) ) {
                         final AccumulateContext accctx = (AccumulateContext) leftTuple.getContextObject();
-                        addMatch( accNode,
-                                  accumulate,
-                                  leftTuple,
-                                  rightTuple,
-                                  null,
-                                  null,
-                                  wm,
-                                  am,
-                                  accctx,
-                                  true );
+                        addMatch( accNode, accumulate, leftTuple, rightTuple,
+                                  null, null, wm, am,
+                                  accctx, true, false );
 
                         // right inserts and updates are done first
                         // so any existing leftTuples we know are updates, but only add if not already added
@@ -335,16 +321,9 @@ public class PhreakAccumulateNode {
                 if (constraints.isAllowedCachedLeft(bm.getContext(),
                                                     rightTuple.getFactHandleForEvaluation())) {
                     // add a new match
-                    addMatch(accNode,
-                             accumulate,
-                             leftTuple,
-                             rightTuple,
-                             null,
-                             null,
-                             wm,
-                             am,
-                             accctx,
-                             true);
+                    addMatch(accNode, accumulate, leftTuple, rightTuple,
+                             null, null, wm, am,
+                             accctx, true, true);
                 }
             }
         } else {
@@ -355,16 +334,9 @@ public class PhreakAccumulateNode {
                                                     rightTuple.getFactHandleForEvaluation())) {
                     if (childLeftTuple == null || childLeftTuple.getRightParent() != rightTuple) {
                         // add a new match
-                        addMatch(accNode,
-                                 accumulate,
-                                 leftTuple,
-                                 rightTuple,
-                                 childLeftTuple,
-                                 null,
-                                 wm,
-                                 am,
-                                 accctx,
-                                 true);
+                        addMatch(accNode, accumulate, leftTuple, rightTuple,
+                                 childLeftTuple, null, wm, am,
+                                 accctx, true, true);
                     } else {
                         // we must re-add this to ensure deterministic iteration
                         LeftTuple temp = childLeftTuple.getHandleNext();
@@ -443,10 +415,6 @@ public class PhreakAccumulateNode {
 
                 // if LeftTupleMemory is empty, there are no matches to modify
                 if ( leftTuple != null ) {
-                    if ( leftTuple.getStagedType() == LeftTuple.NONE ) {
-                        trgLeftTuples.addUpdate( leftTuple );
-                    }
-
                     doRightUpdatesProcessChildren( accNode,
                                                    am,
                                                    wm,
@@ -488,16 +456,9 @@ public class PhreakAccumulateNode {
                     }
                     final AccumulateContext accctx = (AccumulateContext) leftTuple.getContextObject();
                     // add a new match
-                    addMatch(accNode,
-                             accumulate,
-                             leftTuple,
-                             rightTuple,
-                             null,
-                             null,
-                             wm,
-                             am,
-                             accctx,
-                             true);
+                    addMatch(accNode, accumulate, leftTuple, rightTuple,
+                             null, null, wm, am,
+                             accctx, true, false);
                 }
             }
         } else {
@@ -509,7 +470,7 @@ public class PhreakAccumulateNode {
                         trgLeftTuples.addUpdate(leftTuple);
                     }
                     final AccumulateContext accctx = (AccumulateContext) leftTuple.getContextObject();
-                    LeftTuple temp = null;
+                    LeftTuple temp;
                     if (childLeftTuple != null && childLeftTuple.getLeftParent() == leftTuple) {
                         temp = childLeftTuple.getRightParentNext();
                         // we must re-add this to ensure deterministic iteration
@@ -525,19 +486,9 @@ public class PhreakAccumulateNode {
                         childLeftTuple = temp;
                     }
                     // add a new match
-                    addMatch(accNode,
-                             accumulate,
-                             leftTuple,
-                             rightTuple,
-                             null,
-                             childLeftTuple,
-                             wm,
-                             am,
-                             accctx,
-                             true);
-                    if (temp != null) {
-                        childLeftTuple = temp;
-                    }
+                    addMatch(accNode, accumulate, leftTuple, rightTuple,
+                             null, childLeftTuple, wm, am,
+                             accctx, true, false);
                 } else if (childLeftTuple != null && childLeftTuple.getLeftParent() == leftTuple) {
                     if (leftTuple.getStagedType() == LeftTuple.NONE) {
                         trgLeftTuples.addUpdate(leftTuple);
@@ -656,6 +607,11 @@ public class PhreakAccumulateNode {
                                              leftTuple,
                                              workingMemory);
         if (result == null) {
+            if (accctx.propagated) {
+                // retract
+                trgLeftTuples.addDelete(accctx.getResultLeftTuple());
+                accctx.propagated = false;
+            }
             return;
         }
 
@@ -731,7 +687,8 @@ public class PhreakAccumulateNode {
                                  final InternalWorkingMemory wm,
                                  final AccumulateMemory am,
                                  final AccumulateContext accctx,
-                                 final boolean useLeftMemory) {
+                                 final boolean useLeftMemory,
+                                 final boolean leftPropagation) {
         LeftTuple tuple = leftTuple;
         InternalFactHandle handle = rightTuple.getFactHandle();
 
@@ -741,7 +698,7 @@ public class PhreakAccumulateNode {
             handle = rightTuple.getFactHandleForEvaluation();
         }
 
-        if (handle.isExpired()) {
+        if (leftPropagation && handle.isExpired()) {
             return;
         }
 

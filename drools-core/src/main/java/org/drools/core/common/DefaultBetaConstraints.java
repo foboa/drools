@@ -28,7 +28,6 @@ import org.drools.core.reteoo.builder.BuildContext;
 import org.drools.core.rule.ContextEntry;
 import org.drools.core.rule.IndexableConstraint;
 import org.drools.core.rule.MutableTypeConstraint;
-import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.BetaNodeFieldConstraint;
 import org.drools.core.spi.Tuple;
 import org.drools.core.util.bitmask.BitMask;
@@ -46,13 +45,13 @@ public class DefaultBetaConstraints
 
     private static final long serialVersionUID = 510l;
 
-    private transient boolean           disableIndexing;
+    protected transient boolean           disableIndexing;
 
-    private BetaNodeFieldConstraint[]   constraints;
+    protected BetaNodeFieldConstraint[]   constraints;
 
-    private IndexPrecedenceOption       indexPrecedenceOption;
+    protected IndexPrecedenceOption       indexPrecedenceOption;
 
-    private int                         indexed;
+    protected int                         indexed;
 
     private transient Boolean           leftUpdateOptimizationAllowed;
 
@@ -261,10 +260,10 @@ public class DefaultBetaConstraints
         throw new UnsupportedOperationException();
     }
 
-    public BitMask getListenedPropertyMask(List<String> settableProperties) {
+    public BitMask getListenedPropertyMask(Class modifiedClass, List<String> settableProperties) {
         BitMask mask = getEmptyPropertyReactiveMask(settableProperties.size());
         for (BetaNodeFieldConstraint constraint : constraints) {
-            mask = mask.setAll(constraint.getListenedPropertyMask(settableProperties));
+            mask = mask.setAll(constraint.getListenedPropertyMask(modifiedClass, settableProperties));
         }
         return mask;
     }
@@ -287,9 +286,7 @@ public class DefaultBetaConstraints
 
     public void registerEvaluationContext(BuildContext buildContext) {
         for (int i = 0; i < constraints.length; i++) {
-            if (constraints[i] instanceof MvelConstraint) {
-                ((MvelConstraint) constraints[i]).registerEvaluationContext(buildContext);
-            }
+            constraints[i].registerEvaluationContext(buildContext);
         }
     }
 }

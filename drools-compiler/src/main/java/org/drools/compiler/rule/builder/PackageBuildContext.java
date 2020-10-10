@@ -22,18 +22,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.drools.compiler.builder.DroolsAssemblerContext;
 import org.drools.compiler.builder.impl.KnowledgeBuilderConfigurationImpl;
-import org.drools.compiler.builder.impl.KnowledgeBuilderImpl;
 import org.drools.compiler.compiler.DescrBuildError;
 import org.drools.compiler.compiler.Dialect;
 import org.drools.compiler.compiler.DialectCompiletimeRegistry;
 import org.drools.compiler.compiler.DroolsError;
 import org.drools.compiler.compiler.DroolsWarning;
 import org.drools.compiler.lang.descr.BaseDescr;
-import org.drools.compiler.rule.builder.dialect.mvel.MVELDialect;
 import org.drools.core.definitions.InternalKnowledgePackage;
 import org.drools.core.rule.Dialectable;
-import org.drools.core.rule.MVELDialectRuntimeData;
 
 /**
  * A context for the current build
@@ -43,7 +41,7 @@ public class PackageBuildContext {
     // current package
     private InternalKnowledgePackage    pkg;
 
-    private KnowledgeBuilderImpl        kBuilder;
+    private DroolsAssemblerContext kBuilder;
 
     // the contianer descr
     private BaseDescr                   parentDescr;
@@ -80,7 +78,7 @@ public class PackageBuildContext {
     /**
      * Default constructor
      */
-    public void init(final KnowledgeBuilderImpl kBuilder,
+    public void init(final DroolsAssemblerContext kBuilder,
                      final InternalKnowledgePackage pkg,
                      final BaseDescr parentDescr,
                      final DialectCompiletimeRegistry dialectRegistry,
@@ -91,7 +89,7 @@ public class PackageBuildContext {
         this.parentDescr = parentDescr;
         this.dialectRegistry = dialectRegistry;
         this.dialect = (component != null && component.getDialect() != null) ? this.dialectRegistry.getDialect( component.getDialect() ) : defaultDialect;
-        this.typesafe = ((MVELDialect) dialectRegistry.getDialect( "mvel" )).isStrictMode();
+        this.typesafe = isStrictMode( dialectRegistry );
 
         if ( dialect == null && (component != null && component.getDialect() != null) ) {
             this.errors.add( new DescrBuildError( null,
@@ -101,6 +99,10 @@ public class PackageBuildContext {
             // dialect is null, but fall back to default dialect so we can attempt to compile rest of rule.
             this.dialect = defaultDialect;
         }
+    }
+
+    private boolean isStrictMode( DialectCompiletimeRegistry dialectRegistry ) {
+        return dialectRegistry.getDialect( "mvel" ) == null || dialectRegistry.getDialect( "mvel" ).isStrictMode();
     }
 
     public BaseDescr getParentDescr() {
@@ -218,7 +220,7 @@ public class PackageBuildContext {
         return this.kBuilder.getBuilderConfiguration();
     }
     
-    public KnowledgeBuilderImpl getKnowledgeBuilder() {
+    public DroolsAssemblerContext getKnowledgeBuilder() {
         return this.kBuilder;
     }
 
@@ -228,10 +230,6 @@ public class PackageBuildContext {
 
     public void setTypesafe(boolean stricttype) {
         this.typesafe = stricttype;
-    }
-
-    public MVELDialectRuntimeData getMVELDialectRuntimeData() {
-        return ( MVELDialectRuntimeData) pkg.getDialectRuntimeRegistry().getDialectData( "mvel" );
     }
 
     public Class< ? > resolveVarType(String identifier) {

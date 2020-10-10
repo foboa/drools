@@ -51,9 +51,9 @@ public abstract class LeftTupleSource extends BaseNode
         LeftTupleNode,
         Externalizable {
 
-    private BitMask                   leftDeclaredMask = EmptyBitMask.get();
-    private BitMask                   leftInferredMask = EmptyBitMask.get();
-    private BitMask                   leftNegativeMask = EmptyBitMask.get();
+    protected BitMask                 leftDeclaredMask = EmptyBitMask.get();
+    protected BitMask                 leftInferredMask = EmptyBitMask.get();
+    protected BitMask                 leftNegativeMask = EmptyBitMask.get();
 
 
     /** The left input <code>TupleSource</code>. */
@@ -237,7 +237,7 @@ public abstract class LeftTupleSource extends BaseNode
             return;
         }
 
-        Pattern pattern = context.getLastBuiltPatterns()[1]; // left input pattern
+        Pattern pattern = getLeftInputPattern( context ); // left input pattern
 
         ObjectType objectType = getObjectTypeForPropertyReactivity( (LeftInputAdapterNode) leftInput, pattern );
 
@@ -251,14 +251,23 @@ public abstract class LeftTupleSource extends BaseNode
         // if pattern is null (e.g. for eval or query nodes) we cannot calculate the mask, so we set it all
         if ( pattern != null && isPropertyReactive(context, objectClass) ) {
             Collection<String> leftListenedProperties = pattern.getListenedProperties();
-            List<String> settableProperties = getAccessibleProperties( context.getKnowledgeBase(), objectClass );
-            leftDeclaredMask = calculatePositiveMask( leftListenedProperties, settableProperties );
-            leftNegativeMask = calculateNegativeMask( leftListenedProperties, settableProperties );
+            List<String> accessibleProperties = getAccessibleProperties( context.getKnowledgeBase(), objectClass );
+            leftDeclaredMask = calculatePositiveMask( objectClass, leftListenedProperties, accessibleProperties );
+            leftDeclaredMask = setNodeConstraintsPropertyReactiveMask(leftDeclaredMask, objectClass, accessibleProperties);
+            leftNegativeMask = calculateNegativeMask( objectClass, leftListenedProperties, accessibleProperties );
             setLeftListenedProperties(leftListenedProperties);
         } else {
             // if property specific is not on, then accept all modification propagations
             leftDeclaredMask = AllSetBitMask.get();
         }
+    }
+
+    protected BitMask setNodeConstraintsPropertyReactiveMask(BitMask mask, Class objectClass, List<String> accessibleProperties) {
+        return mask;
+    }
+
+    protected Pattern getLeftInputPattern( BuildContext context ) {
+        return context.getLastBuiltPatterns()[1];
     }
 
     protected ObjectType getObjectTypeForPropertyReactivity( LeftInputAdapterNode leftInput, Pattern pattern ) {

@@ -166,7 +166,7 @@ public class ClassDefinition
      * @param fieldName
      * @return
      */
-    public final FieldDefinition getField(final String fieldName) {
+    public FieldDefinition getField(final String fieldName) {
         return this.fields.get( fieldName );
     }
 
@@ -211,6 +211,17 @@ public class ClassDefinition
         this.interfaces = (interfaces != null) ? interfaces : new String[0];
     }
 
+    public final void addInterface(String interfaze) {
+        if (interfaces == null) {
+            interfaces = new String[] { interfaze };
+        } else {
+            String[] i2 = new String[interfaces.length+1];
+            System.arraycopy( interfaces, 0, i2, 0, interfaces.length );
+            i2[interfaces.length] = interfaze;
+            this.interfaces = i2;
+        }
+    }
+
     /**
      * @return Returns the superClass.
      */
@@ -253,7 +264,10 @@ public class ClassDefinition
     public Object get(Object bean,
                       String field) {
         FieldDefinition fieldDefinition = getField( field );
-        return fieldDefinition != null ? fieldDefinition.getFieldAccessor().getValue( bean ) : null;
+        if (fieldDefinition != null) {
+            return fieldDefinition.getFieldAccessor().getValue( bean );
+        }
+        return null;
     }
 
     public void set(Object bean,
@@ -305,6 +319,10 @@ public class ClassDefinition
 
     public Map<String, Object> getMetaData() {
         return metaData;
+    }
+
+    public Object getMetaData(String name) {
+        return metaData != null ? metaData.get(name) : null;
     }
 
     public void addMetaData( String key, Object value ) {

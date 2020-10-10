@@ -16,21 +16,23 @@
 
 package org.drools.core.command.runtime.process;
 
-import org.drools.core.command.impl.ExecutableCommand;
-import org.drools.core.command.impl.RegistryContext;
-import org.kie.api.runtime.KieSession;
-import org.kie.api.runtime.process.ProcessInstance;
-import org.kie.api.runtime.Context;
-import org.kie.internal.command.CorrelationKeyCommand;
-import org.kie.internal.jaxb.CorrelationKeyXmlAdapter;
-import org.kie.internal.process.CorrelationAwareProcessRuntime;
-import org.kie.internal.process.CorrelationKey;
-
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
+import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
+
+import org.drools.core.runtime.impl.ExecutionResultImpl;
+import org.kie.api.command.ExecutableCommand;
+import org.kie.api.runtime.Context;
+import org.kie.api.runtime.KieSession;
+import org.kie.api.runtime.process.ProcessInstance;
+import org.kie.internal.command.CorrelationKeyCommand;
+import org.kie.internal.command.RegistryContext;
+import org.kie.internal.jaxb.CorrelationKeyXmlAdapter;
+import org.kie.internal.process.CorrelationAwareProcessRuntime;
+import org.kie.internal.process.CorrelationKey;
 
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.NONE)
@@ -43,10 +45,21 @@ public class GetProcessInstanceByCorrelationKeyCommand implements ExecutableComm
     @XmlJavaTypeAdapter(value = CorrelationKeyXmlAdapter.class)
     private CorrelationKey correlationKey;
 
+    @XmlAttribute(name="out-identifier")
+    private String outIdentifier;
+
     public GetProcessInstanceByCorrelationKeyCommand() {}
 
     public GetProcessInstanceByCorrelationKeyCommand(CorrelationKey correlationKey) {
         this.correlationKey = correlationKey;
+    }
+
+    public String getOutIdentifier() {
+        return outIdentifier;
+    }
+
+    public void setOutIdentifier(String outIdentifier) {
+        this.outIdentifier = outIdentifier;
     }
 
     @Override
@@ -64,7 +77,15 @@ public class GetProcessInstanceByCorrelationKeyCommand implements ExecutableComm
         if (correlationKey == null) {
             return null;
         }
-        return ((CorrelationAwareProcessRuntime)ksession).getProcessInstance(correlationKey);
+
+        ProcessInstance processInstance = ((CorrelationAwareProcessRuntime)ksession).getProcessInstance(correlationKey);
+
+        if ( this.outIdentifier != null ) {
+            ((RegistryContext) context).lookup( ExecutionResultImpl.class ).setResult(this.outIdentifier,
+                                                                                      processInstance);
+        }
+
+        return processInstance;
     }
 
     public String toString() {

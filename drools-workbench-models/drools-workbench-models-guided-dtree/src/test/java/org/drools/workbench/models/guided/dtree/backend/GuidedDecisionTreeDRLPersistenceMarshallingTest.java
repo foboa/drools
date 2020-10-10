@@ -21,6 +21,7 @@ import java.math.BigInteger;
 import java.util.Calendar;
 import java.util.Date;
 
+import org.assertj.core.api.Assertions;
 import org.drools.workbench.models.guided.dtree.shared.model.GuidedDecisionTree;
 import org.drools.workbench.models.guided.dtree.shared.model.nodes.ActionInsertNode;
 import org.drools.workbench.models.guided.dtree.shared.model.nodes.ActionRetractNode;
@@ -86,6 +87,30 @@ public class GuidedDecisionTreeDRLPersistenceMarshallingTest {
                                                           "name",
                                                           "==",
                                                           new StringValue( "Michael" ) );
+        model.setRoot( type );
+        type.addChild( c1 );
+
+        final String drl = GuidedDecisionTreeDRLPersistence.getInstance().marshal( model );
+        assertEqualsIgnoreWhitespace( expected,
+                                      drl );
+    }
+
+    @Test
+    public void testOnlyWrappingBrakcetsAreRemoved() throws Exception {
+        final String expected = "rule \"test_0\"" +
+                "when\n" +
+                "  Person( name in ( \"John\", \"John(jr)\" ) )\n" +
+                "then\n" +
+                "end";
+
+        final GuidedDecisionTree model = new GuidedDecisionTree();
+        model.setTreeName( "test" );
+
+        final TypeNode type = new TypeNodeImpl( "Person" );
+        final ConstraintNode c1 = new ConstraintNodeImpl( "Person",
+                                                          "name",
+                                                          "in",
+                                                          new StringValue( "John, John(jr)" ) );
         model.setRoot( type );
         type.addChild( c1 );
 
@@ -1226,13 +1251,7 @@ public class GuidedDecisionTreeDRLPersistenceMarshallingTest {
 
     private void assertEqualsIgnoreWhitespace( final String expected,
                                                final String actual ) {
-        final String cleanExpected = expected.replaceAll( "\\s+",
-                                                          "" );
-        final String cleanActual = actual.replaceAll( "\\s+",
-                                                      "" );
-
-        assertEquals( cleanExpected,
-                      cleanActual );
+        Assertions.assertThat(expected).isEqualToIgnoringWhitespace(actual);
     }
 
 }

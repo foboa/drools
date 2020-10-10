@@ -26,25 +26,25 @@ import org.drools.core.reteoo.BetaMemory;
 import org.drools.core.reteoo.builder.BuildContext;
 import org.drools.core.rule.ContextEntry;
 import org.drools.core.rule.MutableTypeConstraint;
-import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.BetaNodeFieldConstraint;
 import org.drools.core.spi.Tuple;
 import org.drools.core.util.bitmask.BitMask;
 
-public class QuadroupleNonIndexSkipBetaConstraints 
-    implements
-    BetaConstraints {
+public class QuadroupleNonIndexSkipBetaConstraints
+        implements
+        BetaConstraints {
+
     private QuadroupleBetaConstraints constraints;
-    
+
     private BetaNodeFieldConstraint constraint0;
     private BetaNodeFieldConstraint constraint1;
     private BetaNodeFieldConstraint constraint2;
     private BetaNodeFieldConstraint constraint3;
-    
+
     public QuadroupleNonIndexSkipBetaConstraints() {
 
     }
-    
+
     public QuadroupleNonIndexSkipBetaConstraints(QuadroupleBetaConstraints constraints) {
         this.constraints = constraints;
         BetaNodeFieldConstraint[] constraint = constraints.getConstraints();
@@ -55,7 +55,7 @@ public class QuadroupleNonIndexSkipBetaConstraints
     }
 
     public QuadroupleNonIndexSkipBetaConstraints cloneIfInUse() {
-        if (constraint0 instanceof MutableTypeConstraint && ((MutableTypeConstraint)constraint0).setInUse()) {
+        if (constraint0 instanceof MutableTypeConstraint && ((MutableTypeConstraint) constraint0).setInUse()) {
             return new QuadroupleNonIndexSkipBetaConstraints(constraints.cloneIfInUse());
         }
         return this;
@@ -70,13 +70,13 @@ public class QuadroupleNonIndexSkipBetaConstraints
     }
 
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-        throw new UnsupportedOperationException( );
+        throw new UnsupportedOperationException();
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
-        throw new UnsupportedOperationException( );
+        throw new UnsupportedOperationException();
     }
-    
+
     public BetaConstraints getOriginalConstraint() {
         return this.constraints;
     }
@@ -88,17 +88,17 @@ public class QuadroupleNonIndexSkipBetaConstraints
     public void updateFromTuple(ContextEntry[] context,
                                 InternalWorkingMemory workingMemory,
                                 Tuple tuple) {
-        constraints.updateFromTuple( context,
-                                     workingMemory,
-                                     tuple );
+        constraints.updateFromTuple(context,
+                                    workingMemory,
+                                    tuple);
     }
 
     public void updateFromFactHandle(ContextEntry[] context,
                                      InternalWorkingMemory workingMemory,
                                      InternalFactHandle handle) {
-        constraints.updateFromFactHandle( context,
-                                          workingMemory,
-                                          handle );
+        constraints.updateFromFactHandle(context,
+                                         workingMemory,
+                                         handle);
     }
 
     public boolean isIndexed() {
@@ -113,10 +113,10 @@ public class QuadroupleNonIndexSkipBetaConstraints
         return constraints.isEmpty();
     }
 
-    public BetaMemory createBetaMemory(final RuleBaseConfiguration config, 
+    public BetaMemory createBetaMemory(final RuleBaseConfiguration config,
                                        final short nodeType) {
-        return constraints.createBetaMemory( config,
-                                             nodeType );
+        return constraints.createBetaMemory(config,
+                                            nodeType);
     }
 
     public int hashCode() {
@@ -128,15 +128,15 @@ public class QuadroupleNonIndexSkipBetaConstraints
     }
 
     public boolean equals(Object object) {
-        return constraints.equals( object );
+        return constraints.equals(object);
     }
 
     public void resetFactHandle(ContextEntry[] context) {
-        constraints.resetFactHandle( context );
+        constraints.resetFactHandle(context);
     }
 
     public void resetTuple(ContextEntry[] context) {
-        constraints.resetTuple( context );
+        constraints.resetTuple(context);
     }
 
     public String toString() {
@@ -145,25 +145,22 @@ public class QuadroupleNonIndexSkipBetaConstraints
 
     public boolean isAllowedCachedLeft(final ContextEntry[] context,
                                        final InternalFactHandle handle) {
-        return this.constraint0.isAllowedCachedLeft( context[0],
-                                                     handle ) && this.constraint1.isAllowedCachedLeft( context[1],
-                                                                                                       handle ) && this.constraint2.isAllowedCachedLeft( context[2],
-                                                                                                                                                         handle )  && this.constraint3.isAllowedCachedLeft( context[3],
-                                                                                                                                                                                                            handle )
-               && this.constraint3.isAllowedCachedLeft( context[3],
-                                                        handle );
+        return this.constraint0.isAllowedCachedLeft(context[0], handle)
+                && this.constraint1.isAllowedCachedLeft(context[1], handle)
+                && this.constraint2.isAllowedCachedLeft(context[2], handle)
+                && this.constraint3.isAllowedCachedLeft(context[3], handle);
     }
 
     public boolean isAllowedCachedRight(ContextEntry[] context,
                                         Tuple tuple) {
-        return this.constraints.isAllowedCachedRight( context, tuple );
+        return this.constraints.isAllowedCachedRight(context, tuple);
     }
 
-    public BitMask getListenedPropertyMask(List<String> settableProperties) {
-        return constraint0.getListenedPropertyMask(settableProperties)
-                          .setAll(constraint1.getListenedPropertyMask(settableProperties))
-                          .setAll(constraint2.getListenedPropertyMask(settableProperties))
-                          .setAll(constraint3.getListenedPropertyMask(settableProperties));
+    public BitMask getListenedPropertyMask(Class modifiedClass, List<String> settableProperties) {
+        return constraint0.getListenedPropertyMask(modifiedClass, settableProperties)
+                .setAll(constraint1.getListenedPropertyMask(modifiedClass, settableProperties))
+                .setAll(constraint2.getListenedPropertyMask(modifiedClass, settableProperties))
+                .setAll(constraint3.getListenedPropertyMask(modifiedClass, settableProperties));
     }
 
     public boolean isLeftUpdateOptimizationAllowed() {
@@ -171,17 +168,9 @@ public class QuadroupleNonIndexSkipBetaConstraints
     }
 
     public void registerEvaluationContext(BuildContext buildContext) {
-        if (constraint0 instanceof MvelConstraint) {
-            ((MvelConstraint) constraint0).registerEvaluationContext(buildContext);
-        }
-        if (constraint1 instanceof MvelConstraint) {
-            ((MvelConstraint) constraint1).registerEvaluationContext(buildContext);
-        }
-        if (constraint2 instanceof MvelConstraint) {
-            ((MvelConstraint) constraint2).registerEvaluationContext(buildContext);
-        }
-        if (constraint3 instanceof MvelConstraint) {
-            ((MvelConstraint) constraint3).registerEvaluationContext(buildContext);
-        }
+        this.constraint0.registerEvaluationContext(buildContext);
+        this.constraint1.registerEvaluationContext(buildContext);
+        this.constraint2.registerEvaluationContext(buildContext);
+        this.constraint3.registerEvaluationContext(buildContext);
     }
 }

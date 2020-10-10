@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.kie</groupId>
     <artifactId>kie-dmn</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>kie-dmn-backend</artifactId>
@@ -16,7 +16,7 @@
   <name>KIE :: Decision Model Notation :: Backend</name>
   
   <properties>
-    <osgi.Bundle-SymbolicName>org.kie.dmn.backend</osgi.Bundle-SymbolicName>
+    <java.module.name>org.kie.dmn.backend</java.module.name>
   </properties>
 
   <dependencies>
@@ -41,7 +41,7 @@
 
     <dependency>
       <groupId>org.kie.soup</groupId>
-      <artifactId>kie-soup-commons</artifactId>
+      <artifactId>kie-soup-xstream</artifactId>
     </dependency>
 
     <dependency>
@@ -80,7 +80,6 @@
               org.kie.dmn.backend.*
             </Export-Package>
             <Import-Package>
-              org.kie.dmn.model.v1_1,
               *
             </Import-Package>
             <_removeheaders>Private-Package</_removeheaders>

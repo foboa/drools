@@ -15,6 +15,10 @@
 
 package org.drools.compiler.rule.builder;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import org.drools.compiler.compiler.AnalysisResult;
 import org.drools.compiler.compiler.BoundIdentifiers;
 import org.drools.compiler.compiler.DescrBuildError;
@@ -27,10 +31,10 @@ import org.drools.compiler.lang.descr.ConstraintConnectiveDescr;
 import org.drools.compiler.lang.descr.ExprConstraintDescr;
 import org.drools.compiler.lang.descr.PatternDescr;
 import org.drools.core.base.ClassObjectType;
+import org.drools.core.base.CoreComponentsBuilder;
 import org.drools.core.base.extractors.ArrayElementReader;
 import org.drools.core.base.extractors.SelfReferenceClassFieldReader;
 import org.drools.core.rule.Declaration;
-import org.drools.core.rule.MVELDialectRuntimeData;
 import org.drools.core.rule.Pattern;
 import org.drools.core.rule.QueryArgument;
 import org.drools.core.rule.QueryElement;
@@ -40,15 +44,7 @@ import org.drools.core.spi.DeclarationScopeResolver;
 import org.drools.core.spi.InternalReadAccessor;
 import org.drools.core.spi.ObjectType;
 import org.drools.core.util.ClassUtils;
-import org.drools.core.util.MVELSafeHelper;
 import org.drools.core.util.StringUtils;
-import org.mvel2.MVEL;
-import org.mvel2.ParserConfiguration;
-import org.mvel2.ParserContext;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 import static org.drools.core.rule.LogicTransformer.toIntArray;
 import static org.drools.core.util.StringUtils.isDereferencingIdentifier;
@@ -74,7 +70,6 @@ public class QueryElementBuilder
         throw new UnsupportedOperationException();
     }
 
-    @SuppressWarnings("unchecked")
     public RuleConditionElement build( RuleBuildContext context,
                                        BaseDescr descr,
                                        QueryImpl query) {
@@ -83,7 +78,7 @@ public class QueryElementBuilder
         Declaration[] params = query.getParameters();
 
         List<BaseDescr> args = (List<BaseDescr>) patternDescr.getDescrs();
-        List<Declaration> requiredDeclarations = new ArrayList<Declaration>();
+        List<Declaration> requiredDeclarations = new ArrayList<>();
 
         ObjectType argsObjectType = ClassObjectType.ObjectArray_ObjectType;
         InternalReadAccessor arrayReader = new SelfReferenceClassFieldReader( Object[].class );
@@ -196,7 +191,7 @@ public class QueryElementBuilder
             }
         }
 
-        List<Integer> varIndexList = new ArrayList<Integer>();
+        List<Integer> varIndexList = new ArrayList<>();
         for (int i = 0; i < arguments.length; i++) {
             if (!(arguments[i] instanceof QueryArgument.Declr)) {
                 if (arguments[i] instanceof QueryArgument.Var) {
@@ -228,7 +223,6 @@ public class QueryElementBuilder
                                  query.isAbductive() );
     }
 
-    @SuppressWarnings("unchecked")
     private void processBinding( RuleBuildContext context,
                                  BaseDescr descr,
                                  Declaration[] params,
@@ -331,7 +325,7 @@ public class QueryElementBuilder
             if (analysisResult == null || analysisResult.getIdentifiers().isEmpty()) {
                 arguments[pos] = getLiteralQueryArgument( context, base, result );
             } else {
-                List<Declaration> declarations = new ArrayList<Declaration>();
+                List<Declaration> declarations = new ArrayList<>();
                 for (String identifier : analysisResult.getIdentifiers()) {
                     Declaration declaration = declarationResolver.getDeclaration( identifier );
                     if (declaration != null) {
@@ -339,7 +333,7 @@ public class QueryElementBuilder
                     }
                 }
                 if (declarations.size() == analysisResult.getIdentifiers().size()) {
-                    arguments[pos] = new QueryArgument.Expression( declarations, expression, getParserContext( context ) );
+                    arguments[pos] = ConstraintBuilder.get().buildExpressionQueryArgument( context, declarations, expression );
                 } else {
                     arguments[pos] = getLiteralQueryArgument( context, base, result );
                 }
@@ -369,7 +363,9 @@ public class QueryElementBuilder
         MVELDumper.MVELDumperContext mvelCtx = new MVELDumper.MVELDumperContext();
         String expr = context.getCompilerFactory().getExpressionProcessor().dump( result, mvelCtx );
         try {
-            Object value = MVELSafeHelper.getEvaluator().executeExpression( MVEL.compileExpression( expr, getParserContext(context) ) );
+            Object value = CoreComponentsBuilder.get()
+                    .evaluateMvelExpression( context.getPkg().getDialectRuntimeRegistry().getDialectData( "mvel" ),
+                            context.getKnowledgeBuilder().getRootClassLoader(), expr );
             return new QueryArgument.Literal( value );
         } catch ( Exception e ) {
             context.addError( new DescrBuildError( context.getParentDescr(),
@@ -378,13 +374,6 @@ public class QueryElementBuilder
                                                    "Unable to compile expression: " + expr ) );
         }
         return null;
-    }
-
-    private ParserContext getParserContext(RuleBuildContext context) {
-        MVELDialectRuntimeData data = ( MVELDialectRuntimeData) context.getPkg().getDialectRuntimeRegistry().getDialectData( "mvel" );
-        ParserConfiguration conf = data.getParserConfiguration();
-        conf.setClassLoader( context.getKnowledgeBuilder().getRootClassLoader() );
-        return new ParserContext( conf );
     }
 
     private static int getPos( String identifier,
@@ -397,7 +386,6 @@ public class QueryElementBuilder
         return -1;
     }
 
-    @SuppressWarnings("unchecked")
     private ConstraintConnectiveDescr parseExpression( final RuleBuildContext context,
                                                        final PatternDescr patternDescr,
                                                        final String expression ) {

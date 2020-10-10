@@ -32,13 +32,13 @@ import org.dmg.pmml.pmml_4_2.descr.Output;
 import org.dmg.pmml.pmml_4_2.descr.PMML;
 import org.dmg.pmml.pmml_4_2.descr.Scorecard;
 import org.drools.core.util.StringUtils;
-import org.drools.pmml.pmml_4_2.extensions.PMMLExtensionNames;
 import org.drools.scorecards.ScorecardCompiler;
 import org.drools.scorecards.parser.xls.XLSKeywords;
 import org.drools.scorecards.pmml.ScorecardPMMLExtensionNames;
 import org.drools.scorecards.pmml.ScorecardPMMLGenerator;
 import org.drools.scorecards.pmml.ScorecardPMMLUtils;
 import org.drools.workbench.models.guided.scorecard.shared.ScoreCardModel;
+import org.kie.pmml.pmml_4_2.extensions.PMMLExtensionNames;
 import org.kie.soup.project.datamodel.imports.Import;
 
 public class GuidedScoreCardDRLPersistence {
@@ -59,7 +59,16 @@ public class GuidedScoreCardDRLPersistence {
         return sb.toString();
     }
 
-    private static PMML createPMMLDocument(final ScoreCardModel model) {
+    public static PMML createPMMLDocument(final ScoreCardModel model) {
+
+        final GuidedScoreCardModelVisitor visitor = new GuidedScoreCardModelVisitor(model);
+        for (String imported : visitor.getConsumedPackageImports()) {
+            Import anImport = new Import(imported);
+            if(!model.getImports().contains(anImport)){
+                model.getImports().addImport(anImport);
+            }
+        }
+
         final Scorecard pmmlScorecard = ScorecardPMMLUtils.createScorecard();
         final Output output = new Output();
         final Characteristics characteristics = new Characteristics();
@@ -122,24 +131,32 @@ public class GuidedScoreCardDRLPersistence {
         }
 
         for (final org.drools.workbench.models.guided.scorecard.shared.Characteristic characteristic : model.getCharacteristics()) {
+            ImportsToFQCN importsToFQCN = new ImportsToFQCN(model.getImports().getImports());
             final Characteristic _characteristic = new Characteristic();
             characteristics.getCharacteristics().add(_characteristic);
 
             extension = new Extension();
             extension.setName(PMMLExtensionNames.EXTERNAL_CLASS);
-            extension.setValue(characteristic.getFact());
+            extension.setValue(importsToFQCN.resolveFQCN(characteristic.getFact()));
             _characteristic.getExtensions().add(extension);
 
             extension = new Extension();
             extension.setName(ScorecardPMMLExtensionNames.CHARACTERTISTIC_DATATYPE);
-            if ("string".equalsIgnoreCase(characteristic.getDataType())) {
-                extension.setValue(XLSKeywords.DATATYPE_TEXT);
-            } else if ("int".equalsIgnoreCase(characteristic.getDataType()) || "double".equalsIgnoreCase(characteristic.getDataType())) {
-                extension.setValue(XLSKeywords.DATATYPE_NUMBER);
-            } else if ("boolean".equalsIgnoreCase(characteristic.getDataType())) {
-                extension.setValue(XLSKeywords.DATATYPE_BOOLEAN);
-            } else {
-                System.out.println(">>>> Found unknown data type :: " + characteristic.getDataType());
+            switch (characteristic.getDataType().toLowerCase()) {
+                case "string":
+                    extension.setValue(XLSKeywords.DATATYPE_TEXT);
+                    break;
+                case "int":
+                    extension.setValue(XLSKeywords.DATATYPE_INTEGER);
+                    break;
+                case "double":
+                    extension.setValue(XLSKeywords.DATATYPE_DOUBLE);
+                    break;
+                case "boolean":
+                    extension.setValue(XLSKeywords.DATATYPE_BOOLEAN);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown datatype found: " + characteristic.getDataType() + "!");
             }
             _characteristic.getExtensions().add(extension);
 
@@ -157,7 +174,7 @@ public class GuidedScoreCardDRLPersistence {
 
             extension = new Extension();
             extension.setName(PMMLExtensionNames.EXTERNAL_CLASS);
-            extension.setValue(characteristic.getFact());
+            extension.setValue(importsToFQCN.resolveFQCN(characteristic.getFact()));
             miningField.getExtensions().add(extension);
 
             for (final org.drools.workbench.models.guided.scorecard.shared.Attribute attribute : characteristic.getAttributes()) {

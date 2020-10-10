@@ -16,35 +16,31 @@
 
 package org.kie.dmn.feel.lang.impl;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import org.antlr.v4.runtime.tree.ParseTree;
+import com.github.javaparser.ast.CompilationUnit;
 import org.kie.dmn.api.feel.runtime.events.FEELEventListener;
 import org.kie.dmn.feel.FEEL;
+import org.kie.dmn.feel.codegen.feel11.CompiledFEELExpression;
+import org.kie.dmn.feel.codegen.feel11.ProcessedExpression;
+import org.kie.dmn.feel.codegen.feel11.ProcessedFEELUnit;
+import org.kie.dmn.feel.codegen.feel11.ProcessedUnaryTest;
 import org.kie.dmn.feel.lang.CompiledExpression;
 import org.kie.dmn.feel.lang.CompilerContext;
 import org.kie.dmn.feel.lang.EvaluationContext;
 import org.kie.dmn.feel.lang.FEELProfile;
 import org.kie.dmn.feel.lang.Type;
-import org.kie.dmn.feel.lang.ast.BaseNode;
-import org.kie.dmn.feel.lang.ast.DashNode;
-import org.kie.dmn.feel.lang.ast.ListNode;
-import org.kie.dmn.feel.lang.ast.RangeNode;
-import org.kie.dmn.feel.lang.ast.UnaryTestNode;
-import org.kie.dmn.feel.parser.feel11.ASTBuilderVisitor;
-import org.kie.dmn.feel.parser.feel11.FEELParser;
-import org.kie.dmn.feel.parser.feel11.FEEL_1_1Parser;
+import org.kie.dmn.feel.parser.feel11.profiles.DoCompileFEELProfile;
 import org.kie.dmn.feel.runtime.FEELFunction;
 import org.kie.dmn.feel.runtime.UnaryTest;
+import org.kie.dmn.feel.util.ClassLoaderUtil;
 
 /**
  * Language runtime entry point
@@ -56,26 +52,41 @@ public class FEELImpl
 
     private Set<FEELEventListener> instanceEventListeners = new HashSet<>();
 
+    private final ClassLoader classLoader;
     private final List<FEELProfile> profiles;
     // pre-cached results from the above profiles...
     private final Optional<ExecutionFrameImpl> customFrame;
     private final Collection<FEELFunction> customFunctions;
+    private final boolean doCompile;
 
     public FEELImpl() {
-        this(Collections.emptyList());
+        this(ClassLoaderUtil.findDefaultClassLoader(), Collections.emptyList());
+    }
+
+    public FEELImpl(ClassLoader cl) {
+        this(cl, Collections.emptyList());
     }
 
     public FEELImpl(List<FEELProfile> profiles) {
+        this(ClassLoaderUtil.findDefaultClassLoader(), profiles);
+    }
+
+    public FEELImpl(ClassLoader cl, List<FEELProfile> profiles) {
+        this.classLoader = cl;
         this.profiles = Collections.unmodifiableList(profiles);
-        ExecutionFrameImpl frame = new ExecutionFrameImpl(null);
+        ExecutionFrameImpl frame = null;
         Map<String, FEELFunction> functions = new HashMap<>();
         for (FEELProfile p : profiles) {
             for (FEELFunction f : p.getFEELFunctions()) {
+                if (frame == null) {
+                    frame = new ExecutionFrameImpl(null);
+                }
                 frame.setValue(f.getName(), f);
                 functions.put(f.getName(), f);
             }
         }
-        customFrame = Optional.of(frame);
+        doCompile = profiles.stream().anyMatch(DoCompileFEELProfile.class::isInstance);
+        customFrame = Optional.ofNullable(frame);
         customFunctions = Collections.unmodifiableCollection(functions.values());
     }
 
@@ -85,36 +96,33 @@ public class FEELImpl
     }
     
     public CompilerContext newCompilerContext(Collection<FEELEventListener> contextListeners) {
-        return new CompilerContextImpl( getEventsManager(contextListeners) );
+        return new CompilerContextImpl(getEventsManager(contextListeners)).addFEELFunctions(customFunctions);
     }
-    
+
+    public Collection<FEELFunction> getCustomFunctions() {
+        return customFunctions;
+    }
+
     @Override
     public CompiledExpression compile(String expression, CompilerContext ctx) {
-        FEEL_1_1Parser parser = FEELParser.parse(getEventsManager(ctx.getListeners()), expression, ctx.getInputVariableTypes(), ctx.getInputVariables(), mergeFunctions(ctx));
-        ParseTree tree = parser.compilation_unit();
-        ASTBuilderVisitor v = new ASTBuilderVisitor( ctx.getInputVariableTypes() );
-        BaseNode expr = v.visit( tree );
-        CompiledExpression ce = new CompiledExpressionImpl( expr );
-        return ce;
+        return new ProcessedExpression(
+                expression,
+                ctx,
+                ProcessedFEELUnit.DefaultMode.of(doCompile || ctx.isDoCompile()),
+                profiles).getResult();
     }
 
-    public CompiledExpression compileExpressionList(String expression, CompilerContext ctx) {
-        FEEL_1_1Parser parser = FEELParser.parse(getEventsManager(ctx.getListeners()), expression, ctx.getInputVariableTypes(), ctx.getInputVariables(), mergeFunctions(ctx));
-        ParseTree tree = parser.expressionList();
-        ASTBuilderVisitor v = new ASTBuilderVisitor(ctx.getInputVariableTypes());
-        BaseNode expr = v.visit(tree);
-        CompiledExpression ce = new CompiledExpressionImpl(expr);
-        return ce;
+    public CompilationUnit generateExpressionSource(String expression, CompilerContext ctx) {
+        return new ProcessedExpression(
+                expression,
+                ctx,
+                ProcessedFEELUnit.DefaultMode.of(doCompile || ctx.isDoCompile()),
+                profiles).getSourceCode();
     }
 
-    private Collection<FEELFunction> mergeFunctions(CompilerContext ctx) {
-        if (ctx.getFEELFunctions().isEmpty()) {
-            return customFunctions;
-        } else {
-            Collection<FEELFunction> result = new LinkedHashSet<>(customFunctions);
-            result.addAll(ctx.getFEELFunctions());
-            return result;
-        }
+    @Override
+    public ProcessedUnaryTest compileUnaryTests(String expressions, CompilerContext ctx) {
+        return new ProcessedUnaryTest(expressions, ctx, profiles);
     }
 
     @Override
@@ -129,7 +137,6 @@ public class FEELImpl
         if ( inputVariables != null ) {
             inputVariables.entrySet().stream().forEach( e -> compilerCtx.addInputVariable( e.getKey(), e.getValue() ) );
         }
-        compilerCtx.addFEELFunctions(customFunctions);
         CompiledExpression expr = compile( expression, compilerCtx );
         return evaluate( expr, ctx );
     }
@@ -140,7 +147,6 @@ public class FEELImpl
         if ( inputVariables != null ) {
             inputVariables.entrySet().stream().forEach( e -> ctx.addInputVariable( e.getKey(), e.getValue() ) );
         }
-        ctx.addFEELFunctions(customFunctions);
         CompiledExpression expr = compile( expression, ctx );
         if ( inputVariables == null ) {
             return evaluate( expr, EMPTY_INPUT );
@@ -151,17 +157,29 @@ public class FEELImpl
 
     @Override
     public Object evaluate(CompiledExpression expr, Map<String, Object> inputVariables) {
-        return ((CompiledExpressionImpl) expr).evaluate(newEvaluationContext(Collections.EMPTY_SET, inputVariables));
+        CompiledFEELExpression e = (CompiledFEELExpression) expr;
+        return e.apply(newEvaluationContext(Collections.EMPTY_SET, inputVariables));
     }
     
     @Override
     public Object evaluate(CompiledExpression expr, EvaluationContext ctx) {
-        return ((CompiledExpressionImpl) expr).evaluate(newEvaluationContext(ctx.getListeners(), ctx.getAllValues()));
+        CompiledFEELExpression e = (CompiledFEELExpression) expr;
+        return e.apply(ctx.current());
     }
 
-    private EvaluationContext newEvaluationContext(Collection<FEELEventListener> listeners, Map<String, Object> inputVariables) {
+    /**
+     * Creates a new EvaluationContext using this FEEL instance classloader, and the supplied parameters listeners and inputVariables
+     */
+    public EvaluationContextImpl newEvaluationContext(Collection<FEELEventListener> listeners, Map<String, Object> inputVariables) {
+        return newEvaluationContext(this.classLoader, listeners, inputVariables);
+    }
+
+    /**
+     * Creates a new EvaluationContext with the supplied classloader, and the supplied parameters listeners and inputVariables
+     */
+    public EvaluationContextImpl newEvaluationContext(ClassLoader cl, Collection<FEELEventListener> listeners, Map<String, Object> inputVariables) {
         FEELEventListenersManager eventsManager = getEventsManager(listeners);
-        EvaluationContextImpl ctx = new EvaluationContextImpl( eventsManager );
+        EvaluationContextImpl ctx = new EvaluationContextImpl(cl, eventsManager, inputVariables.size());
         if (customFrame.isPresent()) {
             ExecutionFrameImpl globalFrame = (ExecutionFrameImpl) ctx.pop();
             ExecutionFrameImpl interveawedFrame = customFrame.get();
@@ -181,38 +199,13 @@ public class FEELImpl
 
     @Override
     public List<UnaryTest> evaluateUnaryTests(String expression, Map<String, Type> variableTypes) {
-        // DMN defines a special case where, unless the expressions are unary tests
-        // or ranges, they need to be converted into an equality test unary expression.
-        // This way, we have to compile and check the low level AST nodes to properly
-        // deal with this case
-        CompilerContext ctx = newCompilerContext();
+        CompilerContext ctx = newCompilerContext(getListeners());
         for( Map.Entry<String, Type> e : variableTypes.entrySet() ) {
             ctx.addInputVariableType( e.getKey(), e.getValue() );
         }
-        CompiledExpressionImpl compiledExpression = (CompiledExpressionImpl) compileExpressionList( expression, ctx );
-        if( compiledExpression != null ) {
-            ListNode listNode = (ListNode) compiledExpression.getExpression();
-            List<BaseNode> tests = new ArrayList<>(  );
-            for( BaseNode o : listNode.getElements() ) {
-                if ( o == null ) {
-                    // not much we can do, so just skip it. Error was reported somewhere else
-                    continue;
-                } else if ( o instanceof UnaryTestNode || o instanceof DashNode ) {
-                    tests.add( o );
-                } else if( o instanceof RangeNode ) {
-                    tests.add( new UnaryTestNode( "in", o ) );
-                } else {
-                    tests.add( new UnaryTestNode( "=", o ) );
-                }
-            }
-            listNode.setElements( tests );
-            compiledExpression.setExpression( listNode );
 
-            // now we can evaluate the expression to build the list of unary tests
-            List<UnaryTest> uts = (List<UnaryTest>) evaluate( compiledExpression, FEELImpl.EMPTY_INPUT );
-            return uts;
-        }
-        return Collections.emptyList();
+        return compileUnaryTests(expression, ctx)
+                .apply(newEvaluationContext(ctx.getListeners(), EMPTY_INPUT));
     }
 
     @Override

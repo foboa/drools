@@ -17,6 +17,7 @@
 package org.kie.dmn.feel.runtime.functions;
 
 import java.math.BigDecimal;
+
 import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
 import org.kie.dmn.feel.runtime.events.InvalidParametersEvent;
 import org.kie.dmn.feel.util.EvalHelper;
@@ -25,7 +26,7 @@ public class NumberFunction
         extends BaseFEELFunction {
 
     public NumberFunction() {
-        super( "number" );
+        super(FEELConversionFunctionNames.NUMBER);
     }
 
     public FEELFnResult<BigDecimal> invoke(@ParameterName("from") String from, @ParameterName("grouping separator") String group, @ParameterName("decimal separator") String decimal) {
@@ -49,11 +50,13 @@ public class NumberFunction
         if ( decimal != null ) {
             from = from.replaceAll( "\\" + decimal, "." );
         }
-        
-        try {
-            return FEELFnResult.ofResult( EvalHelper.getBigDecimalOrNull( from ) );
-        } catch (Exception e) {
-            return FEELFnResult.ofError(new InvalidParametersEvent(Severity.ERROR, "unable to calculate final number result", e));
+
+        BigDecimal result = EvalHelper.getBigDecimalOrNull( from );
+        if( from != null && result == null ) {
+            // conversion failed
+            return FEELFnResult.ofError( new InvalidParametersEvent(Severity.ERROR, "unable to calculate final number result" ) );
+        } else {
+            return FEELFnResult.ofResult( result );
         }
     }
 

@@ -13,6 +13,14 @@
  */
 package org.drools.compiler.lang;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+
 import org.drools.compiler.compiler.DrlExprParser;
 import org.drools.compiler.lang.descr.AtomicExprDescr;
 import org.drools.compiler.lang.descr.BaseDescr;
@@ -28,15 +36,8 @@ import org.drools.core.base.evaluators.Operator;
 import org.drools.core.rule.XpathBackReference;
 import org.drools.core.util.ReflectiveVisitor;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
-
 import static org.drools.compiler.rule.builder.dialect.DialectUtil.findClassByName;
+import static org.drools.core.rule.constraint.EvaluatorHelper.WM_ARGUMENT;
 import static org.drools.core.util.ClassUtils.findClass;
 import static org.drools.core.util.StringUtils.indexOfOutOfQuotes;
 
@@ -219,7 +220,7 @@ public class MVELDumper extends ReflectiveVisitor implements ExpressionRewriter 
         return expr;
     }
 
-    String[] processImplicitConstraints(String expr, AtomicExprDescr atomicExpr, ConstraintConnectiveDescr parent, int parentIdx, MVELDumperContext context) {
+    public String[] processImplicitConstraints(String expr, AtomicExprDescr atomicExpr, ConstraintConnectiveDescr parent, int parentIdx, MVELDumperContext context) {
         boolean hasQuotes = expr.indexOf('"') >= 0;
         String[] constrAndExpr = new String[] { "", expr };
         int sharpPos = hasQuotes ? indexOfOutOfQuotes(expr, '#') : expr.indexOf('#');
@@ -532,11 +533,8 @@ public class MVELDumper extends ReflectiveVisitor implements ExpressionRewriter 
         operator.setRightString( right );
         sbuilder.append( evaluatorPrefix( operator.isNegated() ) )
                 .append( alias )
-                .append( ".evaluate( " )
-                .append( left )
-                .append( ", " )
-                .append( right )
-                .append( " )" )
+                .append( ".evaluate( ").append( WM_ARGUMENT ).append( ", " )
+                .append( left ).append( ", " ).append( right ).append( " )" )
                 .append( evaluatorSufix( operator.isNegated() ) );
 
     }

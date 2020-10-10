@@ -17,36 +17,38 @@
 package org.kie.dmn.feel.runtime.functions;
 
 import java.time.Duration;
-import java.time.Period;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.TemporalAmount;
 import java.util.Arrays;
 import java.util.List;
 
-import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
+import org.kie.dmn.feel.lang.types.impl.ComparablePeriod;
 import org.kie.dmn.feel.runtime.events.InvalidParametersEvent;
-import org.kie.dmn.feel.runtime.functions.FEELFnResult;
 
 public class DurationFunction
         extends BaseFEELFunction {
 
     public DurationFunction() {
-        super( "duration" );
+        super(FEELConversionFunctionNames.DURATION);
     }
 
     public FEELFnResult<TemporalAmount> invoke(@ParameterName( "from" ) String val) {
         if ( val == null ) {
             return FEELFnResult.ofError(new InvalidParametersEvent(Severity.ERROR, "from", "cannot be null"));
         }
-        
+
+        if ( val.indexOf("-") > 0) {
+            return FEELFnResult.ofError( new InvalidParametersEvent(Severity.ERROR, "from", "negative values for units are not allowed.") );
+        }
+
         try {
             // try to parse as days/hours/minute/seconds
             return FEELFnResult.ofResult( Duration.parse( val ) );
         } catch( DateTimeParseException e ) {
             // if it failed, try to parse as years/months
             try {
-                return FEELFnResult.ofResult( Period.parse( val ) );
+                return FEELFnResult.ofResult(ComparablePeriod.parse(val).normalized());
             } catch( DateTimeParseException e2 ) {
                 // failed to parse, so return null according to the spec
                 return FEELFnResult.ofError(new InvalidParametersEvent(Severity.ERROR, "from", "date-parsing exception", 

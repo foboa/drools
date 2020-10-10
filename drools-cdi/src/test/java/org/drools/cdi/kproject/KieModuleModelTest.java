@@ -16,6 +16,8 @@
 
 package org.drools.cdi.kproject;
 
+import java.util.List;
+
 import org.drools.compiler.kproject.models.KieBaseModelImpl;
 import org.drools.compiler.kproject.models.KieSessionModelImpl;
 import org.junit.Test;
@@ -30,15 +32,18 @@ import org.kie.api.builder.model.WorkItemHandlerModel;
 import org.kie.api.conf.DeclarativeAgendaOption;
 import org.kie.api.conf.EqualityBehaviorOption;
 import org.kie.api.conf.EventProcessingOption;
+import org.kie.api.conf.SequentialOption;
+import org.kie.api.conf.SessionsPoolOption;
 import org.kie.api.runtime.conf.BeliefSystemTypeOption;
 import org.kie.api.runtime.conf.ClockTypeOption;
 import org.kie.internal.builder.conf.LanguageLevelOption;
 import org.kie.internal.builder.conf.PropertySpecificOption;
 
-import java.util.List;
-
 import static org.drools.compiler.kproject.models.KieModuleModelImpl.fromXML;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public class KieModuleModelTest {
 
@@ -54,6 +59,8 @@ public class KieModuleModelTest {
                 .setEqualsBehavior( EqualityBehaviorOption.EQUALITY )
                 .setEventProcessingMode( EventProcessingOption.STREAM )
                 .setDeclarativeAgenda( DeclarativeAgendaOption.ENABLED )
+                .setSequential( SequentialOption.YES )
+                .setSessionsPool( SessionsPoolOption.get(3) )
                 .addInclude("OtherKBase")
                 .addPackage("org.kie.pkg1")
                 .addPackage("org.kie.pkg2");
@@ -63,6 +70,7 @@ public class KieModuleModelTest {
                 .setClockType(ClockTypeOption.get("realtime"))
                 .setBeliefSystem(BeliefSystemTypeOption.get("jtms"))
                 .setFileLogger("drools.log", 10, true)
+                .addCalendar("monday", "org.domain.Monday")
                 .setDefault(true);
 
         ksession1.newListenerModel("org.domain.FirstInterface", ListenerModel.Kind.AGENDA_EVENT_LISTENER);
@@ -90,7 +98,7 @@ public class KieModuleModelTest {
 
         String xml = kproj.toXML();
 
-        // System.out.println( xml );
+//         System.out.println( xml );
 
         KieModuleModel kprojXml = fromXML(xml);
 
@@ -102,6 +110,8 @@ public class KieModuleModelTest {
         assertEquals(EqualityBehaviorOption.EQUALITY, kieBaseModelXML.getEqualsBehavior());
         assertEquals(EventProcessingOption.STREAM, kieBaseModelXML.getEventProcessingMode());
         assertEquals(DeclarativeAgendaOption.ENABLED, kieBaseModelXML.getDeclarativeAgenda());
+        assertEquals(SequentialOption.YES, kieBaseModelXML.getSequential());
+        assertEquals(SessionsPoolOption.get(3), kieBaseModelXML.getSessionsPool());
         assertFalse(kieBaseModelXML.isDefault());
         assertEquals("org.kie.pkg1", kieBaseModelXML.getPackages().get(0));
         assertEquals("org.kie.pkg2", kieBaseModelXML.getPackages().get(1));
@@ -112,6 +122,7 @@ public class KieModuleModelTest {
         assertEquals(KieSessionType.STATEFUL, kieSessionModelXML.getType());
         assertEquals(ClockTypeOption.get("realtime"), kieSessionModelXML.getClockType());
         assertEquals(BeliefSystemTypeOption.get("jtms"), kieSessionModelXML.getBeliefSystem());
+        assertEquals("org.domain.Monday", kieSessionModelXML.getCalendars().get("monday"));
 
         FileLoggerModel fileLogger = kieSessionModelXML.getFileLogger();
         assertEquals("drools.log", fileLogger.getFile());

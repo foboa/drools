@@ -16,14 +16,17 @@
 
 package org.kie.dmn.feel.lang.ast;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
 import org.kie.dmn.feel.lang.EvaluationContext;
 import org.kie.dmn.feel.lang.Type;
 import org.kie.dmn.feel.lang.types.BuiltInType;
 import org.kie.dmn.feel.util.Msg;
-
-import java.util.*;
 
 public class QuantifiedExpressionNode
         extends BaseNode {
@@ -112,7 +115,7 @@ public class QuantifiedExpressionNode
         }
     }
 
-    private boolean nextIteration( EvaluationContext ctx, QEIteration[] ictx ) {
+    public static boolean nextIteration(EvaluationContext ctx, QEIteration[] ictx) {
         int i = ictx.length-1;
         while ( i >= 0 && i < ictx.length ) {
             if ( ictx[i].hasNextValue() ) {
@@ -125,7 +128,7 @@ public class QuantifiedExpressionNode
         return i >= 0;
     }
 
-    private void setValueIntoContext(EvaluationContext ctx, QEIteration qeIteration) {
+    public static void setValueIntoContext(EvaluationContext ctx, QEIteration qeIteration) {
         ctx.setValue( qeIteration.getName(), qeIteration.getNextValue() );
     }
 
@@ -156,7 +159,7 @@ public class QuantifiedExpressionNode
         return qei;
     }
 
-    private static class QEIteration {
+    public static class QEIteration {
         private String name;
         private Iterable values;
         private Iterator iterator;
@@ -184,5 +187,19 @@ public class QuantifiedExpressionNode
         public String getName() {
             return name;
         }
+    }
+
+    @Override
+    public ASTNode[] getChildrenNode() {
+        ASTNode[] children = new ASTNode[ iterationContexts.size() + 1 ];
+        System.arraycopy(iterationContexts.toArray(new ASTNode[]{}), 0, children, 0, iterationContexts.size());
+        children[ children.length-1 ] = expression;
+        return children;
+    }
+
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
     }
 }

@@ -16,18 +16,19 @@
 
 package org.kie.dmn.feel.runtime.functions;
 
-import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
-import org.kie.dmn.feel.runtime.events.InvalidParametersEvent;
-import org.kie.dmn.feel.util.EvalHelper;
-
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 
+import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
+import org.kie.dmn.feel.runtime.events.InvalidParametersEvent;
+import org.kie.dmn.feel.util.EvalHelper;
+
 public class ProductFunction
         extends BaseFEELFunction {
+    public static final ProductFunction INSTANCE = new ProductFunction();
 
-    public ProductFunction() {
+    ProductFunction() {
         super( "product" );
     }
 

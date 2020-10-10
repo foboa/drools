@@ -32,21 +32,10 @@ public class PhreakWorkingMemoryFactory implements WorkingMemoryFactory, Seriali
     }
 
     public InternalWorkingMemory createWorkingMemory(long id, InternalKnowledgeBase kBase, SessionConfiguration config, Environment environment) {
-        InternalWorkingMemory cachedWm = kBase.getCachedSession(config, environment);
-        if (cachedWm != null) {
-            return cachedWm;
-        }
-
-        if (kBase.hasUnits()) {
-            throw new IllegalStateException( "Cannot create a KieSession against a KieBase with units" );
-        }
         return new StatefulKnowledgeSessionImpl( id, kBase, true, config, environment);
     }
 
     public InternalWorkingMemory createWorkingMemory(long id, InternalKnowledgeBase kBase, FactHandleFactory handleFactory, long propagationContext, SessionConfiguration config, InternalAgenda agenda, Environment environment) {
-        if (kBase.hasUnits()) {
-            throw new IllegalStateException( "Cannot create a KieSession against a KieBase with units" );
-        }
         return new StatefulKnowledgeSessionImpl(id, kBase, handleFactory, propagationContext, config, agenda, environment);
     }
 }

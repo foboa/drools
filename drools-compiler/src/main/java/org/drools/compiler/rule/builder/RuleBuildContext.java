@@ -1,12 +1,12 @@
 /*
  * Copyright 2006 Red Hat, Inc. and/or its affiliates.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,7 +18,7 @@ package org.drools.compiler.rule.builder;
 
 import java.util.Optional;
 
-import org.drools.compiler.builder.impl.KnowledgeBuilderImpl;
+import org.drools.compiler.builder.DroolsAssemblerContext;
 import org.drools.compiler.compiler.Dialect;
 import org.drools.compiler.compiler.DialectCompiletimeRegistry;
 import org.drools.compiler.compiler.RuleBuildError;
@@ -33,8 +33,9 @@ import org.drools.core.rule.Pattern;
 import org.drools.core.rule.QueryImpl;
 import org.drools.core.spi.DeclarationScopeResolver;
 import org.drools.core.util.ClassUtils;
-import org.kie.api.runtime.rule.RuleUnit;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
+import org.kie.internal.ruleunit.RuleUnitComponentFactory;
+import org.kie.internal.ruleunit.RuleUnitDescription;
+import org.drools.core.addon.TypeResolver;
 
 /**
  * A context for the current build
@@ -61,10 +62,12 @@ public class RuleBuildContext extends PackageBuildContext {
 
     private boolean inXpath;
 
+    private int xpathChuckNr = 0;
+
     /**
      * Default constructor
      */
-    public RuleBuildContext(final KnowledgeBuilderImpl kBuilder,
+    public RuleBuildContext(final DroolsAssemblerContext kBuilder,
                             final RuleDescr ruleDescr,
                             final DialectCompiletimeRegistry dialectCompiletimeRegistry,
                             final InternalKnowledgePackage pkg,
@@ -76,7 +79,7 @@ public class RuleBuildContext extends PackageBuildContext {
             if (abductive == null) {
                 this.rule = new QueryImpl(ruleDescr.getName());
             } else {
-                this.rule = new AbductiveQuery(ruleDescr.getName(), abductive.mode());
+                this.rule = new AbductiveQuery(ruleDescr.getName());
             }
         } else {
             this.rule = ruleDescr.toRule();
@@ -179,21 +182,18 @@ public class RuleBuildContext extends PackageBuildContext {
         boolean nameInferredFromResource = false;
 
         if (ruleUnitClassName == null && rule.getResource() != null && rule.getResource().getSourcePath() != null) {
-            String drlPath = rule.getResource().getSourcePath();
-            int lastSep = drlPath.lastIndexOf('/');
-            if (lastSep >= 0) {
-                drlPath = drlPath.substring(lastSep + 1);
-            }
-            ruleUnitClassName = rule.getPackage() + "." + drlPath.substring(0, drlPath.lastIndexOf('.')).replace('/', '.');
+            // We cannot depend on splitting based on File.separator, because e.g. MemoryFileSystem is "/" based
+            // also on Windows => We need to parse the classname based on Java classname allowed characters.
+            ruleUnitClassName = extractClassNameFromSourcePath();
             nameInferredFromResource = true;
         }
 
-        if (ruleUnitClassName != null) {
+        if (RuleUnitComponentFactory.get() != null && ruleUnitClassName != null) {
             TypeResolver typeResolver = getPkg().getTypeResolver();
             boolean unitFound = false;
             Class<?> ruleUnitClass = ClassUtils.safeLoadClass(typeResolver.getClassLoader(), ruleUnitClassName);
             if (ruleUnitClass != null) {
-                unitFound = RuleUnit.class.isAssignableFrom(ruleUnitClass);
+                unitFound = RuleUnitComponentFactory.get().isRuleUnitClass( ruleUnitClass );
                 if (unitFound && nameInferredFromResource) {
                     rule.setRuleUnitClassName(ruleUnitClassName);
                 }
@@ -207,6 +207,47 @@ public class RuleBuildContext extends PackageBuildContext {
     }
 
     public Optional<EntryPointId> getEntryPointId(String name) {
-        return getPkg().getRuleUnitRegistry().getRuleUnitFor(getRule()).flatMap(ruDescr -> ruDescr.getEntryPointId(name));
+        return getPkg().getRuleUnitDescriptionLoader().getDescription(getRule()).flatMap(ruDescr -> getEntryPointId(ruDescr, name));
+    }
+
+    public Optional<EntryPointId> getEntryPointId( RuleUnitDescription ruDescr, String name ) {
+        return ruDescr.hasVar( name ) ? Optional.of( new EntryPointId( ruDescr.getEntryPointName(name) ) ) : Optional.empty();
+    }
+
+    private String extractClassNameFromSourcePath() {
+        String drlPath = rule.getResource().getSourcePath();
+        final int fileTypeDotIndex = drlPath.lastIndexOf('.');
+        // If '.' is the first character, it may be a path like ./somepath/something/etc,
+        // otherwise, if found somewhere, remove it with file type suffix
+        if (fileTypeDotIndex > 0) {
+            drlPath = drlPath.substring(0, fileTypeDotIndex);
+        }
+
+        StringBuilder classNameBuilder = new StringBuilder();
+        int actualIndex = drlPath.length() - 1;
+        char actualChar = drlPath.charAt(actualIndex);
+        while (Character.isJavaIdentifierPart(actualChar) || Character.isJavaIdentifierStart(actualChar)) {
+            classNameBuilder.append(actualChar);
+            actualIndex--;
+            if (actualIndex >= 0) {
+                actualChar = drlPath.charAt(actualIndex);
+            } else {
+                break;
+            }
+        }
+
+        return rule.getPackage() + "." + classNameBuilder.reverse().toString();
+    }
+
+    public void increaseXpathChuckNr() {
+        xpathChuckNr++;
+    }
+
+    public void resetXpathChuckNr() {
+        xpathChuckNr = 0;
+    }
+
+    public int getXpathChuckNr() {
+        return xpathChuckNr;
     }
 }

@@ -1,12 +1,12 @@
 /*
  * Copyright 2010 Red Hat, Inc. and/or its affiliates.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -17,12 +17,15 @@
 package org.drools.workbench.models.guided.dtable.backend;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.StringTokenizer;
 
+import org.drools.workbench.models.datamodel.rule.ActionCallMethod;
 import org.drools.workbench.models.datamodel.rule.ActionExecuteWorkItem;
 import org.drools.workbench.models.datamodel.rule.ActionFieldList;
 import org.drools.workbench.models.datamodel.rule.ActionFieldValue;
@@ -74,10 +77,16 @@ import org.drools.workbench.models.guided.dtable.shared.model.LimitedEntryBRLCon
 import org.drools.workbench.models.guided.dtable.shared.model.LimitedEntryCol;
 import org.drools.workbench.models.guided.dtable.shared.model.MetadataCol52;
 import org.drools.workbench.models.guided.dtable.shared.model.Pattern52;
+import org.kie.soup.commons.util.ListSplitter;
 import org.kie.soup.project.datamodel.commons.imports.ImportsWriter;
 import org.kie.soup.project.datamodel.commons.packages.PackageNameWriter;
 import org.kie.soup.project.datamodel.oracle.DataType;
 import org.kie.soup.project.datamodel.oracle.OperatorsOracle;
+
+import static org.drools.workbench.models.datamodel.rule.Attribute.NEGATE_RULE;
+import static org.drools.workbench.models.guided.dtable.shared.model.GuidedDecisionTable52.RULE_DESCRIPTION_INDEX;
+import static org.drools.workbench.models.guided.dtable.shared.model.GuidedDecisionTable52.RULE_NAME_COLUMN_INDEX;
+import static org.drools.workbench.models.guided.dtable.shared.model.GuidedDecisionTable52.RULE_NUMBER_INDEX;
 
 /**
  * This takes care of converting GuidedDT object to DRL (via the RuleModel).
@@ -112,11 +121,13 @@ public class GuidedDTDRLPersistence {
             TemplateDataProvider rowDataProvider = new GuidedDTTemplateDataProvider(allColumns,
                                                                                     row);
 
-            Integer num = (Integer) row.get(0).getNumericValue();
-            String desc = row.get(1).getStringValue();
+            Integer num = (Integer) row.get(RULE_NUMBER_INDEX).getNumericValue();
+            String desc = row.get(RULE_DESCRIPTION_INDEX).getStringValue();
 
             BRLRuleModel rm = new BRLRuleModel(dt);
-            rm.name = getName(dt.getTableName(),
+
+            rm.name = getName(dt,
+                              row,
                               num);
 
             doMetadata(allColumns,
@@ -143,9 +154,9 @@ public class GuidedDTDRLPersistence {
                 rm.parentName = dt.getParentName();
             }
 
-            sb.append("//from row number: " + (i + 1) + "\n");
+            sb.append(String.format("//from row number: %d\n", i + 1));
             if (desc != null && desc.length() > 0) {
-                sb.append("//" + desc + "\n");
+                sb.append(String.format("//%s\n", desc));
             }
 
             GuidedDTBRDRLPersistence drlMarshaller = new GuidedDTBRDRLPersistence(rowDataProvider);
@@ -320,12 +331,35 @@ public class GuidedDTDRLPersistence {
     private void addAction(IAction action,
                            List<LabelledAction> actions) {
         String binding = null;
+        boolean isUpdate = false;
         if (action instanceof ActionInsertFact) {
-            final ActionInsertFact af = (ActionInsertFact) action;
-            binding = af.getBoundName();
+            final ActionInsertFact original = (ActionInsertFact) action;
+
+            final ActionInsertFact af = new ActionInsertFact(original.getFactType());
+            af.setBoundName(original.getBoundName());
+            af.setFieldValues(original.getFieldValues());
+
+            action = af;
+            binding = original.getBoundName();
         } else if (action instanceof ActionSetField) {
-            final ActionSetField af = (ActionSetField) action;
-            binding = af.getVariable();
+            final ActionSetField original = (ActionSetField) action;
+
+            ActionSetField asf = null;
+            if (original instanceof ActionCallMethod) {
+                final ActionCallMethod originalACM = (ActionCallMethod) action;
+                asf = new ActionCallMethod(originalACM.getVariable());
+                ((ActionCallMethod) asf).setMethodName(originalACM.getMethodName());
+                ((ActionCallMethod) asf).setState(originalACM.getState());
+            } else if (original instanceof ActionUpdateField) {
+                asf = new ActionUpdateField(original.getVariable());
+                isUpdate = true;
+            } else {
+                asf = new ActionSetField(original.getVariable());
+            }
+            asf.setFieldValues(original.getFieldValues());
+
+            action = asf;
+            binding = original.getVariable();
         }
 
         //Binding is used to group related field setters together. It is essential for
@@ -340,6 +374,7 @@ public class GuidedDTDRLPersistence {
         final LabelledAction a = new LabelledAction();
         a.boundName = binding;
         a.action = action;
+        a.isUpdate = isUpdate;
         actions.add(a);
     }
 
@@ -742,25 +777,30 @@ public class GuidedDTDRLPersistence {
     /**
      * take a CSV list and turn it into DRL syntax
      */
-    String makeInList(String cell) {
+    String makeInList(final String cell) {
         if (cell.startsWith("(")) {
             return cell;
         }
-        String res = "";
-        StringTokenizer st = new StringTokenizer(cell,
-                                                 ",");
-        while (st.hasMoreTokens()) {
-            String t = st.nextToken().trim();
-            if (t.startsWith("\"")) {
-                res += t;
+
+        String result = "";
+        Iterator<String> iterator = Arrays.asList(ListSplitter.split("\"",
+                                                                     true,
+                                                                     cell)).iterator();
+        while (iterator.hasNext()) {
+
+            final String item = iterator.next();
+
+            if (item.startsWith("\"")) {
+                result += item;
             } else {
-                res += "\"" + t + "\"";
+                result += "\"" + item + "\"";
             }
-            if (st.hasMoreTokens()) {
-                res += ", ";
+            if (iterator.hasNext()) {
+                result += ", ";
             }
         }
-        return "(" + res + ")";
+
+        return "(" + result + ")";
     }
 
     private boolean no(String operator) {
@@ -852,7 +892,7 @@ public class GuidedDTDRLPersistence {
             if (validateAttributeCell(cell)) {
 
                 //If instance of "otherwise" column then flag RuleModel as being negated
-                if (at.getAttribute().equals(GuidedDecisionTable52.NEGATE_RULE_ATTR)) {
+                if (Objects.equals(at.getAttribute(), NEGATE_RULE.getAttributeName())) {
                     rm.setNegated(Boolean.valueOf(cell));
                 } else {
                     attribs.add(new RuleAttribute(at.getAttribute(),
@@ -889,9 +929,19 @@ public class GuidedDTDRLPersistence {
         }
     }
 
-    String getName(String tableName,
+    String getName(GuidedDecisionTable52 dt,
+                   List<DTCellValue52> row,
                    Number num) {
-        return "Row " + num.longValue() + " " + tableName;
+        final DTCellValue52 ruleNameValue = row.get(RULE_NAME_COLUMN_INDEX);
+        if (hasStringValue(ruleNameValue)) {
+            return ruleNameValue.getStringValue();
+        } else {
+            return String.format("Row %d %s", num.longValue(), dt.getTableName());
+        }
+    }
+
+    private boolean hasStringValue(final DTCellValue52 dtCellValue52) {
+        return dtCellValue52 != null && dtCellValue52.getStringValue() != null && !dtCellValue52.getStringValue().trim().isEmpty();
     }
 
     boolean validCell(String c,
@@ -952,7 +1002,8 @@ public class GuidedDTDRLPersistence {
                 }
             }
         }
-        if (c.getConstraintValueType() == BaseSingleFieldConstraint.TYPE_LITERAL && c.isBound()) {
+        final int constraintValueType = c.getConstraintValueType();
+        if ((constraintValueType == BaseSingleFieldConstraint.TYPE_LITERAL || constraintValueType == BaseSingleFieldConstraint.TYPE_RET_VALUE) && c.isBound()) {
             sfc.setFieldBinding(c.getBinding());
         }
         sfc.setParameters(c.getParameters());

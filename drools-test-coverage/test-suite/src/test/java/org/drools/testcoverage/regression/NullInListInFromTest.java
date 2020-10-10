@@ -16,23 +16,25 @@
 
 package org.drools.testcoverage.regression;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+import org.drools.testcoverage.common.util.KieBaseTestConfiguration;
 import org.drools.testcoverage.common.util.KieBaseUtil;
 import org.drools.testcoverage.common.util.KieUtil;
-import org.drools.testcoverage.common.util.TestConstants;
+import org.drools.testcoverage.common.util.TestParametersUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.kie.api.KieBase;
-import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
-import org.kie.api.io.Resource;
 import org.kie.api.runtime.KieSession;
-
-import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Tests handling a null value in a list used in FROM (BZ 1093174).
  */
+@RunWith(Parameterized.class)
 public class NullInListInFromTest {
 
     private static final String DRL =
@@ -44,11 +46,20 @@ public class NullInListInFromTest {
             "then\n" +
             "end\n";
 
+    private final KieBaseTestConfiguration kieBaseTestConfiguration;
+
+    public NullInListInFromTest(final KieBaseTestConfiguration kieBaseTestConfiguration) {
+        this.kieBaseTestConfiguration = kieBaseTestConfiguration;
+    }
+
+    @Parameterized.Parameters(name = "KieBase type={0}")
+    public static Collection<Object[]> getParameters() {
+        return TestParametersUtil.getKieBaseConfigurations();
+    }
+
     @Test
-    public void testNullValueInFrom() throws Exception {
-        final Resource resource = KieServices.Factory.get().getResources().newReaderResource(new StringReader(DRL));
-        resource.setTargetPath(TestConstants.DRL_TEST_TARGET_PATH);
-        final KieBuilder kbuilder = KieUtil.getKieBuilderFromResources(true, resource);
+    public void testNullValueInFrom() {
+        final KieBuilder kbuilder = KieUtil.getKieBuilderFromDrls(kieBaseTestConfiguration, true, DRL);
 
         final KieBase kbase = KieBaseUtil.getDefaultKieBaseFromKieBuilder(kbuilder);
         final KieSession ksession = kbase.newKieSession();

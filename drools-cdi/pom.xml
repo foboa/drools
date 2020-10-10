@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>drools-cdi</artifactId>
@@ -31,7 +31,7 @@
   <name>Drools :: CDI</name>
 
   <properties>
-    <osgi.Bundle-SymbolicName>org.drools.cdi</osgi.Bundle-SymbolicName>
+    <java.module.name>org.drools.cdi</java.module.name>
   </properties>
 
   <dependencies>
@@ -52,9 +52,13 @@
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-compiler</artifactId>
+      <artifactId>drools-mvel</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-mvel</artifactId>
     </dependency>
     <dependency>
       <groupId>org.kie</groupId>
@@ -64,10 +68,12 @@
       <groupId>org.kie</groupId>
       <artifactId>kie-internal</artifactId>
     </dependency>
+
     <dependency>
       <groupId>org.kie.soup</groupId>
       <artifactId>kie-soup-project-datamodel-commons</artifactId>
     </dependency>
+
     <!-- External dependencies -->
     <dependency>
       <groupId>org.osgi</groupId>

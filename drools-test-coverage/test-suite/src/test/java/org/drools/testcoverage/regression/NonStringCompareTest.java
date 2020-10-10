@@ -16,22 +16,26 @@
 
 package org.drools.testcoverage.regression;
 
+import java.util.Collection;
+
 import org.assertj.core.api.Assertions;
+import org.drools.testcoverage.common.util.KieBaseTestConfiguration;
 import org.drools.testcoverage.common.util.KieBaseUtil;
 import org.drools.testcoverage.common.util.KieUtil;
 import org.drools.testcoverage.common.util.TestConstants;
+import org.drools.testcoverage.common.util.TestParametersUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.kie.api.KieBase;
-import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
 import org.kie.api.builder.Message.Level;
 import org.kie.api.definition.type.FactType;
-import org.kie.api.io.Resource;
 import org.kie.api.runtime.KieSession;
 
-import java.io.StringReader;
-
+@RunWith(Parameterized.class)
 public class NonStringCompareTest {
+
     private static final String genericDrl =
             "package " + TestConstants.PACKAGE_REGRESSION + "\n"
             + "declare Fact\n"
@@ -43,6 +47,17 @@ public class NonStringCompareTest {
             + "    then\n"
             + "       // consequence\n"
             + "end\n";
+
+    private final KieBaseTestConfiguration kieBaseTestConfiguration;
+
+    public NonStringCompareTest(final KieBaseTestConfiguration kieBaseTestConfiguration) {
+        this.kieBaseTestConfiguration = kieBaseTestConfiguration;
+    }
+
+    @Parameterized.Parameters(name = "KieBase type={0}")
+    public static Collection<Object[]> getParameters() {
+        return TestParametersUtil.getKieBaseConfigurations();
+    }
 
     @Test
     public void testStringCompare() throws Exception {
@@ -84,8 +99,6 @@ public class NonStringCompareTest {
 
     private KieBuilder build(final String replacement) {
         final String drl = String.format(genericDrl, replacement);
-        final Resource resource = KieServices.Factory.get().getResources().newReaderResource(new StringReader(drl));
-        resource.setTargetPath(TestConstants.DRL_TEST_TARGET_PATH);
-        return KieUtil.getKieBuilderFromResources(false, resource);
+        return KieUtil.getKieBuilderFromDrls(kieBaseTestConfiguration, false, drl);
     }
 }

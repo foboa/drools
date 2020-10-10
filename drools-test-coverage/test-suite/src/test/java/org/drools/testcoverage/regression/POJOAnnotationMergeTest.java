@@ -16,23 +16,35 @@
 
 package org.drools.testcoverage.regression;
 
-import org.drools.testcoverage.common.util.KieBaseUtil;
-import org.drools.testcoverage.common.util.KieUtil;
-import org.drools.testcoverage.common.util.TestConstants;
-import org.junit.Test;
-import org.kie.api.KieServices;
-import org.kie.api.definition.type.Position;
-import org.kie.api.io.Resource;
+import java.util.Collection;
 
-import java.io.StringReader;
+import org.drools.testcoverage.common.util.KieBaseTestConfiguration;
+import org.drools.testcoverage.common.util.KieUtil;
+import org.drools.testcoverage.common.util.TestParametersUtil;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.kie.api.definition.type.Position;
 
 /**
  * Tests merging the POJO annotations (e.g. @Position) with fact declaration in
  * DRL.
  */
+@RunWith(Parameterized.class)
 public class POJOAnnotationMergeTest {
 
     private static final String EVENT_CLASS_NAME = PositionAnnotatedEvent.class.getCanonicalName();
+
+    private final KieBaseTestConfiguration kieBaseTestConfiguration;
+
+    public POJOAnnotationMergeTest(final KieBaseTestConfiguration kieBaseTestConfiguration) {
+        this.kieBaseTestConfiguration = kieBaseTestConfiguration;
+    }
+
+    @Parameterized.Parameters(name = "KieBase type={0}")
+    public static Collection<Object[]> getParameters() {
+        return TestParametersUtil.getKieBaseConfigurations();
+    }
 
     // should add metadata to metadata already defined in POJO
     private static final String DRL =
@@ -51,9 +63,7 @@ public class POJOAnnotationMergeTest {
      */
     @Test
     public void testPositionFromPOJOIgnored() {
-        final Resource resource = KieServices.Factory.get().getResources().newReaderResource(new StringReader(DRL));
-        resource.setTargetPath(TestConstants.DRL_TEST_TARGET_PATH);
-        KieUtil.getKieBuilderFromResources(true,resource);
+        KieUtil.getKieBuilderFromDrls(kieBaseTestConfiguration,true, DRL);
     }
 
     /**

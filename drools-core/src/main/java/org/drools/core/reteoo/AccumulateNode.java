@@ -22,7 +22,6 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.base.ClassObjectType;
@@ -32,11 +31,6 @@ import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.common.Memory;
 import org.drools.core.common.WorkingMemoryAction;
 import org.drools.core.impl.InternalKnowledgeBase;
-import org.drools.core.marshalling.impl.PersisterHelper;
-import org.drools.core.marshalling.impl.ProtobufInputMarshaller;
-import org.drools.core.marshalling.impl.ProtobufInputMarshaller.TupleKey;
-import org.drools.core.marshalling.impl.ProtobufMessages;
-import org.drools.core.marshalling.impl.ProtobufMessages.FactHandle;
 import org.drools.core.reteoo.builder.BuildContext;
 import org.drools.core.rule.Accumulate;
 import org.drools.core.rule.ContextEntry;
@@ -49,8 +43,6 @@ import org.drools.core.spi.ObjectType;
 import org.drools.core.spi.PropagationContext;
 import org.drools.core.util.AbstractBaseLinkedListNode;
 import org.drools.core.util.bitmask.BitMask;
-
-import static org.drools.core.reteoo.PropertySpecificUtil.calculatePositiveMask;
 
 /**
  * AccumulateNode
@@ -87,6 +79,7 @@ public class AccumulateNode extends BetaNode {
                sourceBinder,
                context );
         this.resultBinder = resultBinder;
+        this.resultBinder.init( context, getType() );
         this.resultConstraints = resultConstraints;
         this.accumulate = accumulate;
         this.unwrapRightObject = unwrapRightObject;
@@ -111,7 +104,7 @@ public class AccumulateNode extends BetaNode {
                 List<String> accessibleProperties = typeDeclaration.getAccessibleProperties();
                 for ( Declaration decl : accumulate.getRequiredDeclarations() ) {
                     if ( leftObjectType.equals( decl.getPattern().getObjectType() ) ) {
-                        leftMask = leftMask.setAll( calculatePositiveMask( decl.getPattern().getListenedProperties(), accessibleProperties ) );
+                        leftMask = leftMask.setAll( decl.getPattern().getPositiveWatchMask(accessibleProperties) );
                     }
                 }
             }
@@ -168,24 +161,11 @@ public class AccumulateNode extends BetaNode {
                                                      final InternalWorkingMemory workingMemory,
                                                      final LeftTuple leftTuple,
                                                      final Object result) {
-        InternalFactHandle handle;
-        ProtobufMessages.FactHandle _handle = null;
-        if( context.getReaderContext() != null ) {
-            Map<TupleKey, FactHandle> map = (Map<ProtobufInputMarshaller.TupleKey, ProtobufMessages.FactHandle>) context.getReaderContext().nodeMemories.get( getId() );
-            if( map != null ) {
-                _handle = map.get( PersisterHelper.createTupleKey(leftTuple) );
-            }
+        InternalFactHandle handle = null;
+        if ( context.getReaderContext() != null ) {
+            handle = context.getReaderContext().createAccumulateHandle( context.getEntryPoint(), workingMemory, leftTuple, result, getId() );
         }
-        if( _handle != null ) {
-            // create a handle with the given id
-            handle = workingMemory.getFactHandleFactory().newFactHandle( _handle.getId(),
-                                                                         result,
-                                                                         _handle.getRecency(),
-                                                                         workingMemory.getObjectTypeConfigurationRegistry().getObjectTypeConf( context.getEntryPoint(),
-                                                                                                                                               result ),
-                                                                         workingMemory,
-                                                                         null ); // so far, result is not an event
-        } else {
+        if (handle == null) {
             handle = workingMemory.getFactHandleFactory().newFactHandle( result,
                                                                          workingMemory.getObjectTypeConfigurationRegistry().getObjectTypeConf( context.getEntryPoint(),
                                                                                                                                                result ),
@@ -197,7 +177,6 @@ public class AccumulateNode extends BetaNode {
 
     @Override
     public void attach( BuildContext context ) {
-        this.resultBinder.init( context, getType() );
         super.attach( context );
     }
 
@@ -207,20 +186,17 @@ public class AccumulateNode extends BetaNode {
 
     @Override
     public boolean equals( final Object object ) {
-        return this == object ||
-               ( internalEquals( object ) &&
-               this.leftInput.thisNodeEquals( ((AccumulateNode) object).leftInput ) &&
-               this.rightInput.thisNodeEquals( ((AccumulateNode) object).rightInput ) );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
         if ( object == null || !(object instanceof AccumulateNode ) || this.hashCode() != object.hashCode() ) {
             return false;
         }
 
         AccumulateNode other = (AccumulateNode) object;
-        return this.constraints.equals( other.constraints ) &&
+        return this.leftInput.getId() == other.leftInput.getId() && this.rightInput.getId() == other.rightInput.getId() &&
+               this.constraints.equals( other.constraints ) &&
                this.accumulate.equals( other.accumulate ) &&
                resultBinder.equals( other.resultBinder ) &&
                Arrays.equals( this.resultConstraints, other.resultConstraints );
@@ -392,9 +368,8 @@ public class AccumulateNode extends BetaNode {
     }
 
     public LeftTuple createLeftTuple(InternalFactHandle factHandle,
-                                     Sink sink,
                                      boolean leftTupleMemoryEnabled) {
-        return new FromNodeLeftTuple(factHandle, sink, leftTupleMemoryEnabled);
+        return new FromNodeLeftTuple(factHandle, this, leftTupleMemoryEnabled);
     }
 
     public LeftTuple createLeftTuple(final InternalFactHandle factHandle,
@@ -459,7 +434,7 @@ public class AccumulateNode extends BetaNode {
     }
 
     @Override
-    public boolean doRemove(RuleRemovalContext context, ReteooBuilder builder, InternalWorkingMemory[] workingMemories) {
+    public boolean doRemove(RuleRemovalContext context, ReteooBuilder builder) {
         if ( !isInUse() ) {
             getLeftTupleSource().removeTupleSink( this );
             getRightInput().removeObjectSink( this );

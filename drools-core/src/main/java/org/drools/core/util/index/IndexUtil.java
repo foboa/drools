@@ -15,6 +15,10 @@
 
 package org.drools.core.util.index;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.reteoo.BetaMemory;
 import org.drools.core.reteoo.BetaNode;
@@ -22,22 +26,16 @@ import org.drools.core.reteoo.NodeTypeEnums;
 import org.drools.core.reteoo.TupleMemory;
 import org.drools.core.rule.ContextEntry;
 import org.drools.core.rule.IndexableConstraint;
-import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.BetaNodeFieldConstraint;
 import org.drools.core.spi.Constraint;
 import org.drools.core.util.AbstractHashTable.FieldIndex;
 import org.kie.internal.conf.IndexPrecedenceOption;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 import static org.drools.core.util.ClassUtils.getter2property;
 
 public class IndexUtil {
 
     private static final boolean USE_COMPARISON_INDEX = true;
-    private static final boolean USE_RANGE_INDEX = USE_COMPARISON_INDEX && false;
 
     public static boolean compositeAllowed(BetaNodeFieldConstraint[] constraints, short betaNodeType) {
         // 1) If there is 1 or more unification restrictions it cannot be composite
@@ -58,7 +56,7 @@ public class IndexUtil {
             }
         }
 
-        if (firstNonUnification != -1 && firstNonUnification > 0) {
+        if ( firstNonUnification > 0 ) {
             // Make sure a nonunification indexable constraint is first
             swap(constraints, 0, firstNonUnification);
         }
@@ -149,30 +147,8 @@ public class IndexUtil {
     }
 
     private static void sortRangeIndexable(BetaNodeFieldConstraint[] constraints, boolean[] indexable, int i) {
-        int dualConstraintPosition = findDualConstraint(constraints, i);
         swap(constraints, i, 0);
         indexable[0] = true;
-        if (dualConstraintPosition > 0) {
-            swap(constraints, dualConstraintPosition, 1);
-            indexable[1] = true;
-        }
-    }
-
-    private static int findDualConstraint(BetaNodeFieldConstraint[] constraints, int comparisonPos) {
-        if ( !(USE_RANGE_INDEX && constraints[comparisonPos] instanceof MvelConstraint) ) {
-            return -1;
-        }
-        MvelConstraint firstConstraint = (MvelConstraint) constraints[comparisonPos];
-        String leftValue = getLeftValueInExpression(firstConstraint.getExpression());
-        for (int i = comparisonPos+1; i < constraints.length; i++) {
-            if (constraints[i] instanceof MvelConstraint) {
-                MvelConstraint dualConstraint = (MvelConstraint) constraints[i];
-                if (isDual(firstConstraint, leftValue, dualConstraint)) {
-                    return i;
-                }
-            }
-        }
-        return -1;
     }
 
     private static boolean isEqualIndexable(BetaNodeFieldConstraint constraint) {
@@ -200,7 +176,7 @@ public class IndexUtil {
         private final boolean indexable;
         private final String operator;
 
-        private ConstraintType(boolean indexable, String operator) {
+        ConstraintType( boolean indexable, String operator ) {
             this.indexable = indexable;
             this.operator = operator;
         }
@@ -245,10 +221,61 @@ public class IndexUtil {
             }
         }
 
+        public ConstraintType negate() {
+            switch (this) {
+                case EQUAL:
+                    return NOT_EQUAL;
+                case NOT_EQUAL:
+                    return EQUAL;
+                case GREATER_THAN:
+                    return LESS_OR_EQUAL;
+                case GREATER_OR_EQUAL:
+                    return LESS_THAN;
+                case LESS_OR_EQUAL:
+                    return GREATER_THAN;
+                case LESS_THAN:
+                    return GREATER_OR_EQUAL;
+            }
+            return UNKNOWN;
+        }
+
+        public boolean canInverse() {
+            switch (this) {
+                case EQUAL:
+                case NOT_EQUAL:
+                case GREATER_THAN:
+                case GREATER_OR_EQUAL:
+                case LESS_THAN:
+                case LESS_OR_EQUAL:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public ConstraintType inverse() {
+            switch (this) {
+                case GREATER_THAN:
+                    return LESS_THAN;
+                case GREATER_OR_EQUAL:
+                    return LESS_OR_EQUAL;
+                case LESS_THAN:
+                    return GREATER_THAN;
+                case LESS_OR_EQUAL:
+                    return GREATER_OR_EQUAL;
+                default:
+                    return this;
+            }
+        }
+
         public static ConstraintType decode(String operator) {
+            return decode( operator, false );
+        }
+
+        public static ConstraintType decode(String operator, boolean negated) {
             for ( ConstraintType c : ConstraintType.values() ) {
                 if ( c.getOperator() != null && c.getOperator().equals(operator) ) {
-                    return c;
+                    return negated ? c.negate() : c;
                 }
             }
             return UNKNOWN;
@@ -266,7 +293,7 @@ public class IndexUtil {
         }
 
         Factory.IndexSpec indexSpec = new Factory.IndexSpec(config.getIndexPrecedenceOption(), keyDepth, betaNode.getType(), betaNode.getConstraints());
-        List<String> indexedProps = new ArrayList<String>();
+        List<String> indexedProps = new ArrayList<>();
         for (FieldIndex fieldIndex : indexSpec.indexes) {
             indexedProps.add( getter2property(fieldIndex.getExtractor().getNativeReadMethodName()) );
         }
@@ -304,12 +331,6 @@ public class IndexUtil {
                 return new TupleIndexRBTree( indexSpec.constraintType, indexSpec.indexes[0], false );
             }
 
-            if (indexSpec.constraintType == ConstraintType.RANGE) {
-                // missing TreeMap based implementation for range indexes
-                return new RightTupleIndexRangeRBTree( indexSpec.ascendingConstraintType, indexSpec.indexes[0],
-                                                       indexSpec.descendingConstraintType, indexSpec.indexes[1] );
-            }
-
             return new TupleList();
         }
 
@@ -329,12 +350,6 @@ public class IndexUtil {
                 return new TupleIndexRBTree( indexSpec.constraintType, indexSpec.indexes[0], true );
             }
 
-            if (indexSpec.constraintType == ConstraintType.RANGE) {
-                // missing TreeMap based implementation for range indexes
-                return new LeftTupleIndexRangeRBTree( indexSpec.ascendingConstraintType, indexSpec.indexes[0],
-                                                      indexSpec.descendingConstraintType, indexSpec.indexes[1] );
-            }
-
             return new TupleList();
         }
 
@@ -350,9 +365,6 @@ public class IndexUtil {
             private ConstraintType constraintType = ConstraintType.UNKNOWN;
             private FieldIndex[] indexes;
 
-            private ConstraintType ascendingConstraintType = null;
-            private ConstraintType descendingConstraintType = null;
-
             private IndexSpec(IndexPrecedenceOption indexPrecedenceOption, int keyDepth, short nodeType, BetaNodeFieldConstraint[] constraints) {
                 init(indexPrecedenceOption, keyDepth, nodeType, constraints);
             }
@@ -363,7 +375,7 @@ public class IndexUtil {
                         determineTypeWithPatternOrder(nodeType, constraints);
 
                 if (constraintType == ConstraintType.EQUAL) {
-                    List<FieldIndex> indexList = new ArrayList<FieldIndex>();
+                    List<FieldIndex> indexList = new ArrayList<>();
                     indexList.add(((IndexableConstraint)constraints[firstIndexableConstraint]).getFieldIndex());
 
                     // look for other EQUAL constraint to eventually add them to the index
@@ -376,29 +388,6 @@ public class IndexUtil {
 
                 } else if (constraintType.isComparison()) {
                     // look for a dual constraint to create a range index
-                    if (USE_RANGE_INDEX && constraints[firstIndexableConstraint] instanceof MvelConstraint) {
-                        MvelConstraint firstConstraint = (MvelConstraint) constraints[firstIndexableConstraint];
-                        String leftValue = getLeftValueInExpression(firstConstraint.getExpression());
-                        for (int i = firstIndexableConstraint+1; i < constraints.length; i++) {
-                            if (constraints[i] instanceof MvelConstraint) {
-                                MvelConstraint dualConstraint = (MvelConstraint) constraints[i];
-                                if (isDual(firstConstraint, leftValue, dualConstraint)) {
-                                    constraintType = ConstraintType.RANGE;
-                                    if (firstConstraint.getConstraintType().isAscending()) {
-                                        ascendingConstraintType = firstConstraint.getConstraintType();
-                                        descendingConstraintType = dualConstraint.getConstraintType();
-                                        indexes = new FieldIndex[]{ firstConstraint.getFieldIndex(), dualConstraint.getFieldIndex() };
-                                    } else {
-                                        ascendingConstraintType = dualConstraint.getConstraintType();
-                                        descendingConstraintType = firstConstraint.getConstraintType();
-                                        indexes = new FieldIndex[]{ dualConstraint.getFieldIndex(), firstConstraint.getFieldIndex() };
-                                    }
-                                    return;
-                                }
-                            }
-                        }
-                    }
-
                     indexes = new FieldIndex[]{ ((IndexableConstraint)constraints[firstIndexableConstraint]).getFieldIndex() };
                 }
             }
@@ -433,21 +422,5 @@ public class IndexUtil {
             }
 
         }
-    }
-
-    private static boolean isDual(MvelConstraint firstConstraint, String leftValue, MvelConstraint dualConstraint) {
-        return dualConstraint.getConstraintType().isComparison() &&
-                dualConstraint.getConstraintType().isAscending() != firstConstraint.getConstraintType().isAscending() &&
-                leftValue.equals( getLeftValueInExpression(dualConstraint.getExpression()) );
-    }
-
-    private static String getLeftValueInExpression(String expression) {
-        for (int i = 0; i < expression.length(); i++) {
-            char ch = expression.charAt(i);
-            if ( !Character.isJavaIdentifierPart(ch) && ch != '.' ) {
-                return expression.substring(0, i);
-            }
-        }
-        return expression;
     }
 }

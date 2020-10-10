@@ -22,6 +22,7 @@ import static org.kie.dmn.signavio.util.DynamicTypeUtils.mapOf;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -126,7 +127,7 @@ public class FEELExtendedFunctionsTest extends ExtendedFunctionsBaseFEELTest {
                 { "dateTime(\"2016-07-29T05:48:23\")", LocalDateTime.of( 2016, 7, 29, 5, 48, 23, 0 ) , null},
                 { "dateTime( 2016, 7, 29, 5, 48, 23 )", LocalDateTime.of( 2016, 7, 29, 5, 48, 23, 0 ) , null},
                 { "dateTime(\"2016-07-29T05:48:23Z\")", ZonedDateTime.of(2016, 7, 29, 5, 48, 23, 0, ZoneId.of("Z").normalized()) , null},
-                { "dateTime( 2016, 7, 29, 5, 48, 23, -5 )", ZonedDateTime.of(2016, 7, 29, 5, 48, 23, 0, ZoneOffset.ofHours( -5 ) ) , null},
+                { "dateTime( 2016, 7, 29, 5, 48, 23, -5 )", OffsetDateTime.of(2016, 7, 29, 5, 48, 23, 0, ZoneOffset.ofHours( -5 ) ) , null},
                 { "dateTime(\"2016-07-29T05:48:23.765-05:00\")", DateTimeFormatter.ISO_DATE_TIME.parse( "2016-07-29T05:48:23.765-05:00", ZonedDateTime::from ) , null},
                 { "dateTime(date(\"2016-07-29\"), time(\"05:48:23.765-05:00\") )", DateTimeFormatter.ISO_DATE_TIME.parse( "2016-07-29T05:48:23.765-05:00", ZonedDateTime::from ) , null},
                 { "hourDiff( date and time( \"2015-07-02T14:40:23-06:00\" ), date and time(\"2017-07-02T14:40:23-06:00\") )", new BigDecimal( "17544" ), null },
@@ -192,6 +193,7 @@ public class FEELExtendedFunctionsTest extends ExtendedFunctionsBaseFEELTest {
                 {"areElementsOf([\"item0\", \"item3\"], [\"item1\", \"item2\", \"item3\"])", false, null},
                 {"areElementsOf([], [\"item1\", \"item2\", \"item3\"])", true, null},
                 {"zip([\"id\", \"value\"], [\"23a3e98\", \"c45da1b\"], [40, 120])", Arrays.asList(mapOf(entry("id", "23a3e98"), entry("value", new BigDecimal("40"))), mapOf(entry("id", "c45da1b"), entry("value", new BigDecimal("120")))), null},
+                {"zip([\"id\", \"value\"], [[\"23a3e98\", \"c45da1b\"], [40, 120]])", Arrays.asList(mapOf(entry("id", "23a3e98"), entry("value", new BigDecimal("40"))), mapOf(entry("id", "c45da1b"), entry("value", new BigDecimal("120")))), null},
                 {"remove([\"item1\", \"item2\"], \"item1\")", Arrays.asList("item2"), null},
                 {"removeAll([\"item1\", \"item2\", \"item3\"], [\"item1\", \"item2\"])", Arrays.asList("item3"), null},
                 {"removeAll([\"item1\", \"item2\", \"item3\"], [\"item1\", \"item0\"])", Arrays.asList("item2", "item3"), null},

@@ -83,5 +83,15 @@ public class QualifiedNameNode
     public Type getResultType() {
         return resultType;
     }
-    
+
+    @Override
+    public ASTNode[] getChildrenNode() {
+        return parts.toArray( new ASTNode[parts.size()] );
+    }
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
+    }
+
 }

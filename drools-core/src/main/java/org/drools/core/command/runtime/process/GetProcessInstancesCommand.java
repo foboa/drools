@@ -16,23 +16,37 @@
 
 package org.drools.core.command.runtime.process;
 
-import org.drools.core.command.impl.ExecutableCommand;
-import org.drools.core.command.impl.RegistryContext;
-import org.kie.api.runtime.KieSession;
-import org.kie.api.runtime.process.ProcessInstance;
-import org.kie.api.runtime.Context;
+import java.util.ArrayList;
+import java.util.Collection;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
+import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlRootElement;
-import java.util.ArrayList;
-import java.util.Collection;
+
+import org.drools.core.runtime.impl.ExecutionResultImpl;
+import org.kie.api.command.ExecutableCommand;
+import org.kie.api.runtime.Context;
+import org.kie.api.runtime.KieSession;
+import org.kie.api.runtime.process.ProcessInstance;
+import org.kie.internal.command.RegistryContext;
 
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.NONE)
 public class GetProcessInstancesCommand
     implements
     ExecutableCommand<Collection<ProcessInstance>> {
+
+    @XmlAttribute(name="out-identifier")
+    private String outIdentifier;
+
+    public String getOutIdentifier() {
+        return outIdentifier;
+    }
+
+    public void setOutIdentifier(String outIdentifier) {
+        this.outIdentifier = outIdentifier;
+    }
 
     public Collection<ProcessInstance> execute(Context context) {
         KieSession ksession = ((RegistryContext) context).lookup( KieSession.class );
@@ -42,6 +56,11 @@ public class GetProcessInstancesCommand
 
         for ( ProcessInstance instance : instances ) {
             result.add( instance );
+        }
+
+        if ( this.outIdentifier != null ) {
+            ((RegistryContext) context).lookup( ExecutionResultImpl.class ).setResult(this.outIdentifier,
+                                                                                      new ArrayList<>(result));
         }
 
         return result;

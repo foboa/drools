@@ -16,11 +16,16 @@
 
 package org.drools.testcoverage.functional;
 
+import java.util.Collection;
 import org.assertj.core.api.Assertions;
+import org.drools.testcoverage.common.util.KieBaseTestConfiguration;
 import org.drools.testcoverage.common.util.KieBaseUtil;
 import org.drools.testcoverage.common.util.ResourceUtil;
 import org.drools.testcoverage.common.util.TestConstants;
+import org.drools.testcoverage.common.util.TestParametersUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.kie.api.KieBase;
 import org.kie.api.KieServices;
 import org.kie.api.command.Command;
@@ -44,18 +49,31 @@ import java.util.Map;
  * Tests Drools engine capabilities regarding Unicode characters
  * 
  */
+@RunWith(Parameterized.class)
 public class UnicodeTest {
+
+    private final KieBaseTestConfiguration kieBaseTestConfiguration;
+
+    public UnicodeTest(final KieBaseTestConfiguration kieBaseTestConfiguration) {
+        this.kieBaseTestConfiguration = kieBaseTestConfiguration;
+    }
+
+    @Parameterized.Parameters(name = "KieBase type={0}")
+    public static Collection<Object[]> getParameters() {
+        return TestParametersUtil.getKieBaseConfigurations();
+    }
 
     @Test
     public void testJapanese() {
         final KieServices kieServices = KieServices.Factory.get();
         final Resource resource = kieServices.getResources().newClassPathResource("unicode.drl", getClass());
-        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(true, resource);
+        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(kieBaseTestConfiguration,
+                resource);
         final KieSession ksession = kbase.newKieSession();
 
-        final List<Command<?>> commands = new ArrayList<Command<?>>();
+        final List<Command<?>> commands = new ArrayList<>();
 
-        List<人> 一覧 = new ArrayList<人>();
+        final List<人> 一覧 = new ArrayList<>();
         commands.add(kieServices.getCommands().newSetGlobal("一覧", 一覧));
 
         // let's create person yokozuna
@@ -77,13 +95,13 @@ public class UnicodeTest {
     public void testCzech() {
         final KieServices kieServices = KieServices.Factory.get();
         final Resource resource = kieServices.getResources().newClassPathResource("unicode.drl", getClass());
-        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(true, resource);
+        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(kieBaseTestConfiguration, resource);
         final KieSession ksession = kbase.newKieSession();
 
-        final List<Command<?>> commands = new ArrayList<Command<?>>();
-        final List<Člověk> lidé = new ArrayList<Člověk>();
+        final List<Command<?>> commands = new ArrayList<>();
+        final List<Člověk> lidé = new ArrayList<>();
         commands.add(kieServices.getCommands().newSetGlobal("lidé", lidé));
-        Člověk Řehoř = new Člověk();
+        final Člověk Řehoř = new Člověk();
         Řehoř.setVěk(30);
         Řehoř.setJméno("Řehoř");
         commands.add(kieServices.getCommands().newInsert(Řehoř));
@@ -92,8 +110,8 @@ public class UnicodeTest {
 
         Assertions.assertThat(kbase.getRule(TestConstants.PACKAGE_FUNCTIONAL, "příliš žluťoučký kůň úpěl ďábelské ódy")).isNotNull();
 
-        Map<String, Object> metaData = kbase.getRule(TestConstants.PACKAGE_FUNCTIONAL,
-                "příliš žluťoučký kůň úpěl ďábelské ódy").getMetaData();
+        final Map<String, Object> metaData = kbase.getRule(TestConstants.PACKAGE_FUNCTIONAL,
+                                                           "příliš žluťoučký kůň úpěl ďábelské ódy").getMetaData();
         Assertions.assertThat(metaData.get("PrávníPožadavek")).isEqualTo("Osoba starší osmnácti let");
 
         Assertions.assertThat(lidé.size()).isEqualTo(2);
@@ -106,11 +124,11 @@ public class UnicodeTest {
         final KieServices kieServices = KieServices.Factory.get();
         final Resource dsl = kieServices.getResources().newClassPathResource("unicode.dsl", getClass());
         final Resource dslr = kieServices.getResources().newClassPathResource("unicode.dslr", getClass());
-        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(true, dsl, dslr);
+        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(kieBaseTestConfiguration, dsl, dslr);
         final KieSession ksession = kbase.newKieSession();
 
-        final List<Command<?>> commands = new ArrayList<Command<?>>();
-        final List<Člověk> dospělí = new ArrayList<Člověk>();
+        final List<Command<?>> commands = new ArrayList<>();
+        final List<Člověk> dospělí = new ArrayList<>();
         commands.add(kieServices.getCommands().newSetGlobal("dospělí", dospělí));
         final Člověk Řehoř = new Člověk();
         Řehoř.setVěk(30);
@@ -129,11 +147,11 @@ public class UnicodeTest {
     public void testCzechXLSDecisionTable() throws FileNotFoundException {
         final KieServices kieServices = KieServices.Factory.get();
         final Resource resource = kieServices.getResources().newClassPathResource("unicode.xls", getClass());
-        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(true, resource);
+        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(kieBaseTestConfiguration, resource);
         final KieSession ksession = kbase.newKieSession();
 
-        final List<Command<?>> commands = new ArrayList<Command<?>>();
-        final List<Člověk> dospělí = new ArrayList<Člověk>();
+        final List<Command<?>> commands = new ArrayList<>();
+        final List<Člověk> dospělí = new ArrayList<>();
         commands.add(kieServices.getCommands().newSetGlobal("dospělí", dospělí));
         final Člověk Řehoř = new Člověk();
         Řehoř.setVěk(30);
@@ -155,13 +173,13 @@ public class UnicodeTest {
         final Resource decisionTable =
                 ResourceUtil.getDecisionTableResourceFromClasspath("unicode.csv", getClass(), DecisionTableInputType.CSV);
 
-        KieBase kbase = KieBaseUtil.getKieBaseFromResources(true, decisionTable);
-        KieSession ksession = kbase.newKieSession();
+        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(kieBaseTestConfiguration, decisionTable);
+        final KieSession ksession = kbase.newKieSession();
 
-        List<Command<?>> commands = new ArrayList<Command<?>>();
-        List<Člověk> dospělí = new ArrayList<Člověk>();
+        final List<Command<?>> commands = new ArrayList<>();
+        final List<Člověk> dospělí = new ArrayList<>();
         commands.add(kieServices.getCommands().newSetGlobal("dospělí", dospělí));
-        Člověk Řehoř = new Člověk();
+        final Člověk Řehoř = new Člověk();
         Řehoř.setVěk(30);
         Řehoř.setJméno("Řehoř");
         commands.add(kieServices.getCommands().newInsert(Řehoř));
@@ -179,7 +197,7 @@ public class UnicodeTest {
     public void testQueryCallFromJava() throws InstantiationException, IllegalAccessException {
         final KieServices kieServices = KieServices.Factory.get();
         final Resource resource = kieServices.getResources().newClassPathResource("unicode.drl", getClass());
-        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(true, resource);
+        final KieBase kbase = KieBaseUtil.getKieBaseFromResources(kieBaseTestConfiguration, resource);
         final KieSession ksession = kbase.newKieSession();
 
         final FactType locationType = kbase.getFactType(TestConstants.PACKAGE_FUNCTIONAL, "Umístění");
@@ -210,7 +228,7 @@ public class UnicodeTest {
         locationType.set(klíč, "místo", "obálka");
 
         // create working memory objects
-        final List<Command<?>> commands = new ArrayList<Command<?>>();
+        final List<Command<?>> commands = new ArrayList<>();
 
         // Location instances
         commands.add(kieServices.getCommands().newInsert(hruška));
@@ -226,8 +244,8 @@ public class UnicodeTest {
         final ExecutionResults results = ksession.execute(kieServices.getCommands().newBatchExecution(commands, null));
         final QueryResults qResults = (QueryResults) results.getValue(queryAlias);
 
-        final List<String> l = new ArrayList<String>();
-        for (QueryResultsRow r : qResults) {
+        final List<String> l = new ArrayList<>();
+        for (final QueryResultsRow r : qResults) {
             l.add((String) r.get("x"));
         }
 
@@ -300,18 +318,18 @@ public class UnicodeTest {
     @Test
     public void testMutibyteJavaDialect() {
         // DROOLS-1200
-        String drl =
+        final String drl =
                 "rule R dialect \"java\" when\n" +
                 "  Ｄ: String( )\n" +
                 "then\n" +
                 "  System.out.println( Ｄ.toString() );\n" +
                 "end\n";
 
-        KieSession kieSession = new KieHelper().addContent( drl, ResourceType.DRL )
+        final KieSession kieSession = new KieHelper().addContent(drl, ResourceType.DRL )
                                                .build().newKieSession();
 
         kieSession.insert( "Hello" );
-        int fired = kieSession.fireAllRules();
+        final int fired = kieSession.fireAllRules();
         Assertions.assertThat( fired ).isEqualTo( 1 );
     }
 }

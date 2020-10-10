@@ -16,11 +16,13 @@
 
 package org.drools.decisiontable.parser;
 
-import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 import org.drools.decisiontable.parser.xls.PropertiesSheetListener;
 import org.drools.decisiontable.parser.xls.PropertiesSheetListener.CaseInsensitiveMap;
@@ -32,6 +34,7 @@ import org.drools.template.model.Package;
 import org.drools.template.model.Rule;
 import org.drools.template.parser.DecisionTableParseException;
 
+import static org.drools.core.util.StringUtils.replaceOutOfQuotes;
 import static org.drools.decisiontable.parser.ActionType.Code;
 import static org.drools.template.model.Rule.MAX_ROWS;
 
@@ -71,6 +74,7 @@ implements RuleSheetListener {
     public static final String            QUERIES_TAG            = "Queries";
     public static final String            FUNCTIONS_TAG          = "Functions";
     public static final String            DECLARES_TAG           = "Declare";
+    public static final String            UNIT_TAG               = "Unit";
     public static final String            IMPORT_TAG             = "Import";
     public static final String            SEQUENTIAL_FLAG        = "Sequential";
     public static final String            ESCAPE_QUOTES_FLAG     = "EscapeQuotes";
@@ -104,26 +108,28 @@ implements RuleSheetListener {
     private final List<Rule>               _ruleList              = new LinkedList<Rule>();
 
     //need to keep an ordered list of this to make conditions appear in the right order
-    private List<SourceBuilder>            sourceBuilders         = new ArrayList<SourceBuilder>();
+    private Collection<SourceBuilder>     sourceBuilders;
 
     private final PropertiesSheetListener _propertiesListener     = new PropertiesSheetListener();
 
-    private boolean showPackage;
+    private final boolean showPackage;
+    private final boolean trimCell;
     private String worksheetName = null;
 
     /**
      * Constructor.
      */
     public DefaultRuleSheetListener() {
-        this( true );
+        this( true, true );
     }
 
     /**
      * Constructor.
      * @param showPackage if true, the rule set name is passed to the resulting package
      */
-    public DefaultRuleSheetListener(boolean showPackage) {
+    public DefaultRuleSheetListener(boolean showPackage, boolean trimCell) {
         this.showPackage = showPackage;
+        this.trimCell = trimCell;
     }
 
     public void setWorksheetName(String worksheetName) {
@@ -163,6 +169,11 @@ implements RuleSheetListener {
         final Package ruleset = new Package( (showPackage) ? rulesetName : null );
         for ( Rule rule : this._ruleList ) {
             ruleset.addRule( rule );
+        }
+
+        List<String> units = getProperties().getProperty( UNIT_TAG );
+        if (units != null && !units.isEmpty()) {
+            ruleset.setRuleUnit( units.get( 0 ) );
         }
 
         final List<Import> importList = RuleSheetParserUtil.getImportList( getProperties().getProperty( IMPORT_TAG ) );
@@ -299,17 +310,20 @@ implements RuleSheetListener {
      * As when there are merged/spanned cells, they may be left out.
      */
     private void flushRule() {
+        if ( sourceBuilders == null ) {
+            return;
+        }
         for ( SourceBuilder src : sourceBuilders ) {
             if ( src.hasValues() ) {
                 switch ( src.getActionTypeCode() ) {
                     case CONDITION:
                         Condition cond = new Condition();
-                        cond.setSnippet( src.getResult() );
+                        cond.setSnippet( replaceOutOfQuotes( src.getResult(), "\\n", " " ) );
                         _currentRule.addCondition( cond );
                         break;
                     case ACTION:
                         Consequence cons = new Consequence();
-                        cons.setSnippet( src.getResult() );
+                        cons.setSnippet( replaceOutOfQuotes( src.getResult(), "\\n", " " ) );
                         _currentRule.addConsequence( cons );
                         break;
                     case METADATA:
@@ -319,7 +333,6 @@ implements RuleSheetListener {
                 src.clearValues();
             }
         }
-
     }
 
     /*
@@ -348,12 +361,13 @@ implements RuleSheetListener {
      * This gets called each time a "new" rule table is found.
      */
     private void initRuleTable(final int row,
-            final int column,
-            final String value) {
+                               final int column,
+                               final String value,
+                               boolean firstTable) {
         preInitRuleTable( row, column, value );
         this._isInRuleTable = true;
         this._actions = new HashMap<Integer, ActionType>();
-        this.sourceBuilders = new ArrayList<SourceBuilder>();
+        this.sourceBuilders = new TreeSet<SourceBuilder>(Comparator.comparing( SourceBuilder::getColumn ));
         this._ruleStartColumn = column;
         this._ruleStartRow = row;
         this._ruleRow = row + LABEL_ROW + 1;
@@ -369,8 +383,10 @@ implements RuleSheetListener {
         this._currentEscapeQuotesFlag = getFlagValue(ESCAPE_QUOTES_FLAG, true);
         this._currentNumericDisabledFlag = getFlagValue(NUMERIC_DISABLED_FLAG, false);
 
-        this._currentSalience = getNumericValue( MAX_SALIENCE_TAG, this._currentSalience );
-        this._minSalienceTag = getNumericValue(MIN_SALIENCE_TAG, this._minSalienceTag);
+        if (firstTable) {
+            this._currentSalience = getNumericValue( MAX_SALIENCE_TAG, this._currentSalience );
+            this._minSalienceTag = getNumericValue( MIN_SALIENCE_TAG, this._minSalienceTag );
+        }
 
         String headCell = RuleSheetParserUtil.rc2name( this._ruleStartRow, this._ruleStartColumn );
         String ruleCell = RuleSheetParserUtil.rc2name( this._ruleRow, this._ruleStartColumn );
@@ -428,7 +444,7 @@ implements RuleSheetListener {
             final String value) {
         String testVal = value.trim().toLowerCase();
         if ( testVal.startsWith( RULE_TABLE_TAG ) ) {
-            initRuleTable( row, column, value.trim() );
+            initRuleTable( row, column, value.trim(), true );
         } else {
             this._propertiesListener.newCell( row, column, value, RuleSheetListener.NON_MERGED );
         }
@@ -438,11 +454,11 @@ implements RuleSheetListener {
             final int column,
             final String value,
             final int mergedColStart) {
-        String trimVal = value.trim();
+        String trimVal = trimCell ? value.trim() : value;
         String testVal = trimVal.toLowerCase();
         if ( testVal.startsWith( RULE_TABLE_TAG ) ) {
             finishRuleTable();
-            initRuleTable( row, column, trimVal );
+            initRuleTable( row, column, trimVal, false );
             return;
         }
 
@@ -614,7 +630,7 @@ implements RuleSheetListener {
                         RuleSheetParserUtil.rc2name( row, column ) +
                         " has an empty column header." );
             }
-            actionType.addCellValue( row, column, value, _currentEscapeQuotesFlag );
+            actionType.addCellValue( row, column, value, _currentEscapeQuotesFlag, trimCell );
             break;
         case SALIENCE:
             // Only if rule set is not sequential!

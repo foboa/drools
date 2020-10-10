@@ -72,4 +72,10 @@ public class AtomicExprDescr extends BaseDescr implements ExpressionDescr {
         expression = expression.replace( oldVar, newVar );
         return this;
     }
+
+    @Override
+    public BaseDescr negate() {
+        this.expression = "!(" + expression + ")";
+        return this;
+    }
 }

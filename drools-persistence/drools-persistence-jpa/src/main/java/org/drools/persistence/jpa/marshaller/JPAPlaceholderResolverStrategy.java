@@ -22,23 +22,18 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.Set;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
-import javax.persistence.Id;
 import javax.persistence.Persistence;
 import javax.persistence.metamodel.EntityType;
 import javax.persistence.metamodel.Metamodel;
-
 import org.drools.core.common.DroolsObjectInputStream;
-import org.drools.core.marshalling.impl.ProcessMarshallerWriteContext;
 import org.drools.persistence.api.TransactionAware;
 import org.drools.persistence.api.TransactionManager;
+import org.drools.serialization.protobuf.ProtobufProcessMarshallerWriteContext;
 import org.kie.api.marshalling.ObjectMarshallingStrategy;
 import org.kie.api.runtime.Environment;
 import org.kie.api.runtime.EnvironmentName;
@@ -55,7 +50,7 @@ public class JPAPlaceholderResolverStrategy implements ObjectMarshallingStrategy
     private boolean closeEmf = false;
     private String name = JPAPlaceholderResolverStrategy.class.getName();
     
-    private static final ThreadLocal<EntityManager> persister = new ThreadLocal<EntityManager>();
+    private static final ThreadLocal<EntityPersister> persister = new ThreadLocal<EntityPersister>();
     
     public JPAPlaceholderResolverStrategy(Environment env) {
         this( (EntityManagerFactory) env.get(EnvironmentName.ENTITY_MANAGER_FACTORY) );
@@ -137,21 +132,25 @@ public class JPAPlaceholderResolverStrategy implements ObjectMarshallingStrategy
                           Object object) throws IOException {
         Object id = getClassIdValue(object);
         String entityType = object.getClass().getCanonicalName();
+        
+        EntityPersister entityPersister = persister.get();
 
-        EntityManager em = getEntityManager();
-        if (id == null) {
-            em.persist(object);
-            id = getClassIdValue(object);
-        } else {
+        if (!entityPersister.isPersited(object)) {
+            EntityManager em = getEntityManager();
+            if (id == null) {
+                em.persist(object);
+                id = getClassIdValue(object);
+            }
+            addMapping(id, entityType, object, os, em);
             em.merge(object);
+            
+            entityPersister.processed(object);
+            
+            // since this is invoked by marshaller it's safe to call flush
+            // and it's important to be flushed so subsequent unmarshall operations
+            // will get update content especially when merged
+            em.flush();
         }
-        addMapping(id, entityType, object, os, em);
-        em.merge(object);
-        // since this is invoked by marshaller it's safe to call flush
-        // and it's important to be flushed so subsequent unmarshall operations
-        // will get update content especially when merged
-        em.flush();
-
         ByteArrayOutputStream buff = new ByteArrayOutputStream();
         ObjectOutputStream oos = new ObjectOutputStream( buff );
         oos.writeUTF(entityType);
@@ -201,13 +200,13 @@ public class JPAPlaceholderResolverStrategy implements ObjectMarshallingStrategy
     public void onStart(TransactionManager txm) {
         if (persister.get() == null) {
             EntityManager em = emf.createEntityManager();
-            persister.set(em);
+            persister.set(new EntityPersister(em));
         }
     }
 
     @Override
     public void onEnd(TransactionManager txm) {
-        EntityManager em = persister.get();
+        EntityPersister em = persister.get();
         if (em != null) {
             em.close();
             persister.set(null);
@@ -215,9 +214,9 @@ public class JPAPlaceholderResolverStrategy implements ObjectMarshallingStrategy
     }
 
     protected EntityManager getEntityManager() {
-        EntityManager em = persister.get();
-        if (em != null) {
-            return em;
+        EntityPersister em = persister.get();
+        if (em != null && em.getEntityManager() != null) {
+            return em.getEntityManager();
         }
         return emf.createEntityManager();
     }
@@ -231,13 +230,13 @@ public class JPAPlaceholderResolverStrategy implements ObjectMarshallingStrategy
     }
 
     protected void addMapping(Object entityId, String entityType, Object entity, ObjectOutputStream context, EntityManager em) {
-        if (entityId instanceof Number && entity instanceof VariableEntity && context instanceof ProcessMarshallerWriteContext) {
+        if (entityId instanceof Number && entity instanceof VariableEntity && context instanceof ProtobufProcessMarshallerWriteContext ) {
 
-            ProcessMarshallerWriteContext processContext = (ProcessMarshallerWriteContext) context;
+            ProtobufProcessMarshallerWriteContext processContext = (ProtobufProcessMarshallerWriteContext) context;
             VariableEntity variableEntity = (VariableEntity) entity;
 
             MappedVariable mappedVariable = new MappedVariable(((Number)entityId).longValue(), entityType, processContext.getProcessInstanceId(), processContext.getTaskId(), processContext.getWorkItemId());
-            if (processContext.getState() == ProcessMarshallerWriteContext.STATE_ACTIVE) {
+            if (processContext.getState() == ProtobufProcessMarshallerWriteContext.STATE_ACTIVE) {
                 variableEntity.addMappedVariables(mappedVariable);
             } else {
                 MappedVariable toBeRemoved = variableEntity.findMappedVariables(mappedVariable);

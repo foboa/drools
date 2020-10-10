@@ -16,10 +16,10 @@
 
 package org.kie.dmn.feel.runtime.decisiontables;
 
-import static java.util.stream.Collectors.toMap;
-
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -29,8 +29,10 @@ import java.util.stream.IntStream;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
 import org.kie.dmn.feel.FEEL;
+import org.kie.dmn.feel.codegen.feel11.CompiledFEELExpression;
 import org.kie.dmn.feel.lang.CompiledExpression;
 import org.kie.dmn.feel.lang.EvaluationContext;
+import org.kie.dmn.feel.lang.impl.EvaluationContextImpl;
 import org.kie.dmn.feel.runtime.UnaryTest;
 import org.kie.dmn.feel.runtime.events.DecisionTableRulesMatchedEvent;
 import org.kie.dmn.feel.runtime.events.FEELEventBase;
@@ -41,23 +43,29 @@ import org.kie.dmn.feel.util.Either;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DecisionTableImpl {
+import static java.util.stream.Collectors.toMap;
+
+public class DecisionTableImpl implements DecisionTable {
     private static final Logger logger = LoggerFactory.getLogger( DecisionTableImpl.class );
 
     private String               name;
     private List<String>         parameterNames;
+    private List<CompiledExpression> compiledParameterNames;
     private List<DTInputClause>  inputs;
     private List<DTOutputClause> outputs;
     private List<DTDecisionRule> decisionRules;
     private HitPolicy            hitPolicy;
     private boolean              hasDefaultValues;
 
+    private FEEL feel;
+
     public DecisionTableImpl(String name,
                              List<String> parameterNames,
                              List<DTInputClause> inputs,
                              List<DTOutputClause> outputs,
                              List<DTDecisionRule> decisionRules,
-                             HitPolicy hitPolicy) {
+                             HitPolicy hitPolicy,
+                             FEEL feel) {
         this.name = name;
         this.parameterNames = parameterNames;
         this.inputs = inputs;
@@ -65,6 +73,7 @@ public class DecisionTableImpl {
         this.decisionRules = decisionRules;
         this.hitPolicy = hitPolicy;
         this.hasDefaultValues = outputs.stream().allMatch( o -> o.getDefaultValue() != null );
+        this.feel = feel;
     }
 
     /**
@@ -79,7 +88,6 @@ public class DecisionTableImpl {
             return FEELFnResult.ofError(new FEELEventBase(Severity.WARN, "Decision table is empty", null));
         }
         
-        FEEL feel = FEEL.newInstance();
         Object[] actualInputs = resolveActualInputs( ctx, feel );
 
         Either<FEELEvent, Object> actualInputMatch = actualInputsMatchInputValues( ctx, actualInputs );
@@ -92,7 +100,7 @@ public class DecisionTableImpl {
             List<Object> results = evaluateResults( ctx, feel, actualInputs, matches );
             Map<Integer, String> msgs = checkResults( ctx, matches, results );
             if( msgs.isEmpty() ) {
-                Object result = hitPolicy.getDti().dti( ctx, this, actualInputs, matches, results );
+                Object result = hitPolicy.getDti().dti( ctx, this, matches, results );
                 return FEELFnResult.ofResult( result );
             } else {
                 List<Integer> offending = msgs.keySet().stream().collect( Collectors.toList());
@@ -121,15 +129,20 @@ public class DecisionTableImpl {
     }
 
     private Map<Integer, String> checkResults(EvaluationContext ctx, List<DTDecisionRule> matches, List<Object> results) {
+        return checkResults(outputs, ctx, matches, results);
+    }
+
+    public static Map<Integer, String> checkResults(List<? extends DecisionTable.OutputClause> outputs, EvaluationContext ctx, List<? extends Indexed> matches, List<Object> results) {
         Map<Integer, String> msgs = new TreeMap<>(  );
         int i = 0;
         for( Object result : results ) {
             if( outputs.size() == 1 ) {
-                checkOneResult( ctx, matches.get( i ), msgs, outputs.get( 0 ), result );
+                checkOneResult( ctx, matches.get( i ), msgs, outputs.get( 0 ), result, 1 );
             } else if( outputs.size() > 1 ) {
                 Map<String, Object> r = (Map<String, Object>) result;
-                for ( DTOutputClause output : outputs ) {
-                    checkOneResult( ctx, matches.get( i ), msgs, output, r.get( output.getName() ) );
+                int outputIndex = 1;
+                for ( DecisionTable.OutputClause output : outputs ) {
+                    checkOneResult( ctx, matches.get( i ), msgs, output, r.get( output.getName() ), outputIndex++ );
                 }
             }
             i++;
@@ -137,44 +150,54 @@ public class DecisionTableImpl {
         return msgs;
     }
 
-    private void checkOneResult(EvaluationContext ctx, DTDecisionRule rule, Map<Integer, String> msgs, DTOutputClause dtOutputClause, Object result) {
-        if( ! dtOutputClause.getType().isAssignableValue( result ) ) {
+    /**
+     * This checks one "column" of the decision table output(s).
+     */
+    private static void checkOneResult(EvaluationContext ctx, Indexed rule, Map<Integer, String> msgs, DecisionTable.OutputClause dtOutputClause, Object result, int index) {
+        if (dtOutputClause.isCollection() && result instanceof Collection) {
+            for (Object value : (Collection) result) {
+                checkOneValue(ctx, rule, msgs, dtOutputClause, value, index);
+            }
+        } else {
+            checkOneValue(ctx, rule, msgs, dtOutputClause, result, index);
+        }
+    }
+
+    private static void checkOneValue(EvaluationContext ctx, Indexed rule, Map<Integer, String> msgs, DecisionTable.OutputClause dtOutputClause, Object value, int index) {
+        if (((EvaluationContextImpl) ctx).isPerformRuntimeTypeCheck() && !dtOutputClause.getType().isAssignableValue(value)) {
             // invalid type
-            int index = outputs.indexOf( dtOutputClause ) + 1;
             msgs.put( index,
-                      "Invalid result type on rule #" + rule.getIndex() + ", output " +
+                      "Invalid result type on rule #" + (rule.getIndex()+1) + ", output " +
                       (dtOutputClause.getName() != null ? "'"+dtOutputClause.getName()+"'" : "#" + index) +
-                      ". Value "+result+" is not of type "+dtOutputClause.getType().getName() +".");
+                            ". Value " + value + " is not of type " + dtOutputClause.getType().getName() + ".");
             return;
         }
         if( dtOutputClause.getOutputValues() != null && ! dtOutputClause.getOutputValues().isEmpty() ) {
             boolean found = false;
             for( UnaryTest test : dtOutputClause.getOutputValues() ) {
-                Boolean succeeded = test.apply( ctx, result );
+                Boolean succeeded = test.apply(ctx, value);
                 if( succeeded != null && succeeded ) {
                     found = true;
                 }
             }
             if( ! found ) {
                 // invalid result
-                int index = outputs.indexOf( dtOutputClause ) + 1;
                 msgs.put( index,
-                          "Invalid result value on rule #"+rule.getIndex()+", output "+
+                          "Invalid result value on rule #"+(rule.getIndex()+1)+", output "+
                           (dtOutputClause.getName() != null ? "'"+dtOutputClause.getName()+"'" : "#"+index ) +
-                          ". Value "+result+" does not match list of allowed values.");
+                                ". Value " + value + " does not match list of allowed values.");
             }
         }
     }
 
     private Object[] resolveActualInputs(EvaluationContext ctx, FEEL feel) {
-        Map<String, Object> variables = ctx.getAllValues();
         Object[] actualInputs = new Object[ inputs.size() ];
         for( int i = 0; i < inputs.size(); i++ ) {
             CompiledExpression compiledInput = inputs.get( i ).getCompiledInput();
             if( compiledInput != null ) {
-                actualInputs[i] = feel.evaluate( compiledInput, variables );
+                actualInputs[i] = feel.evaluate(compiledInput, ctx);
             } else {
-                actualInputs[i] = feel.evaluate( inputs.get( i ).getInputExpression(), variables );
+                actualInputs[i] = feel.evaluate(inputs.get(i).getInputExpression(), ctx);
             }
         }
         return actualInputs;
@@ -193,7 +216,14 @@ public class DecisionTableImpl {
             // if a list of values is defined, check the the parameter matches the value
             if ( input.getInputValues() != null && ! input.getInputValues().isEmpty() ) {
                 final Object parameter = params[i];
-                boolean satisfies = input.getInputValues().stream().map( ut -> ut.apply( ctx, parameter ) ).filter( Boolean::booleanValue ).findAny().orElse( false );
+                boolean satisfies = true;
+                if (input.isCollection() && parameter instanceof Collection) {
+                    for (Object parameterItem : (Collection<?>) parameter) {
+                        satisfies &= input.getInputValues().stream().map(ut -> ut.apply(ctx, parameterItem)).filter(x -> x != null && x).findAny().orElse(false);
+                    }
+                } else {
+                    satisfies = input.getInputValues().stream().map(ut -> ut.apply(ctx, parameter)).filter(x -> x != null && x).findAny().orElse(false);
+                }
 
                 if ( !satisfies ) {
                     String values = input.getInputValuesText();
@@ -244,6 +274,10 @@ public class DecisionTableImpl {
      */
     private boolean matches(EvaluationContext ctx, Object[] params, DTDecisionRule rule) {
         for( int i = 0; i < params.length; i++ ) {
+            CompiledExpression compiledInput = inputs.get(i).getCompiledInput();
+            if ( compiledInput instanceof CompiledFEELExpression) {
+                ctx.setValue("?", ((CompiledFEELExpression) compiledInput).apply(ctx));
+            }
             if( ! satisfies( ctx, params[i], rule.getInputEntry().get( i ) ) ) {
                 return false;
             }
@@ -272,14 +306,15 @@ public class DecisionTableImpl {
      */
     private Object hitToOutput(EvaluationContext ctx, FEEL feel, DTDecisionRule rule) {
         List<CompiledExpression> outputEntries = rule.getOutputEntry();
-        Map<String, Object> values = ctx.getAllValues();
         if ( outputEntries.size() == 1 ) {
-            Object value = feel.evaluate( outputEntries.get( 0 ), values );
+            Object value = feel.evaluate(outputEntries.get(0), ctx);
             return value;
         } else {
-            // zip outputEntries with its name:
-            return IntStream.range( 0, outputs.size() ).boxed()
-                    .collect( toMap( i -> outputs.get( i ).getName(), i -> feel.evaluate( outputEntries.get( i ), values ) ) );
+            Map<String, Object> output = new HashMap<>();
+            for (int i = 0; i < outputs.size(); i++) {
+                output.put(outputs.get(i).getName(), feel.evaluate(outputEntries.get(i), ctx));
+            }
+            return output;
         }
     }
 
@@ -318,6 +353,20 @@ public class DecisionTableImpl {
 
     public List<String> getParameterNames() {
         return parameterNames;
+    }
+
+    /**
+     * This is leveraged from the DMN layer, and currently unused from a pure FEEL layer perspective (DT FEEL expression deprecated anyway from the DMN spec itself).
+     */
+    public void setCompiledParameterNames(List<CompiledExpression> compiledParameterNames) {
+        this.compiledParameterNames = compiledParameterNames;
+    }
+
+    /**
+     * This is leveraged from the DMN layer, and currently unused from a pure FEEL layer perspective (DT FEEL expression deprecated anyway from the DMN spec itself).
+     */
+    public List<CompiledExpression> getCompiledParameterNames() {
+        return compiledParameterNames;
     }
 
     public String getSignature() {

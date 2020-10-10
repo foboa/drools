@@ -55,6 +55,7 @@ public class InNode
 
     @Override
     public Boolean evaluate(EvaluationContext ctx) {
+        if (exprs == null) return null;
         Object value = this.value.evaluate( ctx );
         Object expr = this.exprs.evaluate( ctx );
         if ( expr != null ) {
@@ -87,7 +88,7 @@ public class InNode
                 return ((Range) expr).includes( value );
             } catch ( Exception e ) {
                 ctx.notifyEvt( astEvent(Severity.ERROR, Msg.createMessage(Msg.EXPRESSION_IS_RANGE_BUT_VALUE_IS_NOT_COMPARABLE, value.toString(), expr.toString() ), e ) );
-                throw e;
+                return null;
             }
         } else if ( value != null ) {
             return value.equals( expr );
@@ -100,5 +101,15 @@ public class InNode
     @Override
     public Type getResultType() {
         return BuiltInType.BOOLEAN;
+    }
+
+    @Override
+    public ASTNode[] getChildrenNode() {
+        return new ASTNode[] { value, exprs };
+    }
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
     }
 }

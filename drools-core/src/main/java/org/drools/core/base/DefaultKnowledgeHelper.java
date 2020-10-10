@@ -25,7 +25,6 @@ import java.util.Collections;
 import java.util.Map;
 
 import org.drools.core.WorkingMemory;
-import org.drools.core.WorkingMemoryEntryPoint;
 import org.drools.core.beliefsystem.BeliefSet;
 import org.drools.core.beliefsystem.BeliefSystem;
 import org.drools.core.beliefsystem.ModedAssertion;
@@ -51,6 +50,7 @@ import org.drools.core.reteoo.ObjectTypeConf;
 import org.drools.core.reteoo.RuleTerminalNode;
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.EntryPointId;
+import org.drools.core.spi.AbstractProcessContext;
 import org.drools.core.spi.Activation;
 import org.drools.core.spi.KnowledgeHelper;
 import org.drools.core.spi.Tuple;
@@ -68,7 +68,6 @@ import org.kie.api.runtime.process.WorkflowProcessInstance;
 import org.kie.api.runtime.rule.EntryPoint;
 import org.kie.api.runtime.rule.FactHandle;
 import org.kie.api.runtime.rule.Match;
-import org.kie.api.runtime.rule.RuleUnit;
 
 import static org.drools.core.reteoo.PropertySpecificUtil.allSetButTraitBitMask;
 import static org.drools.core.reteoo.PropertySpecificUtil.onlyTraitBitSetMask;
@@ -80,9 +79,9 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
 
     private static final long                         serialVersionUID = 510l;
 
-    private Activation                                activation;
-    private Tuple                                     tuple;
-    private WrappedStatefulKnowledgeSessionForRHS     workingMemory;
+    protected Activation                                activation;
+    protected Tuple                                     tuple;
+    protected WrappedStatefulKnowledgeSessionForRHS   workingMemory;
 
     private LinkedList<LogicalDependency<T>>          previousJustified;
 
@@ -93,12 +92,16 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
     }
 
     public DefaultKnowledgeHelper(final WorkingMemory workingMemory) {
-        this.workingMemory = new WrappedStatefulKnowledgeSessionForRHS( workingMemory );
+        this.workingMemory = createWrappedSession( workingMemory );
     }
 
     public DefaultKnowledgeHelper(Activation activation, final WorkingMemory workingMemory) {
-        this.workingMemory = new WrappedStatefulKnowledgeSessionForRHS( workingMemory );
+        this.workingMemory = createWrappedSession( workingMemory );
         this.activation = activation;
+    }
+
+    protected WrappedStatefulKnowledgeSessionForRHS createWrappedSession( WorkingMemory workingMemory ) {
+        return new WrappedStatefulKnowledgeSessionForRHS( workingMemory );
     }
 
     public void readExternal(ObjectInput in) throws IOException,
@@ -384,7 +387,7 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
     public void update(final FactHandle handle,
                        final Object newObject){
         InternalFactHandle h = (InternalFactHandle) handle;
-        h.getEntryPoint().update( h,
+        h.getEntryPoint(workingMemory).update( h,
                                   newObject,
                                   onlyTraitBitSetMask(),
                                   newObject.getClass(),
@@ -398,17 +401,7 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
     public void update( final FactHandle handle, BitMask mask, Class<?> modifiedClass ) {
         InternalFactHandle h = (InternalFactHandle) handle;
 
-        if (h.getDataSource() != null) {
-            // This handle has been insert from a datasource, so update it
-            h.getDataSource().update( h,
-                                      ((InternalFactHandle)handle).getObject(),
-                                      mask,
-                                      modifiedClass,
-                                      this.activation );
-            return;
-        }
-
-        ((InternalWorkingMemoryEntryPoint) h.getEntryPoint()).update( h,
+        ((InternalWorkingMemoryEntryPoint) h.getEntryPoint(workingMemory)).update( h,
                                                                       ((InternalFactHandle)handle).getObject(),
                                                                       mask,
                                                                       modifiedClass,
@@ -453,7 +446,7 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
             return;
         }
 
-        ((InternalFactHandle) handle).getEntryPoint().delete(handle,
+        ((InternalFactHandle) handle).getEntryPoint(workingMemory).delete(handle,
                                                              this.activation.getRule(),
                                                              this.activation.getTuple().getTupleSink(),
                                                              fhState);
@@ -484,11 +477,7 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
     }
 
     public Object get(final Declaration declaration) {
-        WorkingMemoryEntryPoint wmTmp = (this.tuple.get( declaration )).getEntryPoint();
-        return wmTmp != null ?
-               declaration.getValue( wmTmp.getInternalWorkingMemory(),
-                                                     this.tuple.getObject( declaration ) )
-                             : null;
+        return declaration.getValue( workingMemory, this.tuple.getObject( declaration ) );
     }
 
     public Declaration getDeclaration(final String identifier) {
@@ -529,23 +518,23 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
         if (ProcessContext.class.equals(contextClass)) {
             String ruleflowGroupName = getMatch().getRule().getRuleFlowGroup();
             if (ruleflowGroupName != null) {
-                Map<Long, String> nodeInstances = ((InternalRuleFlowGroup) workingMemory.getAgenda().getRuleFlowGroup(ruleflowGroupName)).getNodeInstances();
+                Map<Object, String> nodeInstances = ((InternalRuleFlowGroup) workingMemory.getAgenda().getRuleFlowGroup(ruleflowGroupName)).getNodeInstances();
                 if (!nodeInstances.isEmpty()) {
                     if (nodeInstances.size() > 1) {
                         // TODO
                         throw new UnsupportedOperationException(
                             "Not supporting multiple node instances for the same ruleflow group");
                     }
-                    Map.Entry<Long, String> entry = nodeInstances.entrySet().iterator().next();
+                    Map.Entry<Object, String> entry = nodeInstances.entrySet().iterator().next();
                     ProcessInstance processInstance = workingMemory.getProcessInstance(entry.getKey());
-                    org.drools.core.spi.ProcessContext context = new org.drools.core.spi.ProcessContext(workingMemory.getKnowledgeRuntime());
+                    AbstractProcessContext context = createProcessContext();
                     context.setProcessInstance(processInstance);
                     String nodeInstance = entry.getValue();
                     String[] nodeInstanceIds = nodeInstance.split(":");
                     NodeInstanceContainer container = (WorkflowProcessInstance) processInstance;
                     for (int i = 0; i < nodeInstanceIds.length; i++) {
                         for (NodeInstance subNodeInstance: container.getNodeInstances()) {
-                            if (subNodeInstance.getId() == new Long(nodeInstanceIds[i])) {
+                            if ( sameNodeInstance( subNodeInstance, nodeInstanceIds[i] ) ) {
                                 if (i == nodeInstanceIds.length - 1) {
                                     context.setNodeInstance(subNodeInstance);
                                     break;
@@ -560,6 +549,14 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
             }
         }
         return null;
+    }
+
+    protected AbstractProcessContext createProcessContext() {
+        return new org.drools.core.spi.ProcessContext(workingMemory.getKnowledgeRuntime());
+    }
+
+    protected boolean sameNodeInstance( NodeInstance subNodeInstance, String nodeInstanceId ) {
+        return subNodeInstance.getId() == Long.parseLong( nodeInstanceId );
     }
 
     public KieRuntime getKieRuntime() {
@@ -620,21 +617,5 @@ public class DefaultKnowledgeHelper<T extends ModedAssertion<T>>
 
     public ClassLoader getProjectClassLoader() {
         return ((InternalKnowledgeBase)getKieRuntime().getKieBase()).getRootClassLoader();
-    }
-
-    public void run(RuleUnit ruleUnit ) {
-        workingMemory.switchToRuleUnit( ruleUnit );
-    }
-
-    public void run(Class<? extends RuleUnit> ruleUnitClass) {
-        workingMemory.switchToRuleUnit( ruleUnitClass );
-    }
-
-    public void guard(RuleUnit ruleUnit) {
-        workingMemory.guardRuleUnit( ruleUnit, activation );
-    }
-
-    public void guard(Class<? extends RuleUnit> ruleUnitClass) {
-        workingMemory.guardRuleUnit( ruleUnitClass, activation );
     }
 }

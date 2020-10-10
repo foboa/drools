@@ -17,6 +17,7 @@
 package org.drools.core.reteoo;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import org.drools.core.RuleBaseConfiguration;
@@ -63,8 +64,7 @@ public class MockLeftTupleSink extends LeftTupleSource
     }
 
     protected boolean doRemove(final RuleRemovalContext context,
-                               final ReteooBuilder builder,
-                               final InternalWorkingMemory[] workingMemories) {
+                               final ReteooBuilder builder) {
         return true;
     }
 
@@ -122,9 +122,8 @@ public class MockLeftTupleSink extends LeftTupleSource
     }
 
     public LeftTuple createLeftTuple(InternalFactHandle factHandle,
-                                     Sink sink,
                                      boolean leftTupleMemoryEnabled) {
-        return new LeftTupleImpl(factHandle, sink, leftTupleMemoryEnabled );
+        return new LeftTupleImpl(factHandle, this, leftTupleMemoryEnabled );
     }
 
     public LeftTuple createLeftTuple(final InternalFactHandle factHandle,
@@ -171,10 +170,5 @@ public class MockLeftTupleSink extends LeftTupleSource
     @Override
     public LeftTuple createPeer(LeftTuple original) {
         return null;
-    }
-
-    @Override
-    protected boolean internalEquals( Object object ) {
-        return false;
     }
 }

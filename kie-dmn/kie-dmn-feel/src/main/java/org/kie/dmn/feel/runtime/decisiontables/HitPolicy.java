@@ -16,12 +16,6 @@
 
 package org.kie.dmn.feel.runtime.decisiontables;
 
-import static java.util.stream.Collectors.maxBy;
-import static java.util.stream.Collectors.minBy;
-import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toSet;
-import static java.util.stream.IntStream.range;
-
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,6 +33,12 @@ import org.kie.dmn.feel.runtime.UnaryTest;
 import org.kie.dmn.feel.runtime.events.DecisionTableRulesSelectedEvent;
 import org.kie.dmn.feel.runtime.events.HitPolicyViolationEvent;
 import org.kie.dmn.feel.util.Pair;
+
+import static java.util.stream.Collectors.maxBy;
+import static java.util.stream.Collectors.minBy;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toSet;
+import static java.util.stream.IntStream.range;
 
 public enum HitPolicy {
     UNIQUE( "U", "UNIQUE", HitPolicy::unique, null ),
@@ -100,17 +100,15 @@ public enum HitPolicy {
     public interface HitPolicyDTI {
         Object dti(
                 EvaluationContext ctx,
-                DecisionTableImpl dt,
-                Object[] params,
-                List<DTDecisionRule> matches,
+                DecisionTable dt,
+                List<? extends Indexed> matches,
                 List<Object> results);
     }
 
     public static Object notImplemented(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         throw new RuntimeException( "Not implemented" );
     }
@@ -120,9 +118,8 @@ public enum HitPolicy {
      */
     public static Object unique(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         if ( matches.size() > 1 ) {
             ctx.notifyEvt( () -> {
@@ -158,9 +155,8 @@ public enum HitPolicy {
      */
     public static Object first(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         if ( matches.size() >= 1 ) {
             ctx.notifyEvt( () -> {
@@ -183,16 +179,24 @@ public enum HitPolicy {
      */
     public static Object any(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         if ( matches.size() >= 1 ) {
             long distinctOutputEntry = results.stream()
                     .distinct()
                     .count();
             if ( distinctOutputEntry > 1 ) {
-                throw new RuntimeException( "multiple rules can match, but they [must] all have the same output" );
+                ctx.notifyEvt( () -> {
+                                        List<Integer> ruleMatches = matches.stream().map( m -> m.getIndex() + 1 ).collect( toList() );
+                                        return new HitPolicyViolationEvent(
+                                                FEELEvent.Severity.ERROR,
+                                                "'Multiple rules can match, but they [must] all have the same output '"  + dt.getName() + "'. Matched rules: " + ruleMatches,
+                                                dt.getName(),
+                                                ruleMatches );
+                                }
+                );
+                return null;
             }
 
             ctx.notifyEvt( () -> {
@@ -215,14 +219,13 @@ public enum HitPolicy {
      */
     public static Object priority(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         if ( matches.isEmpty() ) {
             return null;
         }
-        List<Pair<DTDecisionRule, Object>> pairs = sortPairs( ctx, dt, matches, results );
+        List<Pair<? extends Indexed, Object>> pairs = sortPairs( ctx, dt, matches, results );
         ctx.notifyEvt( () -> {
                                    List<Integer> indexes = Collections.singletonList( pairs.get( 0 ).getLeft().getIndex() + 1 );
                                    return new DecisionTableRulesSelectedEvent(
@@ -242,14 +245,13 @@ public enum HitPolicy {
      */
     public static Object outputOrder(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results ) {
         if ( matches.isEmpty() ) {
             return null;
         }
-        List<Pair<DTDecisionRule, Object>> pairs = sortPairs( ctx, dt, matches, results );
+        List<Pair<? extends Indexed, Object>> pairs = sortPairs( ctx, dt, matches, results );
         ctx.notifyEvt( () -> {
                                    List<Integer> indexes = pairs.stream().map( p -> p.getLeft().getIndex() + 1 ).collect( toList() );
                                    return new DecisionTableRulesSelectedEvent(
@@ -264,8 +266,8 @@ public enum HitPolicy {
         return pairs.stream().map( p -> p.getRight() ).collect( Collectors.toList() );
     }
 
-    private static List<Pair<DTDecisionRule, Object>> sortPairs(EvaluationContext ctx, DecisionTableImpl dt, List<DTDecisionRule> matches, List<Object> results) {
-        List<Pair<DTDecisionRule,Object>> pairs = new ArrayList<>(  );
+    private static List<Pair<? extends Indexed, Object>> sortPairs( EvaluationContext ctx, DecisionTable dt, List<? extends Indexed> matches, List<Object> results) {
+        List<Pair<? extends Indexed,Object>> pairs = new ArrayList<>(  );
         for( int i = 0; i < matches.size(); i++ ) {
             pairs.add( new Pair<>( matches.get( i ), results.get( i ) ) );
         }
@@ -278,11 +280,11 @@ public enum HitPolicy {
             } );
         } else if ( dt.getOutputs().size() > 1 ) {
             // multiple outputs, collect the ones that have values listed
-            List<DTOutputClause> priorities = dt.getOutputs().stream().filter( o -> !o.getOutputValues().isEmpty() ).collect( toList() );
+            List<? extends DecisionTable.OutputClause> priorities = dt.getOutputs().stream().filter( o -> !o.getOutputValues().isEmpty() ).collect( toList() );
             pairs.sort( (r1, r2) -> {
                 Map<String, Object> m1 = (Map<String, Object>) r1.getRight();
                 Map<String, Object> m2 = (Map<String, Object>) r2.getRight();
-                for ( DTOutputClause oc : priorities ) {
+                for ( DecisionTable.OutputClause oc : priorities ) {
                     int o = sortByOutputsOrder( ctx, oc.getOutputValues(), m1.get( oc.getName() ), m2.get( oc.getName() ) );
                     if ( o != 0 ) {
                         return o;
@@ -325,9 +327,8 @@ public enum HitPolicy {
      */
     public static Object ruleOrder(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         if ( matches.isEmpty() ) {
             return null;
@@ -345,13 +346,13 @@ public enum HitPolicy {
         return results;
     }
 
-    public static <T> Collector<T, ?, Object> singleValueOrContext(List<DTOutputClause> outputs) {
-        return new SingleValueOrContextCollector<T>( outputs.stream().map( DTOutputClause::getName ).collect( toList() ) );
+    public static <T> Collector<T, ?, Object> singleValueOrContext(List<? extends DecisionTable.OutputClause> outputs) {
+        return new SingleValueOrContextCollector<T>( outputs.stream().map( DecisionTable.OutputClause::getName ).collect( toList() ) );
     }
 
     public static Object generalizedCollect(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
+            DecisionTable dt,
             List<?> results,
             Function<Stream<Object>, Object> resultCollector) {
         final List<Map<String, Object>> raw;
@@ -372,9 +373,8 @@ public enum HitPolicy {
      */
     public static Object countCollect(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         ctx.notifyEvt( () -> {
                                    List<Integer> indexes = matches.stream().map( m -> m.getIndex() + 1 ).collect( toList() );
@@ -398,9 +398,8 @@ public enum HitPolicy {
      */
     public static Object minCollect(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         Object result = generalizedCollect(
                 ctx,
@@ -425,9 +424,8 @@ public enum HitPolicy {
      */
     public static Object maxCollect(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         Object result = generalizedCollect(
                 ctx,
@@ -452,9 +450,8 @@ public enum HitPolicy {
      */
     public static Object sumCollect(
             EvaluationContext ctx,
-            DecisionTableImpl dt,
-            Object[] params,
-            List<DTDecisionRule> matches,
+            DecisionTable dt,
+            List<? extends Indexed> matches,
             List<Object> results) {
         ctx.notifyEvt( () -> {
                                    List<Integer> indexes = matches.stream().map( m -> m.getIndex() + 1 ).collect( toList() );

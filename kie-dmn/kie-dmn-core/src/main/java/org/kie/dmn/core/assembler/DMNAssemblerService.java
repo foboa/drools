@@ -17,40 +17,67 @@
 package org.kie.dmn.core.assembler;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.xml.namespace.QName;
+
 import org.drools.compiler.builder.impl.KnowledgeBuilderImpl;
 import org.drools.compiler.compiler.PackageRegistry;
 import org.drools.compiler.lang.descr.PackageDescr;
 import org.drools.core.definitions.InternalKnowledgePackage;
+import org.drools.core.definitions.ResourceTypePackageRegistry;
 import org.kie.api.internal.assembler.KieAssemblerService;
 import org.kie.api.internal.io.ResourceTypePackage;
 import org.kie.api.io.Resource;
 import org.kie.api.io.ResourceConfiguration;
 import org.kie.api.io.ResourceType;
+import org.kie.api.io.ResourceWithConfiguration;
 import org.kie.dmn.api.core.DMNCompiler;
-import org.kie.dmn.api.core.DMNCompilerConfiguration;
+import org.kie.dmn.api.core.DMNMessage;
 import org.kie.dmn.api.core.DMNModel;
-import org.kie.dmn.api.marshalling.v1_1.DMNExtensionRegister;
+import org.kie.dmn.api.marshalling.DMNMarshaller;
 import org.kie.dmn.core.api.DMNFactory;
+import org.kie.dmn.core.compiler.DMNCompilerConfigurationImpl;
 import org.kie.dmn.core.compiler.DMNCompilerImpl;
 import org.kie.dmn.core.compiler.DMNProfile;
+import org.kie.dmn.core.compiler.ImportDMNResolverUtil;
+import org.kie.dmn.core.compiler.ImportDMNResolverUtil.ImportType;
+import org.kie.dmn.core.compiler.RuntimeTypeCheckOption;
+import org.kie.dmn.core.compiler.profiles.ExtendedDMNProfile;
 import org.kie.dmn.core.impl.DMNKnowledgeBuilderError;
 import org.kie.dmn.core.impl.DMNPackageImpl;
+import org.kie.dmn.feel.util.Either;
+import org.kie.dmn.feel.util.EvalHelper;
+import org.kie.dmn.model.api.Definitions;
+import org.kie.dmn.model.api.Import;
 import org.kie.internal.builder.ResultSeverity;
+import org.kie.internal.utils.ChainedProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class DMNAssemblerService implements KieAssemblerService {
 
+
     private static final Logger logger = LoggerFactory.getLogger( DMNAssemblerService.class );
-    public static final String DMN_PROFILE_PREFIX = "org.kie.dmn.profiles.";
-    public static final String DMN_EXTENSION_REGISTER_PREFIX = "org.kie.dmn.marshaller.extension.";
+    public static final String ORG_KIE_DMN_PREFIX = "org.kie.dmn";
+    public static final String DMN_PROFILE_PREFIX = ORG_KIE_DMN_PREFIX + ".profiles.";
+    public static final String DMN_RUNTIME_LISTENER_PREFIX = ORG_KIE_DMN_PREFIX + ".runtime.listeners.";
     public static final String DMN_COMPILER_CACHE_KEY = "DMN_COMPILER_CACHE_KEY";
     public static final String DMN_PROFILES_CACHE_KEY = "DMN_PROFILES_CACHE_KEY";
+
+    private DMNCompilerConfigurationImpl externalCompilerConfiguration;
+
+    public DMNAssemblerService(DMNCompilerConfigurationImpl externalCompilerConfiguration) {
+        this.externalCompilerConfiguration = externalCompilerConfiguration;
+    }
+
+    public DMNAssemblerService() {
+    }
 
     @Override
     public ResourceType getResourceType() {
@@ -58,12 +85,94 @@ public class DMNAssemblerService implements KieAssemblerService {
     }
 
     @Override
-    public void addResource(Object kbuilder, Resource resource, ResourceType type, ResourceConfiguration configuration)
-            throws Exception {
+    public void addResources(Object kbuilder, Collection<ResourceWithConfiguration> resources, ResourceType type) throws Exception {
+        EvalHelper.clearGenericAccessorCache();
+        KnowledgeBuilderImpl kbuilderImpl = (KnowledgeBuilderImpl) kbuilder;
+        DMNCompilerImpl dmnCompiler = (DMNCompilerImpl) kbuilderImpl.getCachedOrCreate(DMN_COMPILER_CACHE_KEY, () -> getCompiler(kbuilderImpl));
+        DMNMarshaller dmnMarshaller = dmnCompiler.getMarshaller();
+        List<DMNResource> dmnResources = new ArrayList<>();
+        for (ResourceWithConfiguration r : resources) {
+            Definitions definitions = dmnMarshaller.unmarshal(r.getResource().getReader());
+            DMNResource dmnResource = new DMNResource(definitions, r);
+            dmnResources.add(dmnResource);
+        }
+
+        Collection<DMNModel> dmnModels = new ArrayList<>();
+        // KIE API: KieContainer upgrade using KieContainer#updateToVersion -based DMN Import resolution strategy
+        if (kbuilderImpl.getKnowledgeBase() != null) {
+            for (InternalKnowledgePackage pr : kbuilderImpl.getKnowledgeBase().getPackagesMap().values()) {
+                ResourceTypePackage resourceTypePackage = pr.getResourceTypePackages().get(ResourceType.DMN);
+                if (resourceTypePackage != null) {
+                    DMNPackageImpl dmnpkg = (DMNPackageImpl) resourceTypePackage;
+                    dmnModels.addAll(dmnpkg.getAllModels().values());
+                }
+            }
+        }
+        // Workbench: InternalKieBuilder#createFileSet#build -based DMN Import resolution strategy
+        for (PackageRegistry pr : kbuilderImpl.getPackageRegistry().values()) {
+            ResourceTypePackage resourceTypePackage = pr.getPackage().getResourceTypePackages().get(ResourceType.DMN);
+            if (resourceTypePackage != null) {
+                DMNPackageImpl dmnpkg = (DMNPackageImpl) resourceTypePackage;
+                dmnModels.addAll(dmnpkg.getAllModels().values());
+            }
+        }
+
+        enrichDMNResourcesWithImportsDependencies(dmnResources, dmnModels);
+        List<DMNResource> sortedDmnResources = DMNResourceDependenciesSorter.sort(dmnResources);
+
+        for (DMNResource dmnRes : sortedDmnResources) {
+            DMNModel dmnModel = internalAddResource(kbuilderImpl, dmnCompiler, dmnRes, dmnModels);
+            dmnModels.add(dmnModel);
+        }
+    }
+
+    public static void enrichDMNResourcesWithImportsDependencies(List<DMNResource> dmnResources, Collection<DMNModel> dmnModels) {
+        for (DMNResource r : dmnResources) {
+            for (Import i : r.getDefinitions().getImport()) {
+                if (ImportDMNResolverUtil.whichImportType(i) == ImportType.DMN) {
+                    Either<String, DMNModel> inAlreadyCompiled = ImportDMNResolverUtil.resolveImportDMN(i, dmnModels, x -> new QName(x.getNamespace(), x.getName()));
+                    if (inAlreadyCompiled.isLeft()) { // the DMN Model is not already available in the KieBuilder and needs to be compiled.
+                        Either<String, DMNResource> resolvedResult = ImportDMNResolverUtil.resolveImportDMN(i, dmnResources, DMNResource::getModelID);
+                        DMNResource located = resolvedResult.getOrElseThrow(RuntimeException::new);
+                        r.addDependency(located.getModelID());
+                    } else {
+                        // do nothing: the DMN Model is already available in the KieBuilder.
+                    }
+                }
+            }
+        }
+    }
+
+    private DMNModel internalAddResource(KnowledgeBuilderImpl kbuilder, DMNCompiler dmnCompiler, DMNResource dmnRes, Collection<DMNModel> dmnModels) throws Exception {
+        ResourceWithConfiguration r = dmnRes.getResAndConfig();
+        r.getBeforeAdd().accept(kbuilder);
+        DMNModel dmnModel = compileResourceToModel(kbuilder, dmnCompiler, r.getResource(), dmnRes, dmnModels);
+        r.getAfterAdd().accept(kbuilder);
+        return dmnModel;
+    }
+
+    @Override
+    public void addResource(Object kbuilder, Resource resource, ResourceType type, ResourceConfiguration configuration) throws Exception {
+        logger.warn("invoked legacy addResource (no control on the order of the assembler compilation): " + resource.getSourcePath());
         KnowledgeBuilderImpl kbuilderImpl = (KnowledgeBuilderImpl) kbuilder;
         DMNCompiler dmnCompiler = kbuilderImpl.getCachedOrCreate( DMN_COMPILER_CACHE_KEY, () -> getCompiler( kbuilderImpl ) );
 
-        DMNModel model = dmnCompiler.compile(resource);
+        Collection<DMNModel> dmnModels = new ArrayList<>();
+        for (PackageRegistry pr : kbuilderImpl.getPackageRegistry().values()) {
+            ResourceTypePackage resourceTypePackage = pr.getPackage().getResourceTypePackages().get(ResourceType.DMN);
+            if (resourceTypePackage != null) {
+                DMNPackageImpl dmnpkg = (DMNPackageImpl) resourceTypePackage;
+                dmnModels.addAll(dmnpkg.getAllModels().values());
+            }
+        }
+
+        compileResourceToModel(kbuilderImpl, dmnCompiler, resource, null, dmnModels);
+    }
+
+    private DMNModel compileResourceToModel(KnowledgeBuilderImpl kbuilderImpl, DMNCompiler dmnCompiler, Resource resource, DMNResource dmnRes, Collection<DMNModel> dmnModels) {
+        DMNModel model = dmnRes != null ?
+                dmnCompiler.compile(dmnRes.getDefinitions(), resource, dmnModels) :
+                dmnCompiler.compile(resource, dmnModels);
         if( model != null ) {
             String namespace = model.getNamespace();
 
@@ -71,32 +180,35 @@ public class DMNAssemblerService implements KieAssemblerService {
             InternalKnowledgePackage kpkgs = pkgReg.getPackage();
             kpkgs.addCloningResource( DMN_COMPILER_CACHE_KEY, dmnCompiler );
 
-            Map<ResourceType, ResourceTypePackage> rpkg = kpkgs.getResourceTypePackages();
+            ResourceTypePackageRegistry rpkg = kpkgs.getResourceTypePackages();
 
-            DMNPackageImpl dmnpkg = (DMNPackageImpl) rpkg.get( ResourceType.DMN );
-            if ( dmnpkg == null ) {
-                dmnpkg = new DMNPackageImpl( namespace );
-                rpkg.put(ResourceType.DMN, dmnpkg);
-            } else {
-                if ( dmnpkg.getModel( model.getName() ) != null ) {
-                    kbuilderImpl.addBuilderResult(new DMNKnowledgeBuilderError(ResultSeverity.ERROR, resource, namespace, "Duplicate model name " + model.getName() + " in namespace " + namespace));
-                    logger.error( "Duplicate model name {} in namespace {}", model.getName(), namespace );
-                }
+            DMNPackageImpl dmnpkg = rpkg.computeIfAbsent(ResourceType.DMN, rtp -> new DMNPackageImpl(namespace));
+            if ( dmnpkg.getModel( model.getName() ) != null ) {
+                kbuilderImpl.addBuilderResult(new DMNKnowledgeBuilderError(ResultSeverity.ERROR, resource, namespace, "Duplicate model name " + model.getName() + " in namespace " + namespace));
+                logger.error( "Duplicate model name {} in namespace {}", model.getName(), namespace );
             }
             dmnpkg.addModel( model.getName(), model );
+            for (DMNMessage m : model.getMessages()) {
+                kbuilderImpl.addBuilderResult(DMNKnowledgeBuilderError.from(resource, namespace, m));
+            }
             dmnpkg.addProfiles(kbuilderImpl.getCachedOrCreate(DMN_PROFILES_CACHE_KEY, () -> getDMNProfiles(kbuilderImpl)));
         } else {
             kbuilderImpl.addBuilderResult(new DMNKnowledgeBuilderError(ResultSeverity.ERROR, resource, "Unable to compile DMN model for the resource"));
-            logger.error( "Unable to compile DMN model for resource {}", resource.getSourcePath() );
+            logger.error("Unable to compile DMN model for the resource {}", resource.getSourcePath());
         }
+        return model;
     }
 
-    private List<DMNProfile> getDMNProfiles(KnowledgeBuilderImpl kbuilderImpl) {
+    protected List<DMNProfile> getDMNProfiles(KnowledgeBuilderImpl kbuilderImpl) {
+        ChainedProperties chainedProperties = kbuilderImpl.getBuilderConfiguration().getChainedProperties();
+
+        List<DMNProfile> dmnProfiles = new ArrayList<>();
+        dmnProfiles.addAll(getDefaultDMNProfiles(chainedProperties));
+
         Map<String, String> dmnProfileProperties = new HashMap<>();
-        kbuilderImpl.getBuilderConfiguration().getChainedProperties().mapStartsWith(dmnProfileProperties, DMN_PROFILE_PREFIX, false);
+        chainedProperties.mapStartsWith(dmnProfileProperties, DMN_PROFILE_PREFIX, false);
         if (!dmnProfileProperties.isEmpty()) {
             try {
-                List<DMNProfile> dmnProfiles = new ArrayList<>();
                 for (Map.Entry<String, String> dmnProfileProperty : dmnProfileProperties.entrySet()) {
                     DMNProfile dmnProfile = (DMNProfile) kbuilderImpl.getRootClassLoader()
                                                                      .loadClass(dmnProfileProperty.getValue()).newInstance();
@@ -110,49 +222,62 @@ public class DMNAssemblerService implements KieAssemblerService {
                 logger.warn("DMN Compiler configuration contained errors, will fall-back using empty-configuration compiler.");
             }
         }
-        return Collections.emptyList();
+        return dmnProfiles;
+    }
+
+    public static List<DMNProfile> getDefaultDMNProfiles(ChainedProperties properties) {
+        if (!isStrictMode(properties)) {
+            return Arrays.asList(new ExtendedDMNProfile());
+        } else {
+            return Collections.emptyList();
+        }
+    }
+
+    public static boolean isStrictMode(ChainedProperties properties) {
+        String val = properties.getProperty("org.kie.dmn.strictConformance", "false");
+        return "".equals(val) || Boolean.parseBoolean(val);
     }
 
     private DMNCompiler getCompiler(KnowledgeBuilderImpl kbuilderImpl) {
         List<DMNProfile> dmnProfiles = kbuilderImpl.getCachedOrCreate(DMN_PROFILES_CACHE_KEY, () -> getDMNProfiles(kbuilderImpl));
-        if (!dmnProfiles.isEmpty()) {
-            DMNCompilerConfiguration compilerConfig = DMNFactory.newCompilerConfiguration();
-            for (DMNProfile dmnProfile : dmnProfiles) {
-                compilerConfig.addExtensions(dmnProfile.getExtensionRegisters());
-            }
+        DMNCompilerConfigurationImpl compilerConfiguration;
 
-            DMNCompilerImpl compiler = (DMNCompilerImpl) DMNFactory.newCompiler(compilerConfig);
-            for (DMNProfile dmnProfile : dmnProfiles) {
-                compiler.addDRGElementCompilers(dmnProfile.getDRGElementCompilers());
-            }
-            for (DMNProfile dmnProfile : dmnProfiles) {
-                compiler.registerFEELFunctions(dmnProfile.getFEELFunctions());
-            }
+        // Beware: compilerConfiguration can't be cached in DMNAssemblerService
+        if (externalCompilerConfiguration == null) {
+            compilerConfiguration = compilerConfigWithKModulePrefs(kbuilderImpl.getRootClassLoader(), kbuilderImpl.getBuilderConfiguration().getChainedProperties(), dmnProfiles, (DMNCompilerConfigurationImpl) DMNFactory.newCompilerConfiguration());
+        } else {
+            compilerConfiguration = externalCompilerConfiguration;
+        }
 
-            return compiler;
+        if (isStrictMode(kbuilderImpl.getBuilderConfiguration().getChainedProperties())) {
+            compilerConfiguration.setProperty(RuntimeTypeCheckOption.PROPERTY_NAME, "true");
         }
-        Map<String, String> extensionProperties = new HashMap<>();
-        kbuilderImpl.getBuilderConfiguration().getChainedProperties()
-                .mapStartsWith(extensionProperties, DMN_EXTENSION_REGISTER_PREFIX, false);
-        if( !extensionProperties.isEmpty() ) {
-            List<DMNExtensionRegister> extensionRegisters = new ArrayList<>();
-            try {
-                for (Map.Entry<String, String> extensionProperty : extensionProperties.entrySet()) {
-                    String extRegClassName = extensionProperty.getValue();
-                    DMNExtensionRegister extRegister = (DMNExtensionRegister) kbuilderImpl.getRootClassLoader()
-                            .loadClass(extRegClassName).newInstance();
-                    extensionRegisters.add(extRegister);
-                }
-                DMNCompilerConfiguration compilerConfig = DMNFactory.newCompilerConfiguration();
-                compilerConfig.addExtensions(extensionRegisters);
-                return DMNFactory.newCompiler(compilerConfig);
-            } catch(Exception e) {
-                kbuilderImpl.addBuilderResult(new DMNKnowledgeBuilderError(ResultSeverity.WARNING, "Trying to load a non-existing extension element register "+e.getLocalizedMessage()));
-                logger.error( "Trying to load a non-existing extension element register {}", e.getLocalizedMessage(), e);
-                kbuilderImpl.addBuilderResult(new DMNKnowledgeBuilderError(ResultSeverity.WARNING, "DMN Compiler configuration contained errors, fall-back using empty-configuration compiler."));
-                logger.warn( "DMN Compiler configuration contained errors, fall-back using empty-configuration compiler." );
-            }
+
+        return DMNFactory.newCompiler(compilerConfiguration);
+    }
+
+    /**
+     * Returns a DMNCompilerConfiguration with the specified properties set, and applying the explicited dmnProfiles.
+     * @param classLoader 
+     * @param chainedProperties applies properties --it does not do any classloading nor profile loading based on these properites, just passes the values. 
+     * @param dmnProfiles applies these DMNProfile(s) to the DMNCompilerConfiguration
+     * @param config
+     * @return
+     */
+    public static DMNCompilerConfigurationImpl compilerConfigWithKModulePrefs(ClassLoader classLoader, ChainedProperties chainedProperties, List<DMNProfile> dmnProfiles, DMNCompilerConfigurationImpl config) {
+
+        config.setRootClassLoader(classLoader);
+
+        Map<String, String> dmnPrefs = new HashMap<>();
+        chainedProperties.mapStartsWith(dmnPrefs, ORG_KIE_DMN_PREFIX, true);
+        config.setProperties(dmnPrefs);
+        
+        for (DMNProfile dmnProfile : dmnProfiles) {
+            config.addExtensions(dmnProfile.getExtensionRegisters());
+            config.addDRGElementCompilers(dmnProfile.getDRGElementCompilers());
+            config.addFEELProfile(dmnProfile);
         }
-        return DMNFactory.newCompiler();
+
+        return config;
     }
 }

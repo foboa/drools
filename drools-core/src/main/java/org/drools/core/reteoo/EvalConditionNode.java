@@ -20,6 +20,7 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -125,17 +126,16 @@ public class EvalConditionNode extends LeftTupleSource
 
     @Override
     public boolean equals(final Object object) {
-        return this == object ||
-               ( internalEquals( object ) && this.leftInput.thisNodeEquals( ((EvalConditionNode)object).leftInput ) );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
         if ( object == null || !(object instanceof EvalConditionNode) || this.hashCode() != object.hashCode() ) {
             return false;
         }
 
-        return this.condition.equals( ((EvalConditionNode)object).condition );
+        EvalConditionNode other = (EvalConditionNode)object;
+        return this.leftInput.getId() == other.leftInput.getId() && this.condition.equals( other.condition );
     }
 
     public EvalMemory createMemory(final RuleBaseConfiguration config, InternalWorkingMemory wm) {
@@ -201,9 +201,8 @@ public class EvalConditionNode extends LeftTupleSource
 
 
     public LeftTuple createLeftTuple(InternalFactHandle factHandle,
-                                     Sink sink,
                                      boolean leftTupleMemoryEnabled) {
-        return new EvalNodeLeftTuple(factHandle, sink, leftTupleMemoryEnabled );
+        return new EvalNodeLeftTuple(factHandle, this, leftTupleMemoryEnabled );
     }
 
     public LeftTuple createLeftTuple(final InternalFactHandle factHandle,
@@ -282,8 +281,7 @@ public class EvalConditionNode extends LeftTupleSource
     }
 
     protected boolean doRemove(final RuleRemovalContext context,
-                               final ReteooBuilder builder,
-                               final InternalWorkingMemory[] workingMemories) {
+                               final ReteooBuilder builder) {
         if ( !this.isInUse() ) {
             getLeftTupleSource().removeTupleSink( this );
             return true;

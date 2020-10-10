@@ -26,7 +26,7 @@ public class ForallDescr extends BaseDescr
 
     private static final long   serialVersionUID = 510l;
 
-    private static final String BASE_IDENTIFIER  = "$__forallBaseIdentifier";
+    public static final String BASE_IDENTIFIER  = "$__forallBaseIdentifier";
 
     private List<BaseDescr>     patterns;
 
@@ -76,6 +76,36 @@ public class ForallDescr extends BaseDescr
         return null;
     }
 
+    public boolean isSinglePattern() {
+        return this.patterns.size() == 1;
+    }
+
+    public BaseDescr getSelfJoinConstraint() {
+        if (this.patterns.size() != 2) {
+            return null;
+        }
+
+        PatternDescr p1 = (PatternDescr) this.patterns.get( 0 );
+        String identifier = p1.getIdentifier();
+        if (identifier == null) {
+            return null;
+        }
+
+        PatternDescr p2 = (PatternDescr) this.patterns.get( 1 );
+        if (!p1.getObjectType().equals( p2.getObjectType() )) {
+            return null;
+        }
+
+        identifier = identifier.replace( "$", "\\$" );
+        for (BaseDescr constraint : p2.getConstraint().getDescrs()) {
+            if ( constraint instanceof ExprConstraintDescr && constraint.getText() != null &&
+                 constraint.getText().matches( "\\s*this\\s*==\\s*" + identifier + "\\s*" ) ) {
+                return constraint;
+            }
+        }
+        return null;
+    }
+
     /**
      * Returns the remaining patterns from the forall CE
      * @return
@@ -110,4 +140,10 @@ public class ForallDescr extends BaseDescr
     public String toString() {
         return "forall( "+patterns+" )";
     }
+
+    @Override
+    public void accept(DescrVisitor visitor) {
+        visitor.visit(this);
+    }
+
 }

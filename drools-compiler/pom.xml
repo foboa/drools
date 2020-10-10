@@ -6,7 +6,7 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>drools-compiler</artifactId>
@@ -15,13 +15,17 @@
   <name>Drools :: Compiler</name>
 
   <properties>
-    <osgi.Bundle-SymbolicName>org.drools.compiler</osgi.Bundle-SymbolicName>
-    <excludedGroups>org.drools.compiler.TurtleTestCategory</excludedGroups>
+    <java.module.name>org.drools.compiler</java.module.name>
+    <excludedGroups>org.kie.test.testcategory.TurtleTestCategory</excludedGroups>
     <surefire.forkCount>2</surefire.forkCount>
   </properties>
 
   <dependencies>
     <!-- Internal dependencies -->
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-core-reflective</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.drools</groupId>
       <artifactId>drools-core</artifactId>
@@ -50,10 +54,6 @@
       <artifactId>kie-soup-commons</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.kie.soup</groupId>
-      <artifactId>kie-soup-project-datamodel-commons</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.osgi</groupId>
       <artifactId>org.osgi.core</artifactId>
       <scope>provided</scope>
@@ -78,7 +78,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.jdt.core.compiler</groupId>
+      <groupId>org.eclipse.jdt</groupId>
       <artifactId>ecj</artifactId>
     </dependency>
     <dependency>
@@ -87,18 +87,10 @@
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>org.mvel</groupId>
-      <artifactId>mvel2</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.thoughtworks.xstream</groupId>
       <artifactId>xstream</artifactId>
       <!-- mdp temporary change, for kmodule.xml, undo once new format is chosen
           scope>test</scope-->
-    </dependency>
-    <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
     </dependency>
 
     <dependency>
@@ -118,7 +110,7 @@
     </dependency>
     <dependency>
       <groupId>org.jboss.spec.javax.xml.bind</groupId>
-      <artifactId>jboss-jaxb-api_2.2_spec</artifactId>
+      <artifactId>jboss-jaxb-api_2.3_spec</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -133,18 +125,18 @@
     </dependency>
 
     <dependency>
-      <groupId>commons-io</groupId>
-      <artifactId>commons-io</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>net.java.dev.glazedlists</groupId>
-      <artifactId>glazedlists_java15</artifactId>
+      <groupId>org.kie</groupId>
+      <artifactId>kie-test-util</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.assertj</groupId>
       <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -159,23 +151,17 @@
       <scope>test</scope>
     </dependency>
     
-    <!-- Required for TestListener in maven-surefire-plugin. -->
-    <dependency>
-      <groupId>org.kie</groupId>
-      <artifactId>kie-test-util</artifactId>
-      <scope>test</scope>
-    </dependency>
-    
   </dependencies>
 
   <build>
     <pluginManagement>
       <plugins>
         <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>findbugs-maven-plugin</artifactId>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
           <configuration>
-            <excludeFilterFile>${project.basedir}/src/main/findbugs/findbugs-exclude.xml</excludeFilterFile>
+            <excludeFilterFile>${project.basedir}/src/main/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
+            <maxHeap>1024</maxHeap> <!-- MB -->
           </configuration>
         </plugin>
         <plugin>
@@ -198,20 +184,38 @@
         </plugin>
       </plugins>
     </pluginManagement>
-    
+
     <plugins>
+      <!-- shade ecj to allow the gwt compiler to use its own version -->
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <configuration>
-          <properties>
-            <property>
-              <name>listener</name>
-              <value>org.kie.test.util.TestStatusListener</value>
-            </property>
-          </properties>
-        </configuration>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createSourcesJar>true</createSourcesJar>
+              <artifactSet>
+                <includes>
+                  <include>org.eclipse.jdt:ecj</include>
+                </includes>
+              </artifactSet>
+              <relocations>
+                <relocation>
+                  <pattern>org.eclipse.jdt</pattern>
+                  <shadedPattern>org.drools.compiler.shade.org.eclipse.jdt</shadedPattern>
+                </relocation>
+              </relocations>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
+
       <plugin>
         <groupId>org.apache.felix</groupId>
         <artifactId>maven-bundle-plugin</artifactId>
@@ -228,6 +232,9 @@
                    in ECJ directly to export the versions correctly in the MANIFEST.MF. -->
               org.eclipse.jdt.*;version="[0,1)";resolution:=optional,
               org.osgi.*;resolution:=optional,
+              org.drools.core.base.accumulators;resolution:=optional,
+              org.drools.core.rule.builder.dialect.asm;resolution:=optional,
+              org.drools.mvel.asm;resolution:=optional,
               org.drools.cdi;resolution:=optional,
               org.drools.template.parser;resolution:=optional,
               org.jbpm.process.instance.impl;resolution:=optional,
@@ -262,6 +269,30 @@
       </properties>
     </profile>
     <profile>
+      <id>enableTestStatusListener</id>
+      <activation>
+        <property>
+          <name>enableTestStatusListener</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <properties>
+                <property>
+                  <name>listener</name>
+                  <value>org.kie.test.util.TestStatusListener</value>
+                </property>
+              </properties>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
       <id>grammarsProfile</id>
       <activation>
         <property>
@@ -276,7 +307,7 @@
               <execution>
                 <phase>generate-sources</phase>
                 <configuration>
-                  <tasks>
+                  <target>
                     <condition property="antlr.debugParser" value="-Xconversiontimeout 32000 -debug" else="">
                       <isset property="debugParser"/>
                     </condition>
@@ -346,7 +377,7 @@
                         <include name="Java__.g"/>
                       </fileset>
                     </delete>
-                  </tasks>
+                  </target>
                 </configuration>
                 <goals>
                   <goal>run</goal>
@@ -356,6 +387,13 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>sonarcloud-analysis</id>
+      <properties>
+        <!-- Generated classes should not show up in Sonar. -->
+        <sonar.exclusions>**/*Lexer.java</sonar.exclusions>
+      </properties>
     </profile>
   </profiles>
 

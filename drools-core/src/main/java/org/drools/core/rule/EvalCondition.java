@@ -16,26 +16,20 @@
 
 package org.drools.core.rule;
 
-import org.drools.core.WorkingMemory;
-import org.drools.core.base.mvel.MVELEvalExpression;
-import org.drools.core.spi.CompiledInvoker;
-import org.drools.core.spi.EvalExpression;
-import org.drools.core.spi.Tuple;
-import org.drools.core.spi.Wireable;
-import org.kie.internal.security.KiePolicyHelper;
-
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
-import java.io.Serializable;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
-import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+import org.drools.core.WorkingMemory;
+import org.drools.core.spi.EvalExpression;
+import org.drools.core.spi.Tuple;
+import org.drools.core.spi.Wireable;
+import org.kie.internal.security.KiePolicyHelper;
 
 public class EvalCondition extends ConditionalElement
     implements
@@ -43,9 +37,9 @@ public class EvalCondition extends ConditionalElement
     Wireable {
     private static final long          serialVersionUID   = 510l;
 
-    private EvalExpression             expression;
+    protected EvalExpression             expression;
 
-    private Declaration[]              requiredDeclarations;
+    protected Declaration[]              requiredDeclarations;
 
     private static final Declaration[] EMPTY_DECLARATIONS = new Declaration[0];
 
@@ -80,7 +74,7 @@ public class EvalCondition extends ConditionalElement
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
-        if ( this.expression instanceof CompiledInvoker ) {
+        if ( EvalExpression.isCompiledInvoker(this.expression) ) {
             out.writeObject( null );
         } else {
             out.writeObject( this.expression );
@@ -94,7 +88,7 @@ public class EvalCondition extends ConditionalElement
     }
 
     public void wire(Object object) {
-        EvalExpression expression = KiePolicyHelper.isPolicyEnabled() ? new SafeEvalExpression((EvalExpression) object) : (EvalExpression) object;
+        EvalExpression expression = KiePolicyHelper.isPolicyEnabled() ? new EvalExpression.SafeEvalExpression((EvalExpression) object) : (EvalExpression) object;
         setEvalExpression( expression );
         for ( EvalCondition clone : this.cloned ) {
             clone.wireClone( expression );
@@ -102,9 +96,7 @@ public class EvalCondition extends ConditionalElement
     }
 
     private void wireClone(EvalExpression expression) {
-        setEvalExpression( this.expression instanceof MVELEvalExpression && expression instanceof MVELEvalExpression ?
-                           ( (MVELEvalExpression) expression ).clonePreservingDeclarations( (MVELEvalExpression) this.expression ) :
-                           expression );
+        setEvalExpression( expression.clonePreservingDeclarations( this.expression ) );
         for ( EvalCondition clone : this.cloned ) {
             clone.wireClone( expression );
         }
@@ -158,7 +150,7 @@ public class EvalCondition extends ConditionalElement
             return true;
         }
 
-        if ( object == null || object.getClass() != EvalCondition.class ) {
+        if ( object == null || object.getClass() != this.getClass() ) {
             return false;
         }
 
@@ -169,7 +161,7 @@ public class EvalCondition extends ConditionalElement
         }
 
         for ( int i = 0, length = this.requiredDeclarations.length; i < length; i++ ) {
-            if ( this.requiredDeclarations[i].getPattern().getOffset() != other.requiredDeclarations[i].getPattern().getOffset() ) {
+            if ( this.requiredDeclarations[i].getOffset() != other.requiredDeclarations[i].getOffset() ) {
                 return false;
             }
 
@@ -205,7 +197,6 @@ public class EvalCondition extends ConditionalElement
         return null;
     }
 
-
     public void replaceDeclaration(Declaration declaration,
                                    Declaration resolved) {
         for ( int i = 0; i < this.requiredDeclarations.length; i++ ) {
@@ -216,50 +207,18 @@ public class EvalCondition extends ConditionalElement
         this.expression.replaceDeclaration( declaration,
                                             resolved );
     }
+
+    public List<EvalCondition> getCloned() {
+        return cloned;
+    }
+
     
+    public void setCloned(List<EvalCondition> cloned) {
+        this.cloned = cloned;
+    }
+
     @Override
     public String toString() {
         return this.expression.toString();
-    }
-
-    public static class SafeEvalExpression implements EvalExpression, Serializable {
-        private static final long serialVersionUID = -5682290553015978731L;
-        private EvalExpression delegate;
-        public SafeEvalExpression(EvalExpression delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public Object createContext() {
-            return AccessController.doPrivileged(new PrivilegedAction<Object>() {
-                @Override
-                public Object run() {
-                    return delegate.createContext();
-                }
-            }, KiePolicyHelper.getAccessContext());
-        }
-
-        @Override
-        public boolean evaluate(final Tuple tuple, 
-                final Declaration[] requiredDeclarations, 
-                final WorkingMemory workingMemory, 
-                final Object context) throws Exception {
-            return AccessController.doPrivileged(new PrivilegedExceptionAction<Boolean>() {
-                @Override
-                public Boolean run() throws Exception {
-                    return delegate.evaluate(tuple, requiredDeclarations, workingMemory, context);
-                }
-            }, KiePolicyHelper.getAccessContext());
-        }
-
-        @Override
-        public void replaceDeclaration(Declaration declaration, Declaration resolved) {
-            delegate.replaceDeclaration(declaration, resolved);
-        }
-        
-        @Override
-        public SafeEvalExpression clone() {
-            return new SafeEvalExpression( this.delegate.clone() );
-        }
     }
 }

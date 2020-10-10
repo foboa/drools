@@ -16,11 +16,19 @@
 
 package org.drools.testcoverage.regression;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.assertj.core.api.Assertions;
 import org.drools.core.builder.conf.impl.DecisionTableConfigurationImpl;
+import org.drools.testcoverage.common.util.KieBaseTestConfiguration;
 import org.drools.testcoverage.common.util.KieBaseUtil;
 import org.drools.testcoverage.common.util.KieUtil;
+import org.drools.testcoverage.common.util.TestParametersUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.kie.api.KieBase;
 import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
@@ -34,14 +42,23 @@ import org.kie.internal.builder.DecisionTableInputType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
-
 /**
  * Tests loading decision tables from several worksheets in a XLS file.
  */
+@RunWith(Parameterized.class)
 public class MultipleSheetsLoadingTest {
+
+    private final KieBaseTestConfiguration kieBaseTestConfiguration;
+
+    public MultipleSheetsLoadingTest(final KieBaseTestConfiguration kieBaseTestConfiguration) {
+        this.kieBaseTestConfiguration = kieBaseTestConfiguration;
+    }
+
+    @Parameterized.Parameters(name = "KieBase type={0}")
+    public static Collection<Object[]> getParameters() {
+        return TestParametersUtil.getKieBaseConfigurations();
+    }
+
     private static final Logger LOGGER = LoggerFactory.getLogger(MultipleSheetsLoadingTest.class);
 
     private static final String XLS_EXTENSION = "xls";
@@ -76,7 +93,7 @@ public class MultipleSheetsLoadingTest {
     private KieBuilder buildResources() {
         final Resource resourceXlsFirst = this.createResourceWithConfig(WORKSHEET_1_NAME);
         final Resource resourceXlsSecond = this.createResourceWithConfig(WORKSHEET_2_NAME);
-        return KieUtil.getKieBuilderFromResources(false, resourceXlsFirst, resourceXlsSecond);
+        return KieUtil.getKieBuilderFromResources(kieBaseTestConfiguration, false, resourceXlsFirst, resourceXlsSecond);
     }
 
     private Resource createResourceWithConfig(final String worksheetName) {

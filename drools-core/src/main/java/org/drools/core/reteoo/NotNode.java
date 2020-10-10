@@ -89,9 +89,8 @@ public class NotNode extends BetaNode {
     }    
 
     public LeftTuple createLeftTuple(InternalFactHandle factHandle,
-                                     Sink sink,
                                      boolean leftTupleMemoryEnabled) {
-        return new NotNodeLeftTuple(factHandle, sink, leftTupleMemoryEnabled );
+        return new NotNodeLeftTuple(factHandle, this, leftTupleMemoryEnabled );
     }
 
     public LeftTuple createLeftTuple(final InternalFactHandle factHandle,
@@ -147,13 +146,13 @@ public class NotNode extends BetaNode {
                 memory.setNodeDirtyWithoutNotify();
             }
             // NotNodes can only be unlinked, if they have no variable constraints
-            memory.linkNode( wm );
+            memory.linkNode( this, wm );
         } else if ( stagedInsertWasEmpty ) {
             // nothing staged before, notify rule, so it can evaluate network
-            memory.setNodeDirty(wm);
+            memory.setNodeDirty(this, wm);
         }
 
-        flushLeftTupleIfNecessary( wm, memory.getSegmentMemory(), isStreamMode() );
+        flushLeftTupleIfNecessary( wm, memory.getOrCreateSegmentMemory( this, wm ), isStreamMode() );
     }
 
     public void retractRightTuple(final RightTuple rightTuple,
@@ -177,13 +176,13 @@ public class NotNode extends BetaNode {
                 memory.setNodeDirtyWithoutNotify();
             }
             // NotNodes can only be unlinked, if they have no variable constraints
-            memory.linkNode( wm );
+            memory.linkNode( this, wm );
         }  else if ( stagedDeleteWasEmpty ) {
             // nothing staged before, notify rule, so it can evaluate network
-            memory.setNodeDirty( wm );
+            memory.setNodeDirty( this, wm );
         }
 
-        flushLeftTupleIfNecessary( wm, memory.getSegmentMemory(), isStreamMode() );
+        flushLeftTupleIfNecessary( wm, memory.getOrCreateSegmentMemory( this, wm ), isStreamMode() );
     }
 
     @Override
@@ -192,7 +191,7 @@ public class NotNode extends BetaNode {
     }
 
     @Override
-    public boolean doRemove(RuleRemovalContext context, ReteooBuilder builder, InternalWorkingMemory[] workingMemories) {
+    public boolean doRemove(RuleRemovalContext context, ReteooBuilder builder) {
         if ( !isInUse() ) {
             getLeftTupleSource().removeTupleSink( this );
             getRightInput().removeObjectSink( this );

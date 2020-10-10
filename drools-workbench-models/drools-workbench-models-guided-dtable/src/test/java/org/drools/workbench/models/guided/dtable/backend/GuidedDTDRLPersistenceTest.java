@@ -1,12 +1,12 @@
 /*
  * Copyright 2010 Red Hat, Inc. and/or its affiliates.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -19,6 +19,7 @@ package org.drools.workbench.models.guided.dtable.backend;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.assertj.core.api.Assertions;
 import org.drools.workbench.models.commons.backend.rule.RuleModelDRLPersistenceImpl;
 import org.drools.workbench.models.datamodel.rule.ActionExecuteWorkItem;
 import org.drools.workbench.models.datamodel.rule.ActionFieldValue;
@@ -26,6 +27,7 @@ import org.drools.workbench.models.datamodel.rule.ActionInsertFact;
 import org.drools.workbench.models.datamodel.rule.ActionRetractFact;
 import org.drools.workbench.models.datamodel.rule.ActionSetField;
 import org.drools.workbench.models.datamodel.rule.ActionWorkItemFieldValue;
+import org.drools.workbench.models.datamodel.rule.Attribute;
 import org.drools.workbench.models.datamodel.rule.BaseSingleFieldConstraint;
 import org.drools.workbench.models.datamodel.rule.FactPattern;
 import org.drools.workbench.models.datamodel.rule.FreeFormLine;
@@ -67,11 +69,17 @@ import org.drools.workbench.models.guided.dtable.shared.model.LimitedEntryCondit
 import org.drools.workbench.models.guided.dtable.shared.model.MetadataCol52;
 import org.drools.workbench.models.guided.dtable.shared.model.Pattern52;
 import org.drools.workbench.models.guided.dtable.shared.model.RowNumberCol52;
+import org.drools.workbench.models.guided.dtable.shared.model.RuleNameColumn;
 import org.junit.Test;
 import org.kie.soup.project.datamodel.imports.Import;
 import org.kie.soup.project.datamodel.oracle.DataType;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public class GuidedDTDRLPersistenceTest {
 
@@ -94,11 +102,11 @@ public class GuidedDTDRLPersistenceTest {
         dt.getConditions().add(p1);
 
         dt.setData(DataUtilities.makeDataLists(new String[][]{
-                new String[]{"1", "desc1", "ak1,mk1"},
-                new String[]{"2", "desc2", "(ak2,mk2)"},
-                new String[]{"3", "desc3", "( ak3, mk3 )"},
-                new String[]{"4", "desc4", "( \"ak4\", \"mk4\" )"},
-                new String[]{"5", "desc5", "( \"ak5 \", \" mk5\" )"},
+                new String[]{"1", "", "desc1", "ak1,mk1"},
+                new String[]{"2", "", "desc2", "(ak2,mk2)"},
+                new String[]{"3", "", "desc3", "( ak3, mk3 )"},
+                new String[]{"4", "", "desc4", "( \"ak4\", \"mk4\" )"},
+                new String[]{"5", "", "desc5", "( \"ak5 \", \" mk5\" )"},
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -156,7 +164,7 @@ public class GuidedDTDRLPersistenceTest {
         dt.setTableName("michael");
 
         AttributeCol52 attr = new AttributeCol52();
-        attr.setAttribute("salience");
+        attr.setAttribute(Attribute.SALIENCE.getAttributeName());
         attr.setDefaultValue(new DTCellValue52("66"));
         dt.getAttributeCols().add(attr);
 
@@ -223,8 +231,8 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(set2);
 
         dt.setData(DataUtilities.makeDataLists(new String[][]{
-                new String[]{"1", "desc", "42", "33", "michael", "age * 0.2", "age > 7", "6.60", "true", "gooVal1", "f2"},
-                new String[]{"2", "desc", "66", "39", "bob", "age * 0.3", "age > 7", "6.60", "", "gooVal1", "whee"}
+                new String[]{"1", "", "desc", "42", "33", "michael", "age * 0.2", "age > 7", "6.60", "true", "gooVal1", "f2"},
+                new String[]{"2", "", "desc", "66", "39", "bob", "age * 0.3", "age > 7", "6.60", "", "gooVal1", "whee"}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -259,9 +267,9 @@ public class GuidedDTDRLPersistenceTest {
                    rm.attributes);
 
         AttributeCol52 col1 = new AttributeCol52();
-        col1.setAttribute("salience");
+        col1.setAttribute(Attribute.SALIENCE.getAttributeName());
         AttributeCol52 col2 = new AttributeCol52();
-        col2.setAttribute("agenda-group");
+        col2.setAttribute(Attribute.AGENDA_GROUP.getAttributeName());
         attributeCols.add(col1);
         attributeCols.add(col2);
         allColumns.addAll(attributeCols);
@@ -298,6 +306,8 @@ public class GuidedDTDRLPersistenceTest {
     @Test
     public void testCellCSV() {
         GuidedDTDRLPersistence p = new GuidedDTDRLPersistence();
+        assertEquals("(\"Helsinki, Finland\", \"Boston\")",
+                     p.makeInList("\"Helsinki, Finland\",Boston"));
         assertEquals("(\"Michael\", \"Mark\", \"Peter\")",
                      p.makeInList("Michael, Mark, Peter"));
         assertEquals("(\"Michael\")",
@@ -350,7 +360,7 @@ public class GuidedDTDRLPersistenceTest {
         dt.setTableName("michael");
 
         AttributeCol52 attr = new AttributeCol52();
-        attr.setAttribute("salience");
+        attr.setAttribute(Attribute.SALIENCE.getAttributeName());
         attr.setDefaultValue(new DTCellValue52("66"));
         dt.getAttributeCols().add(attr);
 
@@ -411,8 +421,8 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(set2);
 
         dt.setData(DataUtilities.makeDataLists(new String[][]{
-                new String[]{"1", "desc", "42", "33", "michael, manik", "age * 0.2", "age > 7", "6.60", "true", "gooVal1", "f2"},
-                new String[]{"2", "desc", "", "39", "bob, frank", "age * 0.3", "age > 7", "6.60", "", "gooVal1", null}
+                new String[]{"1", "", "desc", "42", "33", "michael, manik", "age * 0.2", "age > 7", "6.60", "true", "gooVal1", "f2"},
+                new String[]{"2", "", "desc", "", "39", "bob, frank", "age * 0.3", "age > 7", "6.60", "", "gooVal1", null}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -427,7 +437,7 @@ public class GuidedDTDRLPersistenceTest {
         dt.setTableName("michael");
 
         AttributeCol52 attr = new AttributeCol52();
-        attr.setAttribute("salience");
+        attr.setAttribute(Attribute.SALIENCE.getAttributeName());
         attr.setDefaultValue(new DTCellValue52("66"));
         dt.getAttributeCols().add(attr);
 
@@ -494,8 +504,8 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(set2);
 
         dt.setData(DataUtilities.makeDataLists(new String[][]{
-                new String[]{"1", "desc", "42", "33", "michael", "age * 0.2", "BAM", "6.60", "true", "gooVal1", "f2"},
-                new String[]{"2", "desc", "66", "39", "bob", "age * 0.3", "BAM", "6.60", "", "gooVal1", "whee"}
+                new String[]{"1", "", "desc", "42", "33", "michael", "age * 0.2", "BAM", "6.60", "true", "gooVal1", "f2"},
+                new String[]{"2", "", "desc", "66", "39", "bob", "age * 0.3", "BAM", "6.60", "", "gooVal1", "whee"}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -657,7 +667,7 @@ public class GuidedDTDRLPersistenceTest {
         col2.setFactField("age");
         col2.setConstraintValueType(BaseSingleFieldConstraint.TYPE_RET_VALUE);
         col2.setOperator("<");
-        col2.setBinding("$name");
+        col2.setBinding("$age");
         p1.getChildColumns().add(col2);
         allColumns.add(col2);
 
@@ -713,7 +723,7 @@ public class GuidedDTDRLPersistenceTest {
                      cons.getOperator());
         assertEquals("33 + 1",
                      cons.getValue());
-        assertNull(cons.getFieldBinding());
+        assertEquals("$age", cons.getFieldBinding());
 
         cons = (SingleFieldConstraint) person.getConstraint(2);
         assertEquals(BaseSingleFieldConstraint.TYPE_PREDICATE,
@@ -824,6 +834,7 @@ public class GuidedDTDRLPersistenceTest {
                      cons.getOperator());
         assertEquals("33 + 1",
                      cons.getValue());
+        assertNull(cons.getFieldBinding());
 
         cons = (SingleFieldConstraint) person.getConstraint(2);
         assertEquals(BaseSingleFieldConstraint.TYPE_PREDICATE,
@@ -859,13 +870,14 @@ public class GuidedDTDRLPersistenceTest {
     @Test
     public void multipleLHSNotPatternInclusion() {
         GuidedDTDRLPersistence p = new GuidedDTDRLPersistence();
-        Object[] row = new Object[]{"1", "desc", "mike", true, true};
+        Object[] row = new Object[]{"1", "", "desc", "mike", true, true};
         Object[][] data = new Object[1][];
         data[0] = row;
 
         List<BaseColumn> allColumns = new ArrayList<>();
         List<CompositeColumn<? extends BaseColumn>> allPatterns = new ArrayList<>();
         allColumns.add(new RowNumberCol52());
+        allColumns.add(new RuleNameColumn());
         allColumns.add(new DescriptionCol52());
 
         Pattern52 p1 = new Pattern52();
@@ -1586,12 +1598,27 @@ public class GuidedDTDRLPersistenceTest {
     @Test
     public void testName() {
         GuidedDTDRLPersistence p = new GuidedDTDRLPersistence();
-        assertEquals("Row 42 XXX",
-                     p.getName("XXX",
-                               42));
-        assertEquals("Row 42 YYY",
-                     p.getName("YYY",
-                               42));
+
+        GuidedDecisionTable52 dt = new GuidedDecisionTable52();
+        dt.setTableName("My table");
+        dt.setData(DataUtilities.makeDataLists(new Object[][]{
+                new Object[]{"1", "", "desc"},
+                new Object[]{"2", "Custom Rule Name", "desc"},
+                new Object[]{"3", "", "desc"}
+        }));
+
+        assertEquals("Row 1 My table",
+                     p.getName(dt,
+                               dt.getData().get(0),
+                               1));
+        assertEquals("Custom Rule Name",
+                     p.getName(dt,
+                               dt.getData().get(1),
+                               2));
+        assertEquals("Row 3 My table",
+                     p.getName(dt,
+                               dt.getData().get(2),
+                               3));
     }
 
     @Test
@@ -1621,7 +1648,7 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(asf);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", "Fred", 75l}
+                new Object[]{"1", "", "desc", "Fred", 75l}
         }));
 
         String drl1 = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -1639,7 +1666,7 @@ public class GuidedDTDRLPersistenceTest {
                                      drl1);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", null, 75l}
+                new Object[]{"1", "", "desc", null, 75l}
         }));
 
         String drl2 = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -1832,7 +1859,7 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(asf);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", "y", "old"}
+                new Object[]{"1", "", "desc", "y", "old"}
         }));
 
         String drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -1842,7 +1869,7 @@ public class GuidedDTDRLPersistenceTest {
         assertTrue(drl.indexOf("setAge(") > drl.indexOf("modify( x ) {"));
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", null, "old"}
+                new Object[]{"1", "", "desc", null, "old"}
         }));
 
         drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -1854,7 +1881,7 @@ public class GuidedDTDRLPersistenceTest {
         assertTrue(drl.indexOf("setAge(") > drl.indexOf("modify( x ) {"));
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", null, null}
+                new Object[]{"1", "", "desc", null, null}
         }));
 
         drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -1898,7 +1925,7 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(asf2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", "x", 55l, "Fred"}
+                new Object[]{"1", "", "desc", "x", 55l, "Fred"}
         }));
 
         String drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -1918,7 +1945,7 @@ public class GuidedDTDRLPersistenceTest {
                                      drl);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", "x", null, "Fred"}
+                new Object[]{"1", "", "desc", "x", null, "Fred"}
         }));
         drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
         final String expected2 = "//from row number: 1\n" +
@@ -1936,7 +1963,7 @@ public class GuidedDTDRLPersistenceTest {
                                      drl);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", "x", 55l, null}
+                new Object[]{"1", "", "desc", "x", 55l, null}
         }));
         drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
         final String expected3 = "//from row number: 1\n" +
@@ -1984,7 +2011,7 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(asf2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", "x", 55l, "Fred"}
+                new Object[]{"1", "", "desc", "x", 55l, "Fred"}
         }));
 
         String drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -2005,7 +2032,7 @@ public class GuidedDTDRLPersistenceTest {
                                      drl);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", "x", null, "Fred"}
+                new Object[]{"1", "", "desc", "x", null, "Fred"}
         }));
 
         drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -2023,7 +2050,7 @@ public class GuidedDTDRLPersistenceTest {
                                      drl);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{"1", "desc", "x", 55l, ""}
+                new Object[]{"1", "", "desc", "x", 55l, ""}
         }));
 
         drl = GuidedDTDRLPersistence.getInstance().marshal(dt);
@@ -2061,7 +2088,7 @@ public class GuidedDTDRLPersistenceTest {
 
         //With provided getValue()
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "edam"},
+                new String[]{"1", "", "desc", "edam"},
         };
         dt.setData(DataUtilities.makeDataLists(data));
 
@@ -2071,7 +2098,7 @@ public class GuidedDTDRLPersistenceTest {
 
         //Without provided getValue() #1
         data = new String[][]{
-                new String[]{"1", "desc", null},
+                new String[]{"1", "", "desc", null},
         };
         dt.setData(DataUtilities.makeDataLists(data));
 
@@ -2081,7 +2108,7 @@ public class GuidedDTDRLPersistenceTest {
 
         //Without provided getValue() #2
         data = new String[][]{
-                new String[]{"1", "desc", ""},
+                new String[]{"1", "", "desc", ""},
         };
         dt.setData(DataUtilities.makeDataLists(data));
 
@@ -2097,12 +2124,12 @@ public class GuidedDTDRLPersistenceTest {
         dt.setTableName("limited-entry");
 
         AttributeCol52 attr = new AttributeCol52();
-        attr.setAttribute("salience");
+        attr.setAttribute(Attribute.SALIENCE.getAttributeName());
         dt.getAttributeCols().add(attr);
 
         dt.setData(DataUtilities.makeDataLists(new String[][]{
-                new String[]{"1", "desc", "100"},
-                new String[]{"2", "desc", "200"}
+                new String[]{"1", "", "desc", "100"},
+                new String[]{"2", "", "desc", "200"}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2123,8 +2150,8 @@ public class GuidedDTDRLPersistenceTest {
         dt.getMetadataCols().add(md);
 
         dt.setData(DataUtilities.makeDataLists(new String[][]{
-                new String[]{"1", "desc", "md1"},
-                new String[]{"2", "desc", "md2"}
+                new String[]{"1", "", "desc", "md1"},
+                new String[]{"2", "", "desc", "md2"}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2155,8 +2182,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc1);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true},
-                new Object[]{2l, "desc", false}
+                new Object[]{1l, "", "desc", true},
+                new Object[]{2l, "", "desc", false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2191,8 +2218,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc1);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true},
-                new Object[]{2l, "desc", false}
+                new Object[]{1l, "", "desc", true},
+                new Object[]{2l, "", "desc", false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2243,9 +2270,9 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, false, true},
-                new Object[]{2l, "desc", false, true, true},
-                new Object[]{3l, "desc", false, false, true}
+                new Object[]{1l, "", "desc", true, false, true},
+                new Object[]{2l, "", "desc", false, true, true},
+                new Object[]{3l, "", "desc", false, false, true}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2291,8 +2318,8 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(asf1);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true},
-                new Object[]{2l, "desc", true, false}
+                new Object[]{1l, "", "desc", true, true},
+                new Object[]{2l, "", "desc", true, false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2333,8 +2360,8 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(asf1);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true},
-                new Object[]{2l, "desc", false}
+                new Object[]{1l, "", "desc", true},
+                new Object[]{2l, "", "desc", false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2395,8 +2422,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true, true},
-                new Object[]{2l, "desc", false, false, false}
+                new Object[]{1l, "", "desc", true, true, true},
+                new Object[]{2l, "", "desc", false, false, false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2444,8 +2471,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true, true},
-                new Object[]{2l, "desc", null, null, null}
+                new Object[]{1l, "", "desc", true, true, true},
+                new Object[]{2l, "", "desc", null, null, null}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2493,8 +2520,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true, true},
-                new Object[]{2l, "desc", false, false, false}
+                new Object[]{1l, "", "desc", true, true, true},
+                new Object[]{2l, "", "desc", false, false, false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2542,8 +2569,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true, true},
-                new Object[]{2l, "desc", null, null, null}
+                new Object[]{1l, "", "desc", true, true, true},
+                new Object[]{2l, "", "desc", null, null, null}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2591,8 +2618,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true, true},
-                new Object[]{2l, "desc", false, false, false}
+                new Object[]{1l, "", "desc", true, true, true},
+                new Object[]{2l, "", "desc", false, false, false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2640,8 +2667,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true, true},
-                new Object[]{2l, "desc", null, null, null}
+                new Object[]{1l, "", "desc", true, true, true},
+                new Object[]{2l, "", "desc", null, null, null}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2689,8 +2716,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true, true},
-                new Object[]{2l, "desc", false, false, false}
+                new Object[]{1l, "", "desc", true, true, true},
+                new Object[]{2l, "", "desc", false, false, false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2738,8 +2765,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc3);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true, true},
-                new Object[]{2l, "desc", null, null, null}
+                new Object[]{1l, "", "desc", true, true, true},
+                new Object[]{2l, "", "desc", null, null, null}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2780,15 +2807,15 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", "Pupa, Brains", "55, 66"},
-                new Object[]{2l, "desc", "", ""}
+                new Object[]{1l, "", "desc", "Pupa, Brains, \"John, Snow\"", "55, 66"},
+                new Object[]{2l, "", "desc", "", ""}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
         String drl = p.marshal(dt);
 
         int index = -1;
-        index = drl.indexOf("Smurf( name in ( \"Pupa\", \"Brains\" ) , age in ( 55, 66 ) )");
+        index = drl.indexOf("Smurf( name in ( \"Pupa\", \"Brains\", \"John, Snow\" ) , age in ( 55, 66 ) )");
         assertTrue(index > -1);
 
         index = drl.indexOf("Smurf( )",
@@ -2822,8 +2849,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", "Pupa, Brains", "55, 66"},
-                new Object[]{2l, "desc", "", ""}
+                new Object[]{1l, "", "desc", "Pupa, Brains", "55, 66"},
+                new Object[]{2l, "", "desc", "", ""}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2866,8 +2893,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true},
-                new Object[]{2l, "desc", false, false}
+                new Object[]{1l, "", "desc", true, true},
+                new Object[]{2l, "", "desc", false, false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -2910,8 +2937,8 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc", true, true},
-                new Object[]{2l, "desc", false, false}
+                new Object[]{1l, "", "desc", true, true},
+                new Object[]{2l, "", "desc", false, false}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -3672,9 +3699,9 @@ public class GuidedDTDRLPersistenceTest {
 
         // All 3 rows should render, as the code is now lower down for skipping columns with empty cells
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "Gargamel", "Pupa", "50"},
-                new String[]{"2", "desc", "Gargamel", "", "50"},
-                new String[]{"3", "desc", "Gargamel", "Pupa", ""}
+                new String[]{"1", "", "desc", "Gargamel", "Pupa", "50"},
+                new String[]{"2", "", "desc", "Gargamel", "", "50"},
+                new String[]{"3", "", "desc", "Gargamel", "Pupa", ""}
         };
 
         //Simple (mandatory) columns
@@ -3919,9 +3946,9 @@ public class GuidedDTDRLPersistenceTest {
 
         // All 3 rows should render, as the code is now lower down for skipping columns with empty cells
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "Gargamel", "Pupa", "50"},
-                new String[]{"2", "desc", "Gargamel", "", "50"},
-                new String[]{"3", "desc", "Gargamel", "Pupa", ""}
+                new String[]{"1", "", "desc", "Gargamel", "Pupa", "50"},
+                new String[]{"2", "", "desc", "Gargamel", "", "50"},
+                new String[]{"3", "", "desc", "Gargamel", "Pupa", ""}
         };
 
         //Simple (mandatory) columns
@@ -4030,9 +4057,9 @@ public class GuidedDTDRLPersistenceTest {
 
         // All 3 rows should render, as the code is now lower down for skipping columns with empty cells
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "Pupa", "50"},
-                new String[]{"2", "desc", "", "50"},
-                new String[]{"3", "desc", "Pupa", ""}
+                new String[]{"1", "", "desc", "Pupa", "50"},
+                new String[]{"2", "", "desc", "", "50"},
+                new String[]{"3", "", "desc", "Pupa", ""}
         };
 
         //Simple (mandatory) columns
@@ -4142,8 +4169,8 @@ public class GuidedDTDRLPersistenceTest {
         //Row 0 should become an IPattern in the resulting RuleModel as it contains getValue()s for all Template fields in the BRL Column
         //Row 1 should *NOT* become an IPattern in the resulting RuleModel as it does *NOT* contain getValue()s for all Template fields in the BRL Column
         Object[][] data = new Object[][]{
-                new Object[]{"1", "desc", Boolean.TRUE},
-                new Object[]{"2", "desc", Boolean.FALSE}
+                new Object[]{"1", "", "desc", Boolean.TRUE},
+                new Object[]{"2", "", "desc", Boolean.FALSE}
         };
 
         //Simple (mandatory) columns
@@ -4209,10 +4236,10 @@ public class GuidedDTDRLPersistenceTest {
         //Row 2 should *NOT* become an IPattern in the resulting RuleModel as it does *NOT* contain values for all Template fields in the BRL Column
         //Row 3 should *NOT* become an IPattern in the resulting RuleModel as it does *NOT* contain values for all Template fields in the BRL Column
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "Pupa", "50"},
-                new String[]{"2", "desc", "", "50"},
-                new String[]{"3", "desc", "Pupa", ""},
-                new String[]{"4", "desc", "", ""}
+                new String[]{"1", "", "desc", "Pupa", "50"},
+                new String[]{"2", "", "desc", "", "50"},
+                new String[]{"3", "", "desc", "Pupa", ""},
+                new String[]{"4", "", "desc", "", ""}
         };
 
         //Simple (mandatory) columns
@@ -4287,9 +4314,9 @@ public class GuidedDTDRLPersistenceTest {
 
         // All three rows are entered, some columns with optional data
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "Gargamel", "Pupa", "50"},
-                new String[]{"2", "desc", "Gargamel", "", "50"},
-                new String[]{"3", "desc", "Gargamel", "Pupa", ""}
+                new String[]{"1", "", "desc", "Gargamel", "Pupa", "50"},
+                new String[]{"2", "", "desc", "Gargamel", "", "50"},
+                new String[]{"3", "", "desc", "Gargamel", "Pupa", ""}
         };
 
         //Simple (mandatory) columns
@@ -4505,9 +4532,9 @@ public class GuidedDTDRLPersistenceTest {
 
         // All three rows are entered, some columns with optional data
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "Gargamel", "Pupa", "50"},
-                new String[]{"2", "desc", "Gargamel", "", "50"},
-                new String[]{"3", "desc", "Gargamel", "Pupa", ""}
+                new String[]{"1", "", "desc", "Gargamel", "Pupa", "50"},
+                new String[]{"2", "", "desc", "Gargamel", "", "50"},
+                new String[]{"3", "", "desc", "Gargamel", "Pupa", ""}
         };
 
         //Simple (mandatory) columns
@@ -4652,9 +4679,9 @@ public class GuidedDTDRLPersistenceTest {
 
         // All three rows are entered, some columns with optional data
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "Pupa", "50"},
-                new String[]{"2", "desc", "", "50"},
-                new String[]{"3", "desc", "Pupa", ""}
+                new String[]{"1", "", "desc", "Pupa", "50"},
+                new String[]{"2", "", "desc", "", "50"},
+                new String[]{"3", "", "desc", "Pupa", ""}
         };
 
         //Simple (mandatory) columns
@@ -4798,8 +4825,8 @@ public class GuidedDTDRLPersistenceTest {
         GuidedDecisionTable52 dtable = new GuidedDecisionTable52();
 
         Object[][] data = new Object[][]{
-                new Object[]{"1", "desc", Boolean.TRUE},
-                new Object[]{"2", "desc", Boolean.FALSE}
+                new Object[]{"1", "", "desc", Boolean.TRUE},
+                new Object[]{"2", "", "desc", Boolean.FALSE}
         };
 
         //Simple (mandatory) columns
@@ -4873,10 +4900,10 @@ public class GuidedDTDRLPersistenceTest {
         //Row 2 should *NOT* become an IAction in the resulting RuleModel as it does *NOT* contain values for all Template fields in the BRL Column
         //Row 3 should *NOT* become an IAction in the resulting RuleModel as it does *NOT* contain values for all Template fields in the BRL Column
         String[][] data = new String[][]{
-                new String[]{"1", "desc", "Pupa", "50"},
-                new String[]{"2", "desc", "", "50"},
-                new String[]{"3", "desc", "Pupa", ""},
-                new String[]{"4", "desc", "", ""}
+                new String[]{"1", "", "desc", "Pupa", "50"},
+                new String[]{"2", "", "desc", "", "50"},
+                new String[]{"3", "", "desc", "Pupa", ""},
+                new String[]{"4", "", "desc", "", ""}
         };
 
         //Simple (mandatory) columns
@@ -4963,7 +4990,7 @@ public class GuidedDTDRLPersistenceTest {
         dt.getConditions().add(p1);
 
         dt.setData(DataUtilities.makeDataLists(new String[][]{
-                new String[]{"1", "desc", "42"}
+                new String[]{"1", "", "desc", "42"}
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -4999,10 +5026,10 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc-row1", null, null},
-                new Object[]{2l, "desc-row2", "   ", 35l},
-                new Object[]{3l, "desc-row3", "", null},
-                new Object[]{4l, "desc-row4", "", 35l},
+                new Object[]{1l, "", "desc-row1", null, null},
+                new Object[]{2l, "", "desc-row2", "   ", 35l},
+                new Object[]{3l, "", "desc-row3", "", null},
+                new Object[]{4l, "", "desc-row4", "", 35l},
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -5069,10 +5096,10 @@ public class GuidedDTDRLPersistenceTest {
         p1.getChildColumns().add(cc2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc-row1", null, null},
-                new Object[]{2l, "desc-row2", "\"   \"", 35l},
-                new Object[]{3l, "desc-row3", "\"\"", null},
-                new Object[]{4l, "desc-row4", "\"\"", 35l},
+                new Object[]{1l, "", "desc-row1", null, null},
+                new Object[]{2l, "", "desc-row2", "\"   \"", 35l},
+                new Object[]{3l, "", "desc-row3", "\"\"", null},
+                new Object[]{4l, "", "desc-row4", "\"\"", 35l},
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -5135,10 +5162,10 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(ins2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc-row1", null, null},
-                new Object[]{2l, "desc-row2", "   ", 35l},
-                new Object[]{3l, "desc-row3", "", null},
-                new Object[]{4l, "desc-row4", "", 35l},
+                new Object[]{1l, "", "desc-row1", null, null},
+                new Object[]{2l, "", "desc-row2", "   ", 35l},
+                new Object[]{3l, "", "desc-row3", "", null},
+                new Object[]{4l, "", "desc-row4", "", 35l},
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -5204,10 +5231,10 @@ public class GuidedDTDRLPersistenceTest {
         dt.getActionCols().add(ins2);
 
         dt.setData(DataUtilities.makeDataLists(new Object[][]{
-                new Object[]{1l, "desc-row1", null, null},
-                new Object[]{2l, "desc-row2", "\"   \"", 35l},
-                new Object[]{3l, "desc-row3", "\"\"", null},
-                new Object[]{4l, "desc-row4", "\"\"", 35l},
+                new Object[]{1l, "", "desc-row1", null, null},
+                new Object[]{2l, "", "desc-row2", "\"   \"", 35l},
+                new Object[]{3l, "", "desc-row3", "\"\"", null},
+                new Object[]{4l, "", "desc-row4", "\"\"", 35l},
         }));
 
         GuidedDTDRLPersistence p = GuidedDTDRLPersistence.getInstance();
@@ -5259,12 +5286,6 @@ public class GuidedDTDRLPersistenceTest {
 
     private void assertEqualsIgnoreWhitespace(final String expected,
                                               final String actual) {
-        final String cleanExpected = expected.replaceAll("\\s+",
-                                                         "");
-        final String cleanActual = actual.replaceAll("\\s+",
-                                                     "");
-
-        assertEquals(cleanExpected,
-                     cleanActual);
+        Assertions.assertThat(expected).isEqualToIgnoringWhitespace(actual);
     }
 }

@@ -80,5 +80,14 @@ public class IfExpressionNode
             return BuiltInType.UNKNOWN;
         }
     }
-    
+
+    @Override
+    public ASTNode[] getChildrenNode() {
+        return new ASTNode[] { condition, thenExpression, elseExpression };
+    }
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
+    }
 }

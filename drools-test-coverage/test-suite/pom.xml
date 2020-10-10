@@ -8,7 +8,7 @@
   <parent>
     <groupId>org.drools.testcoverage</groupId>
     <artifactId>drools-test-coverage-parent</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>drools-test-suite</artifactId>
@@ -16,7 +16,8 @@
   <description>Drools test coverage test suite (tests not requiring specific dependencies)</description>
 
   <properties>
-    <excludedGroups>org.drools.compiler.TurtleTestCategory</excludedGroups>
+    <java.module.name>org.drools.testcoverage.testsuite</java.module.name>
+    <excludedGroups>org.kie.test.testcategory.TurtleTestCategory</excludedGroups>
   </properties>
 
   <dependencies>
@@ -34,13 +35,23 @@
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-compiler</artifactId>
+      <artifactId>drools-mvel</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-compiler</artifactId>
+      <artifactId>drools-mvel</artifactId>
       <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-serialization-protobuf</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-model-compiler</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -55,7 +66,22 @@
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-verifier</artifactId>
+      <artifactId>drools-workbench-models-guided-template</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-verifier-drl</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-verifier-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-verifier-core</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -72,6 +98,11 @@
     <dependency>
       <groupId>org.kie</groupId>
       <artifactId>kie-ci</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.kie</groupId>
+      <artifactId>kie-test-util</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -107,4 +138,5 @@
       </properties>
     </profile>
   </profiles>
+
 </project>

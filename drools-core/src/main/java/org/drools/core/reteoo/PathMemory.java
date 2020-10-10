@@ -15,7 +15,8 @@
 
 package org.drools.core.reteoo;
 
-import org.drools.core.base.mvel.MVELSalienceExpression;
+import java.io.Serializable;
+
 import org.drools.core.common.ActivationsFilter;
 import org.drools.core.common.CompositeDefaultAgenda;
 import org.drools.core.common.InternalAgenda;
@@ -30,7 +31,7 @@ import org.slf4j.LoggerFactory;
 
 public class PathMemory extends AbstractBaseLinkedListNode<Memory>
         implements
-        Memory {
+        Serializable, Memory {
 
     protected static final Logger log = LoggerFactory.getLogger(PathMemory.class);
     protected static final boolean isLogTraceEnabled = log.isTraceEnabled();
@@ -96,7 +97,7 @@ public class PathMemory extends AbstractBaseLinkedListNode<Memory>
                 TerminalNode rtn = (TerminalNode) getPathEndNode();
                 log.trace("  LinkSegment smask={} rmask={} name={}", mask, linkedSegmentMask, rtn.getRule().getName());
             } else {
-                log.trace("  LinkSegment smask={} rmask={} name={}", mask, "RiaNode");
+                log.trace("  LinkSegment smask={} rmask={}", mask, "RiaNode");
             }
         }
         if (isRuleLinked()) {
@@ -112,9 +113,7 @@ public class PathMemory extends AbstractBaseLinkedListNode<Memory>
     private TerminalNode ensureAgendaItemCreated(InternalAgenda agenda) {
         TerminalNode rtn = (TerminalNode) getPathEndNode();
         if (agendaItem == null) {
-            int salience = ( rtn.getRule().getSalience() instanceof MVELSalienceExpression)
-                           ? 0
-                           : rtn.getRule().getSalience().getValue(null, rtn.getRule(), agenda.getWorkingMemory());
+            int salience = rtn.getRule().getSalience().isDynamic() ? 0 : rtn.getRule().getSalience().getValue();
             agendaItem = agenda.createRuleAgendaItem(salience, this, rtn);
         }
         return rtn;
@@ -231,6 +230,8 @@ public class PathMemory extends AbstractBaseLinkedListNode<Memory>
 
     public void reset() {
         this.linkedSegmentMask = 0L;
+        // TODO we could reset the agandaItem instead of throwing it away
+        this.agendaItem = null;
     }
 
     public InternalAgenda getActualAgenda(InternalWorkingMemory wm) {

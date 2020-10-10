@@ -70,7 +70,7 @@ public class AgendaItemImpl<T extends ModedAssertion<T>>  implements  AgendaItem
     private           LinkedList<LogicalDependency<T>>  justified;
     private           LinkedList<LogicalDependency<SimpleMode>>      blocked;
     private           LinkedList<SimpleMode>                         blockers;
-    private           InternalAgendaGroup                            agendaGroup;
+    private transient InternalAgendaGroup                            agendaGroup;
     private           ActivationGroupNode                            activationGroupNode;
     private           ActivationNode                                 activationNode;
     private           InternalFactHandle                             factHandle;
@@ -294,11 +294,15 @@ public class AgendaItemImpl<T extends ModedAssertion<T>>  implements  AgendaItem
      */
     @Override
     public boolean equals(final Object object) {
+        if (object == null) {
+            return false;
+        }
+
         if (object == this) {
             return true;
         }
 
-        if (!(object instanceof AgendaItemImpl)) {
+        if (!(AgendaItemImpl.class.isAssignableFrom(object.getClass()))) {
             return false;
         }
 

@@ -6,7 +6,7 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>drools-distribution</artifactId>
@@ -114,15 +114,6 @@
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-verifier</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.drools</groupId>
-      <artifactId>drools-verifier</artifactId>
-      <classifier>sources</classifier>
-    </dependency>
-    <dependency>
-      <groupId>org.drools</groupId>
       <artifactId>drools-persistence-jpa</artifactId>
     </dependency>
     <dependency>
@@ -159,11 +150,11 @@
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-pmml</artifactId>
+      <artifactId>kie-pmml</artifactId>
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-pmml</artifactId>
+      <artifactId>kie-pmml</artifactId>
       <classifier>sources</classifier>
     </dependency>
     <dependency>

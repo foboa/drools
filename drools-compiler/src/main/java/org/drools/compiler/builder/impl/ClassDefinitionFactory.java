@@ -41,21 +41,24 @@ import org.drools.compiler.lang.descr.QualifiedName;
 import org.drools.compiler.lang.descr.TypeDeclarationDescr;
 import org.drools.compiler.lang.descr.TypeFieldDescr;
 import org.drools.compiler.rule.builder.util.AnnotationFactory;
+import org.drools.core.addon.TypeResolver;
+import org.drools.core.base.ClassFieldInspector;
+import org.drools.core.base.CoreComponentsBuilder;
 import org.drools.core.factmodel.AnnotationDefinition;
 import org.drools.core.factmodel.ClassDefinition;
 import org.drools.core.factmodel.EnumClassDefinition;
 import org.drools.core.factmodel.EnumLiteralDefinition;
 import org.drools.core.factmodel.FieldDefinition;
+import org.drools.core.factmodel.GenericTypeDefinition;
 import org.drools.core.factmodel.traits.Thing;
+import org.drools.core.factmodel.traits.Trait;
 import org.drools.core.factmodel.traits.Traitable;
 import org.drools.core.factmodel.traits.TraitableBean;
 import org.drools.core.rule.TypeDeclaration;
 import org.drools.core.util.ClassUtils;
-import org.drools.core.util.asm.ClassFieldInspector;
 import org.kie.api.definition.type.Key;
 import org.kie.api.definition.type.Position;
 import org.kie.api.io.Resource;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
 
 public class ClassDefinitionFactory {
 
@@ -226,13 +229,10 @@ public class ClassDefinitionFactory {
         BitSet occupiedPositions = new BitSet(fields.size());
 
         for (TypeFieldDescr field : fields.values()) {
-            String typeName = field.getPattern().getObjectType();
-            String typeNameKey = typeName;
-            String fullFieldType = kbuilder != null ?
-                    TypeDeclarationUtils.toBuildableType(typeNameKey, kbuilder.getRootClassLoader()) :
-                    typeNameKey;
+            GenericTypeDefinition genericType = field.getPattern().getGenericType()
+                    .map( type -> TypeDeclarationUtils.toBuildableType(type, kbuilder != null ? kbuilder.getRootClassLoader() : null) );
 
-            FieldDefinition fieldDef = new FieldDefinition(field.getFieldName(), fullFieldType);
+            FieldDefinition fieldDef = new FieldDefinition(field.getFieldName(), genericType);
             fieldDefs.add(fieldDef);
 
             if (field.hasOverride()) {
@@ -317,6 +317,12 @@ public class ClassDefinitionFactory {
         return fieldDefs;
     }
 
+    public static ClassDefinition createClassDefinition(Class<?> typeClass, Resource resource) {
+        ClassDefinition clsDef = new ClassDefinition();
+        ClassDefinitionFactory.populateDefinitionFromClass( clsDef, resource, typeClass, typeClass.getAnnotation( Trait.class ) != null );
+        return clsDef;
+    }
+
     public static void populateDefinitionFromClass(ClassDefinition def, Resource resource, Class<?> concrete, boolean asTrait) {
         try {
             def.setClassName(concrete.getName());
@@ -324,7 +330,7 @@ public class ClassDefinitionFactory {
                 def.setSuperClass(concrete.getSuperclass().getName());
             }
 
-            ClassFieldInspector inspector = new ClassFieldInspector(concrete);
+            ClassFieldInspector inspector = CoreComponentsBuilder.get().createClassFieldInspector(concrete);
             Map<String, Method> methods = inspector.getGetterMethods();
             Map<String, Method> setters = inspector.getSetterMethods();
             int j = 0;

@@ -41,7 +41,6 @@ import org.drools.core.common.TripleBetaConstraints;
 import org.drools.core.common.TripleNonIndexSkipBetaConstraints;
 import org.drools.core.common.TupleSets;
 import org.drools.core.common.UpdateContext;
-import org.drools.core.phreak.SegmentUtilities;
 import org.drools.core.reteoo.AccumulateNode.AccumulateMemory;
 import org.drools.core.reteoo.builder.BuildContext;
 import org.drools.core.rule.IndexableConstraint;
@@ -59,7 +58,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.drools.core.phreak.AddRemoveRule.flushLeftTupleIfNecessary;
-import static org.drools.core.reteoo.PropertySpecificUtil.*;
+import static org.drools.core.phreak.RuleNetworkEvaluator.doUpdatesReorderChildLeftTuple;
+import static org.drools.core.reteoo.PropertySpecificUtil.isPropertyReactive;
 import static org.drools.core.util.ClassUtils.areNullSafeEquals;
 
 public abstract class BetaNode extends LeftTupleSource
@@ -117,7 +117,7 @@ public abstract class BetaNode extends LeftTupleSource
      * @param rightInput
      *            The right input <code>ObjectSource</code>.
      */
-    BetaNode(final int id,
+    protected BetaNode(final int id,
              final LeftTupleSource leftInput,
              final ObjectSource rightInput,
              final BetaConstraints constraints,
@@ -134,6 +134,7 @@ public abstract class BetaNode extends LeftTupleSource
             throw new RuntimeException("cannot have null constraints, must at least be an instance of EmptyBetaConstraints");
         }
 
+        this.constraints.init(context, getType());
         this.constraints.registerEvaluationContext(context);
 
         initMasks(context, leftInput);
@@ -169,10 +170,10 @@ public abstract class BetaNode extends LeftTupleSource
                 Class objectClass = ((ClassObjectType) objectType).getClassType();
                 if (isPropertyReactive(context, objectClass)) {
                     rightListenedProperties = pattern.getListenedProperties();
-                    List<String> accessibleProperties = getAccessibleProperties( context.getKnowledgeBase(), objectClass );
-                    rightDeclaredMask = calculatePositiveMask(rightListenedProperties, accessibleProperties);
-                    rightDeclaredMask = rightDeclaredMask.setAll(constraints.getListenedPropertyMask(accessibleProperties));
-                    rightNegativeMask = calculateNegativeMask(rightListenedProperties, accessibleProperties);
+                    List<String> accessibleProperties = pattern.getAccessibleProperties( context.getKnowledgeBase() );
+                    rightDeclaredMask = pattern.getPositiveWatchMask(accessibleProperties);
+                    rightDeclaredMask = rightDeclaredMask.setAll(constraints.getListenedPropertyMask(objectClass, accessibleProperties));
+                    rightNegativeMask = pattern.getNegativeWatchMask(accessibleProperties);
                 } else {
                     // if property reactive is not on, then accept all modification propagations
                     rightDeclaredMask = AllSetBitMask.get();
@@ -265,7 +266,7 @@ public abstract class BetaNode extends LeftTupleSource
         super.writeExternal( out );
     }
 
-    public void setUnificationJoin() {
+    private void setUnificationJoin() {
         // If this join uses a indexed, ==, constraint on a query parameter then set indexedUnificationJoin to true
         // This ensure we get the correct iterator
         BetaNodeFieldConstraint[] betaCconstraints = this.constraints.getConstraints();
@@ -304,13 +305,13 @@ public abstract class BetaNode extends LeftTupleSource
             if ( stagedInsertWasEmpty ) {
                 memory.setNodeDirtyWithoutNotify();
             }
-            shouldFlush = memory.linkNode(wm, !rightInputIsPassive) | shouldFlush;
+            shouldFlush = memory.linkNode( this, wm, !rightInputIsPassive ) | shouldFlush;
         } else if ( stagedInsertWasEmpty ) {
-            shouldFlush = memory.setNodeDirty( wm, !rightInputIsPassive ) | shouldFlush;
+            shouldFlush = memory.setNodeDirty( this, wm, !rightInputIsPassive ) | shouldFlush;
         }
 
         if (shouldFlush) {
-            flushLeftTupleIfNecessary( wm, memory.getSegmentMemory(), isStreamMode() );
+            flushLeftTupleIfNecessary( wm, memory.getOrCreateSegmentMemory( this, wm ), isStreamMode() );
         }
     }
 
@@ -340,6 +341,7 @@ public abstract class BetaNode extends LeftTupleSource
                 doUpdateRightTuple(rightTuple, wm, bm);
             } else if (rightTuple.getMemory() != null) {
                 getBetaMemory( this, wm ).getRightTupleMemory().removeAdd(rightTuple);
+                doUpdatesReorderChildLeftTuple( rightTuple );
             }
         } else {
             if ( context.getModificationMask().intersects(getRightInferredMask()) ) {
@@ -366,11 +368,11 @@ public abstract class BetaNode extends LeftTupleSource
             shouldFlush = memory.unlinkNode(wm) | shouldFlush;
         } else if ( stagedDeleteWasEmpty ) {
             // nothing staged before, notify rule, so it can evaluate network
-            shouldFlush = memory.setNodeDirty( wm ) | shouldFlush;
+            shouldFlush = memory.setNodeDirty( this, wm ) | shouldFlush;
         }
 
         if (shouldFlush) {
-            flushLeftTupleIfNecessary( wm, memory.getSegmentMemory(), isStreamMode() );
+            flushLeftTupleIfNecessary( wm, memory.getOrCreateSegmentMemory( this, wm ), isStreamMode() );
         }
     }
 
@@ -383,11 +385,11 @@ public abstract class BetaNode extends LeftTupleSource
 
         boolean shouldFlush = isStreamMode();
         if ( stagedUpdateWasEmpty  ) {
-            shouldFlush = memory.setNodeDirty( wm ) | shouldFlush;
+            shouldFlush = memory.setNodeDirty( this, wm ) | shouldFlush;
         }
 
         if (shouldFlush) {
-            flushLeftTupleIfNecessary( wm, memory.getSegmentMemory(), isStreamMode() );
+            flushLeftTupleIfNecessary( wm, memory.getOrCreateSegmentMemory( this, wm ), isStreamMode() );
         }
     }
 
@@ -473,7 +475,7 @@ public abstract class BetaNode extends LeftTupleSource
         return this.constraints;
     }
     
-    public void setConstraints(BetaConstraints constraints) {
+    private void setConstraints(BetaConstraints constraints) {
         this.constraints = constraints.cloneIfInUse();
     }
     
@@ -516,7 +518,6 @@ public abstract class BetaNode extends LeftTupleSource
     }
 
     public void attach(BuildContext context) {
-        constraints.init(context, getType());
         setUnificationJoin();
 
         this.rightInput.addObjectSink(this);
@@ -580,13 +581,10 @@ public abstract class BetaNode extends LeftTupleSource
 
     @Override
     public boolean equals(Object object) {
-        return this == object ||
-               ( internalEquals(object) &&
-               this.leftInput.thisNodeEquals( ((BetaNode) object).leftInput ) );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
         if ( object == null || !(object instanceof BetaNode) || this.hashCode() != object.hashCode() ) {
             return false;
         }
@@ -597,6 +595,7 @@ public abstract class BetaNode extends LeftTupleSource
                this.rightInputIsPassive == other.rightInputIsPassive &&
                areNullSafeEquals(this.leftListenedProperties, other.leftListenedProperties) &&
                areNullSafeEquals(this.rightListenedProperties, other.rightListenedProperties) &&
+               this.leftInput.getId() == other.leftInput.getId() &&
                this.rightInput.getId() == other.rightInput.getId();
     }
 
@@ -681,14 +680,9 @@ public abstract class BetaNode extends LeftTupleSource
     }
     
     public static BetaMemory getBetaMemoryFromRightInput( final BetaNode betaNode, final InternalWorkingMemory workingMemory ) {
-        BetaMemory memory = NodeTypeEnums.AccumulateNode == betaNode.getType() ?
+        return NodeTypeEnums.AccumulateNode == betaNode.getType() ?
                             ((AccumulateMemory)workingMemory.getNodeMemory( betaNode )).getBetaMemory() :
                             (BetaMemory) workingMemory.getNodeMemory( betaNode );
-
-        if ( memory.getSegmentMemory() == null ) {
-            SegmentUtilities.createSegmentMemory( betaNode, workingMemory ); // initialises for all nodes in segment, including this one
-        }
-        return memory;
     }
     
     public BitMask getRightDeclaredMask() {

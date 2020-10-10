@@ -20,10 +20,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.kie.dmn.api.marshalling.v1_1.DMNExtensionRegister;
+import org.kie.dmn.api.marshalling.DMNExtensionRegister;
 import org.kie.dmn.core.compiler.DMNProfile;
 import org.kie.dmn.core.compiler.DRGElementCompiler;
 import org.kie.dmn.feel.runtime.FEELFunction;
+import org.kie.dmn.signavio.feel.runtime.functions.AbsFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.AppendAllFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.AreElementsOfFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.AvgFunction;
@@ -32,7 +33,6 @@ import org.kie.dmn.signavio.feel.runtime.functions.DateTimeFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.DayAddFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.DayDiffFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.DayFunction;
-import org.kie.dmn.signavio.feel.runtime.functions.SecondsDiffFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.HourDiffFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.HourFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.IntegerFunction;
@@ -48,24 +48,29 @@ import org.kie.dmn.signavio.feel.runtime.functions.MidFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.MinuteFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.MinutesDiffFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.ModeFunction;
+import org.kie.dmn.signavio.feel.runtime.functions.ModuloFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.MonthAddFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.MonthDiffFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.MonthFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.NotContainsAnyFunction;
+import org.kie.dmn.signavio.feel.runtime.functions.NowFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.PercentFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.PowerFunction;
+import org.kie.dmn.signavio.feel.runtime.functions.ProductFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.RemoveAllFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.RightFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.RoundDownFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.RoundFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.RoundUpFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.SecondFunction;
+import org.kie.dmn.signavio.feel.runtime.functions.SecondsDiffFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.SignavioEndsWithFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.SignavioNumberFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.SignavioRemoveFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.SignavioStartsWithFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.TextFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.TextOccurrencesFunction;
+import org.kie.dmn.signavio.feel.runtime.functions.TodayFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.TrimFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.UpperFunction;
 import org.kie.dmn.signavio.feel.runtime.functions.WeekdayFunction;
@@ -99,7 +104,14 @@ public class KieDMNSignavioProfile implements DMNProfile {
         return Arrays.asList(SIGNAVIO_FUNCTIONS);
     }
 
-    public final static FEELFunction[] SIGNAVIO_FUNCTIONS = new FEELFunction[]{// signavio profile functions
+    public final static FEELFunction[] SIGNAVIO_FUNCTIONS = new FEELFunction[]{// can re-use for Signavio, from the extended kie profile
+                                                                               NowFunction.INSTANCE,
+                                                                               TodayFunction.INSTANCE,
+                                                                               AbsFunction.INSTANCE,
+                                                                               ModuloFunction.INSTANCE,
+                                                                               ProductFunction.INSTANCE,
+                                                                               MedianFunction.INSTANCE,
+                                                                               ModeFunction.INSTANCE,
                                                                                new DayFunction(),
                                                                                new MonthFunction(),
                                                                                new YearFunction(),
@@ -131,8 +143,6 @@ public class KieDMNSignavioProfile implements DMNProfile {
                                                                                new SignavioRemoveFunction(),
                                                                                new RemoveAllFunction(),
                                                                                new AvgFunction(),
-                                                                               new MedianFunction(),
-                                                                               new ModeFunction(),
                                                                                new SignavioEndsWithFunction(),
                                                                                new SignavioStartsWithFunction(),
                                                                                new TextOccurrencesFunction(),

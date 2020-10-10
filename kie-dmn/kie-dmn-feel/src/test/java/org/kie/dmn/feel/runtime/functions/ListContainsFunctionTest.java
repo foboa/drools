@@ -17,10 +17,10 @@
 package org.kie.dmn.feel.runtime.functions;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.kie.dmn.feel.runtime.events.InvalidParametersEvent;
@@ -56,13 +56,15 @@ public class ListContainsFunctionTest {
 
     @Test
     public void invokeContains() {
-        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test", BigDecimal.ONE), "test"), true);
-        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test", BigDecimal.ONE), BigDecimal.ONE), true);
+        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test"), "test"), true);
+        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test"), 1), true);
+        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test"), BigDecimal.ONE), true);
     }
 
     @Test
     public void invokeNotContains() {
-        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test", BigDecimal.ONE), "testtt"), false);
-        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test", BigDecimal.ONE), BigDecimal.valueOf(2)), false);
+        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test"), "testtt"), false);
+        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test"), 3), false);
+        FunctionTestUtil.assertResult(listContainsFunction.invoke(Arrays.asList(1, 2, "test"), BigDecimal.valueOf(3)), false);
     }
 }

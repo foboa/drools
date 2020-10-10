@@ -500,7 +500,12 @@ unaryExpression returns [BaseDescr result]
 unaryExpressionNotPlusMinus returns [BaseDescr result]
 @init { boolean isLeft = false; BindingDescr bind = null;}
     :   TILDE unaryExpression
-    | 	NEGATION unaryExpression
+    | 	NEGATION ue=unaryExpression
+        {
+            if( buildDescr && ue != null ) {
+                $result = ue.negate();
+            }
+        }
     |   (castExpression)=>castExpression
     |   (backReferenceExpression)=>backReferenceExpression
     |   { isLeft = helper.getLeftMostExpr() == null;}
@@ -697,6 +702,9 @@ selector
     :   (DOT super_key)=>DOT { helper.emit($DOT, DroolsEditorType.SYMBOL); } super_key superSuffix
     |   (DOT new_key)=>DOT { helper.emit($DOT, DroolsEditorType.SYMBOL); } new_key (nonWildcardTypeArguments)? innerCreator
     |   (DOT ID)=>DOT { helper.emit($DOT, DroolsEditorType.SYMBOL); }
+                  ID { helper.emit($ID, DroolsEditorType.IDENTIFIER); }
+                  ((LEFT_PAREN) => arguments)?
+    |   (NULL_SAFE_DOT ID)=>NULL_SAFE_DOT { helper.emit($NULL_SAFE_DOT, DroolsEditorType.SYMBOL); }
                   ID { helper.emit($ID, DroolsEditorType.IDENTIFIER); }
                   ((LEFT_PAREN) => arguments)?
     //|   DOT this_key

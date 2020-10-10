@@ -49,11 +49,13 @@ public class LoggingPrintStream extends PrintStream {
 
     }
 
+    @Override
     public void write(int b) {
         log(String.valueOf(b));
     }
 
-    public void write(byte buf[], int off, int len) {
+    @Override
+    public void write(byte[] buf, int off, int len) {
         if (buf == null) {
             throw new NullPointerException();
         } else if ((off < 0) || (off > buf.length) || (len < 0) ||
@@ -63,18 +65,18 @@ public class LoggingPrintStream extends PrintStream {
             return;
         }
         for (int i = 0 ; i < len ; i++) {
-            write(buf[off + i]);
+            writeByte(buf[off + i]);
         }
         for (int i = 0 ; i < len ; i++) {
-            write(buf[off + i]);
+            writeByte(buf[off + i]);
         }
     }
 
-    private void write(byte b) {
+    private void writeByte(byte b) {
         buffer.append(Byte.toString(b));
     }
 
-    private void write(String s) {
+    private void writeString(String s) {
         synchronized (buffer) {
             buffer.append(s);
         }
@@ -86,46 +88,57 @@ public class LoggingPrintStream extends PrintStream {
 
     }
 
+    @Override
     public void print(boolean b) {
-        write(b ? "true" : "false");
+        writeString(b ? "true" : "false");
     }
 
+    @Override
     public void print(char c) {
-        write(String.valueOf(c));
+        writeString(String.valueOf(c));
     }
 
+    @Override
     public void print(int i) {
-        write(String.valueOf(i));
+        writeString(String.valueOf(i));
     }
 
+    @Override
     public void print(long l) {
-        write(String.valueOf(l));
+        writeString(String.valueOf(l));
     }
 
+    @Override
     public void print(float f) {
-        write(String.valueOf(f));
+        writeString(String.valueOf(f));
     }
 
+    @Override
     public void print(double d) {
-        write(String.valueOf(d));
+        writeString(String.valueOf(d));
     }
 
-    public void print(char s[]) {
-        write(String.valueOf(s));
+    @Override
+    public void print(char[] s) {
+        writeString(String.valueOf(s));
     }
 
+    @Override
     public void print(String s) {
-        write(s == null ? "null" : s);
+        writeString(s == null ? "null" : s);
     }
 
+    @Override
     public void print(Object obj) {
-        write(String.valueOf(obj));
+        writeString(String.valueOf(obj));
     }
 
+    @Override
     public void println() {
         newLine();
     }
 
+    @Override
     public void println(boolean x) {
         synchronized (logger) {
             print(x);
@@ -133,6 +146,7 @@ public class LoggingPrintStream extends PrintStream {
         }
     }
 
+    @Override
     public void println(char x) {
         synchronized (logger) {
             print(x);
@@ -140,6 +154,7 @@ public class LoggingPrintStream extends PrintStream {
         }
     }
 
+    @Override
     public void println(int x) {
         synchronized (logger) {
             print(x);
@@ -147,6 +162,7 @@ public class LoggingPrintStream extends PrintStream {
         }
     }
 
+    @Override
     public void println(long x) {
         synchronized (logger) {
             print(x);
@@ -154,6 +170,7 @@ public class LoggingPrintStream extends PrintStream {
         }
     }
 
+    @Override
     public void println(float x) {
         synchronized (logger) {
             print(x);
@@ -161,6 +178,7 @@ public class LoggingPrintStream extends PrintStream {
         }
     }
 
+    @Override
     public void println(double x) {
         synchronized (logger) {
             print(x);
@@ -168,13 +186,15 @@ public class LoggingPrintStream extends PrintStream {
         }
     }
 
-    public void println(char x[]) {
+    @Override
+    public void println(char[] x) {
         synchronized (logger) {
             print(x);
             newLine();
         }
     }
 
+    @Override
     public void println(String x) {
         synchronized (logger) {
             print(x);
@@ -182,6 +202,7 @@ public class LoggingPrintStream extends PrintStream {
         }
     }
 
+    @Override
     public void println(Object x) {
         synchronized (logger) {
             print(x);

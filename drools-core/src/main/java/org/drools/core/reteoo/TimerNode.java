@@ -29,6 +29,7 @@ import org.drools.core.common.MemoryFactory;
 import org.drools.core.common.UpdateContext;
 import org.drools.core.reteoo.builder.BuildContext;
 import org.drools.core.rule.Declaration;
+import org.drools.core.rule.Pattern;
 import org.drools.core.spi.PropagationContext;
 import org.drools.core.time.impl.Timer;
 import org.drools.core.util.AbstractBaseLinkedListNode;
@@ -109,6 +110,11 @@ public class TimerNode extends LeftTupleSource
         return this.declarations;
     }
 
+    @Override
+    protected Pattern getLeftInputPattern( BuildContext context ) {
+        return context.getLastBuiltPatterns()[0];
+    }
+
     /**
      * Produce a debug string.
      *
@@ -128,18 +134,20 @@ public class TimerNode extends LeftTupleSource
         return hash;
     }
 
-    public boolean equals(final Object object) {
-        return this == object ||
-               ( internalEquals( object ) && this.leftInput.thisNodeEquals(((TimerNode)object).leftInput) );
-    }
-
     @Override
-    protected boolean internalEquals( Object object ) {
+    public boolean equals(final Object object) {
+        if (this == object) {
+            return true;
+        }
+
         if ( object == null || !(object instanceof TimerNode) || this.hashCode() != object.hashCode() ) {
             return false;
         }
 
         TimerNode other = (TimerNode) object;
+        if (this.leftInput.getId() != other.leftInput.getId()) {
+            return false;
+        }
         if (calendarNames != null) {
             if (other.getCalendarNames() == null || other.getCalendarNames().length != calendarNames.length) {
                 return false;
@@ -169,8 +177,7 @@ public class TimerNode extends LeftTupleSource
     }
 
     protected boolean doRemove(final RuleRemovalContext context,
-                            final ReteooBuilder builder,
-                            final InternalWorkingMemory[] workingMemories) {
+                            final ReteooBuilder builder) {
         if (!this.isInUse()) {
             getLeftTupleSource().removeTupleSink(this);
             return true;
@@ -227,9 +234,8 @@ public class TimerNode extends LeftTupleSource
     }
 
     public LeftTuple createLeftTuple(InternalFactHandle factHandle,
-                                     Sink sink,
                                      boolean leftTupleMemoryEnabled) {
-        return new EvalNodeLeftTuple(factHandle, sink, leftTupleMemoryEnabled);
+        return new EvalNodeLeftTuple(factHandle, this, leftTupleMemoryEnabled);
     }
 
     public LeftTuple createLeftTuple(final InternalFactHandle factHandle,

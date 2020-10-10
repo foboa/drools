@@ -16,8 +16,8 @@
 
 package org.drools.compiler.compiler;
 
-import org.drools.compiler.commons.jci.problems.CompilationProblem;
 import org.drools.compiler.lang.descr.BaseDescr;
+import org.kie.internal.jci.CompilationProblem;
 
 public class FactTemplateError extends DroolsError {
     private Package   pkg;
@@ -37,7 +37,7 @@ public class FactTemplateError extends DroolsError {
         this.descr = descr;
         this.object = object;
         this.message = message;
-        this.line = new int[] { ( this.descr != null ) ? this.descr.getLine() : -1 };
+        this.line = new int[] {this.descr.getLine()};
     }
 
     @Override

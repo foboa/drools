@@ -19,11 +19,11 @@ package org.kie.dmn.feel.lang.ast;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
+
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
 import org.kie.dmn.feel.lang.EvaluationContext;
+import org.kie.dmn.feel.lang.impl.SilentWrappingEvaluationContextImpl;
 import org.kie.dmn.feel.lang.types.BuiltInType;
 import org.kie.dmn.feel.util.Msg;
 
@@ -67,9 +67,8 @@ public class FilterExpressionNode
         try {
             if( filter.getResultType() != BuiltInType.BOOLEAN ) {
                 // check if index
-                Object f = filter.evaluate( ctx );
-                if (f == null) return null;
-                if (f instanceof Number ) {
+                Object f = filter.evaluate(new SilentWrappingEvaluationContextImpl(ctx)); // I need to try evaluate filter first, ignoring errors; only if evaluation fails, or is not a Number, it delegates to try `evaluateExpressionsInContext`
+                if (f != null && f instanceof Number) {
                     // what to do if Number is not an integer??
                     int i = ((Number) f).intValue();
                     if ( i > 0 && i <= list.size() ) {
@@ -77,7 +76,7 @@ public class FilterExpressionNode
                     } else if ( i < 0 && Math.abs( i ) <= list.size() ) {
                         return list.get( list.size() + i );
                     } else {
-                        ctx.notifyEvt( astEvent( Severity.ERROR, Msg.createMessage( Msg.INDEX_OUT_OF_BOUND ) ) );
+                        ctx.notifyEvt(astEvent(Severity.WARN, Msg.createMessage(Msg.INDEX_OUT_OF_BOUND, list.size(), i)));
                         return null;
                     }
                 } else {
@@ -103,23 +102,32 @@ public class FilterExpressionNode
         try {
             ctx.enterFrame();
             // handle it as a predicate
+            // Have the "item" variable set first, so to respect the DMN spec: The expression in square brackets can reference a list
+            // element using the name item, unless the list element is a context that contains the key "item".
             ctx.setValue( "item", v );
-            // if it is a Map, need to add all string keys as variables in the context
-            if( v instanceof Map ) {
-                Set<Map.Entry> set = ((Map) v).entrySet();
-                for( Map.Entry ce : set ) {
-                    if( ce.getKey() instanceof String ) {
-                        ctx.setValue( (String) ce.getKey(), ce.getValue() );
-                    }
-                }
-            }
 
-            Object r = this.filter.evaluate( ctx );
+            // using Root object logic to avoid having to eagerly inspect all attributes.
+            ctx.setRootObject(v);
+
+            // a filter would always return a list with all the elements for which the filter is true.
+            // In case any element fails in there or the filter expression returns null, it will only exclude the element, but will continue to process the list.
+            // In case all elements fail, the result will be an empty list.
+            Object r = this.filter.evaluate(new SilentWrappingEvaluationContextImpl(ctx)); // evaluate filter, ignoring errors 
             if( r instanceof Boolean && ((Boolean)r) == Boolean.TRUE ) {
                 results.add( v );
             }
         } finally {
             ctx.exitFrame();
         }
+    }
+
+    @Override
+    public ASTNode[] getChildrenNode() {
+        return new ASTNode[] { expression, filter };
+    }
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
     }
 }

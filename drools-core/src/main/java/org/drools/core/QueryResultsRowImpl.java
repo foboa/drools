@@ -92,11 +92,12 @@ public class QueryResultsRowImpl implements QueryResultsRow {
      */
     @Override
     public FactHandle getFactHandle(String identifier) {
-        return getFactHandle( getDeclarations().get( identifier ) );
+        Declaration declr = getDeclarations().get( identifier );
+        return declr != null ? getFactHandle( getDeclarations().get( identifier ) ) : null;
     }
 
     public FactHandle getFactHandle(Declaration declr) {
-        return this.row.getHandles()[  declr.getPattern().getOffset() ];
+        return this.row.getHandles()[  declr.getOffset() ];
     }
 
     public FactHandle getFactHandle(int i) {

@@ -40,12 +40,18 @@ public class DefaultWorkItemManager implements WorkItemManager, Externalizable {
     private static final long serialVersionUID = 510l;
 
     private AtomicLong workItemCounter = new AtomicLong(0);
-    private Map<Long, WorkItem> workItems = new ConcurrentHashMap<Long, WorkItem>();
+    private Map<Long, WorkItem> workItems = new ConcurrentHashMap<>();
     private InternalKnowledgeRuntime kruntime;
-    private Map<String, WorkItemHandler> workItemHandlers = new HashMap<String, WorkItemHandler>();
+    private Map<String, WorkItemHandler> workItemHandlers = new HashMap<>();
 
     public DefaultWorkItemManager(InternalKnowledgeRuntime kruntime) {
         this.kruntime = kruntime;
+    }
+
+    /**
+     * Do not use this constructor. It should be used just by deserialization.
+     */
+    public DefaultWorkItemManager() {
     }
 
     @SuppressWarnings("unchecked")
@@ -74,7 +80,7 @@ public class DefaultWorkItemManager implements WorkItemManager, Externalizable {
     }
 
     public void internalAddWorkItem(WorkItem workItem) {
-        workItems.put(new Long(workItem.getId()), workItem);
+        workItems.put(workItem.getId(), workItem);
         // fix to reset workItemCounter after deserialization
         if (workItem.getId() > workItemCounter.get()) {
             workItemCounter.set(workItem.getId());
@@ -82,7 +88,7 @@ public class DefaultWorkItemManager implements WorkItemManager, Externalizable {
     }
 
     public void internalAbortWorkItem(long id) {
-        WorkItemImpl workItem = (WorkItemImpl) workItems.get(new Long(id));
+        WorkItemImpl workItem = (WorkItemImpl) workItems.get(id);
         // work item may have been aborted
         if (workItem != null) {
             WorkItemHandler handler = this.workItemHandlers.get(workItem.getName());
@@ -127,7 +133,7 @@ public class DefaultWorkItemManager implements WorkItemManager, Externalizable {
     }
     
     public Set<WorkItem> getWorkItems() {
-        return new HashSet<WorkItem>(workItems.values());
+        return new HashSet<>(workItems.values());
     }
 
     public WorkItem getWorkItem(long id) {
@@ -135,7 +141,7 @@ public class DefaultWorkItemManager implements WorkItemManager, Externalizable {
     }
 
     public void completeWorkItem(long id, Map<String, Object> results) {
-        WorkItem workItem = workItems.get(new Long(id));
+        WorkItem workItem = workItems.get(id);
         // work item may have been aborted
         if (workItem != null) {
             (workItem).setResults(results);
@@ -145,12 +151,12 @@ public class DefaultWorkItemManager implements WorkItemManager, Externalizable {
             if (processInstance != null) {
                 processInstance.signalEvent("workItemCompleted", workItem);
             }
-            workItems.remove(new Long(id));
+            workItems.remove(id);
         }
     }
 
     public void abortWorkItem(long id) {
-        WorkItemImpl workItem = (WorkItemImpl) workItems.get(new Long(id));
+        WorkItemImpl workItem = (WorkItemImpl) workItems.get(id);
         // work item may have been aborted
         if (workItem != null) {
             ProcessInstance processInstance = kruntime.getProcessInstance(workItem.getProcessInstanceId());
@@ -159,7 +165,7 @@ public class DefaultWorkItemManager implements WorkItemManager, Externalizable {
             if (processInstance != null) {
                 processInstance.signalEvent("workItemAborted", workItem);
             }
-            workItems.remove(new Long(id));
+            workItems.remove(id);
         }
     }
 

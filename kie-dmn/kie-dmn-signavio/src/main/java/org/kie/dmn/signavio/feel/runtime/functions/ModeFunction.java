@@ -29,8 +29,9 @@ import org.kie.dmn.feel.runtime.functions.ParameterName;
 
 public class ModeFunction
         extends BaseFEELFunction {
+    public static final ModeFunction INSTANCE = new ModeFunction();
 
-    public ModeFunction() {
+    ModeFunction() {
         super("mode");
     }
 
@@ -47,9 +48,9 @@ public class ModeFunction
         long maxFreq = collect.values().stream().mapToLong(Long::longValue).max().orElse(-1);
 
         List<?> mostFrequents = collect.entrySet().stream()
-                                       .filter(kv -> kv.getValue() == maxFreq)
-                                       .map(Map.Entry::getKey)
-                                       .collect(Collectors.toList());
+                .filter(kv -> kv.getValue() == maxFreq)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
 
         if (mostFrequents.size() == 1) {
             return FEELFnResult.ofResult(mostFrequents.get(0));

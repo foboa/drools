@@ -30,12 +30,10 @@ import org.drools.core.reteoo.RuleTerminalNodeLeftTuple;
 import org.drools.core.reteoo.TerminalNode;
 import org.drools.core.spi.Activation;
 import org.drools.core.spi.AgendaGroup;
-import org.drools.core.spi.ConsequenceException;
 import org.drools.core.spi.InternalActivationGroup;
 import org.drools.core.spi.KnowledgeHelper;
 import org.drools.core.spi.PropagationContext;
 import org.drools.core.spi.RuleFlowGroup;
-import org.drools.core.spi.Tuple;
 import org.kie.api.runtime.rule.Agenda;
 import org.kie.api.runtime.rule.AgendaFilter;
 
@@ -138,7 +136,7 @@ public interface InternalAgenda
      */
     String getFocusName();
 
-    int fireNextItem(AgendaFilter filter, int fireCount, int fireLimit) throws ConsequenceException;
+    int fireNextItem(AgendaFilter filter, int fireCount, int fireLimit);
 
     AgendaItem createAgendaItem(RuleTerminalNodeLeftTuple rtnLeftTuple,
                                 int salience,
@@ -146,10 +144,8 @@ public interface InternalAgenda
                                 RuleAgendaItem ruleAgendaItem,
                                 InternalAgendaGroup agendaGroup);
 
-    void cancelActivation(final Tuple leftTuple,
-                          final PropagationContext context,
-                          final Activation activation,
-                          final TerminalNode rtn );
+    void cancelActivation(final PropagationContext context,
+                          final Activation activation );
 
     /**
      * Adds the activation to the agenda. Depending on the mode the agenda is running,

@@ -46,10 +46,6 @@ public class FieldFactory implements FieldDataFactory, Serializable {
                                     ValueType valueType) {
         FieldValue field = null;
         if ( value == null ) {
-            valueType = ValueType.NULL_TYPE;
-        }
-
-        if ( valueType == ValueType.NULL_TYPE ) {
             field = new ObjectFieldImpl( null );
         } else if ( valueType == ValueType.PCHAR_TYPE || valueType == ValueType.CHAR_TYPE) {
             if( value instanceof String && ((String)value).length() == 1 ) {
@@ -121,7 +117,7 @@ public class FieldFactory implements FieldDataFactory, Serializable {
             }
         }  else if ( valueType == ValueType.STRING_TYPE ) {
             field = new ObjectFieldImpl( value.toString() );
-        } else if ( valueType == ValueType.DATE_TYPE ) {
+        } else if ( valueType.getSimpleType() == SimpleValueType.DATE ) {
             //MN: I think its fine like this, seems to work !
             if( value instanceof String ) {
                 Date date = DateUtils.parseDate( (String) value );

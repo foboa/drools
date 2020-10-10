@@ -16,44 +16,55 @@
 
 package org.kie.dmn.feel.lang.types;
 
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.ZonedDateTime;
+import java.time.chrono.ChronoPeriod;
+import java.time.temporal.ChronoField;
+import java.time.temporal.Temporal;
+import java.time.temporal.TemporalAccessor;
+import java.time.temporal.TemporalQueries;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
-import org.kie.dmn.feel.FEEL;
 import org.kie.dmn.feel.lang.SimpleType;
-import org.kie.dmn.feel.lang.Symbol;
 import org.kie.dmn.feel.lang.Type;
 import org.kie.dmn.feel.marshaller.FEELStringMarshaller;
 import org.kie.dmn.feel.runtime.FEELFunction;
 import org.kie.dmn.feel.runtime.Range;
 import org.kie.dmn.feel.runtime.UnaryTest;
-import org.kie.dmn.feel.runtime.functions.*;
-
-import java.time.*;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
 
 public enum BuiltInType implements SimpleType {
 
-    UNKNOWN("any", "unknown"),
-    NUMBER("number"),
-    STRING("string"),
-    DATE("date"),
-    TIME("time"),
-    DATE_TIME("date and time", "dateTime"),
-    DURATION("duration", "days and time duration", "years and months duration", "dayTimeDuration", "yearMonthDuration"),
-    BOOLEAN("boolean"),
+    UNKNOWN(SimpleType.ANY, "unknown", "any"), // updated FEEL lattice of types from DMN v1.2
+    NUMBER(SimpleType.NUMBER),
+    STRING(SimpleType.STRING),
+    DATE(SimpleType.DATE),
+    TIME(SimpleType.TIME),
+    DATE_TIME(SimpleType.DATE_AND_TIME, "dateTime"),
+    DURATION("duration", SimpleType.DAYS_AND_TIME_DURATION, SimpleType.YEARS_AND_MONTHS_DURATION, "dayTimeDuration", "yearMonthDuration"),
+    BOOLEAN(SimpleType.BOOLEAN),
     RANGE("range"),
-    FUNCTION("function"),         // TODO be parametrized as FUNCTION<type>
-    LIST("list"),
-    CONTEXT("context"),
+    FUNCTION(SimpleType.FUNCTION), // TODO be parametrized as FUNCTION<type>
+    LIST(SimpleType.LIST),
+    CONTEXT(SimpleType.CONTEXT),
     UNARY_TEST("unary test");
 
     private final String[] names;
-    private final BuiltInTypeSymbol symbol;
+    private final Collection<BuiltInTypeSymbol> symbols;
 
     BuiltInType(String... names) {
         this.names = names;
-        this.symbol = new BuiltInTypeSymbol( names[0], this );
+        this.symbols = Arrays.asList(names).stream().map(n -> new BuiltInTypeSymbol(n, this)).collect(Collectors.toList());
     }
 
     public String getName() {
@@ -77,7 +88,9 @@ public enum BuiltInType implements SimpleType {
         return t -> null;
     }
 
-    public Symbol getSymbol() { return symbol; }
+    public Collection<BuiltInTypeSymbol> getSymbols() {
+        return symbols;
+    }
 
     @Override
     public String toString() {
@@ -113,7 +126,7 @@ public enum BuiltInType implements SimpleType {
             return TIME;
         } else if( o instanceof ZonedDateTime || o instanceof OffsetDateTime || o instanceof LocalDateTime ) {
             return DATE_TIME;
-        } else if( o instanceof Duration || o instanceof Period ) {
+        } else if (o instanceof Duration || o instanceof ChronoPeriod) {
             return DURATION;
         } else if( o instanceof Boolean ) {
             return BOOLEAN;
@@ -127,6 +140,14 @@ public enum BuiltInType implements SimpleType {
             return LIST;
         } else if( o instanceof Map ) {
             return CONTEXT;
+        } else if (o instanceof TemporalAccessor) {
+            // last, determine if it's a FEEL time with TZ
+            TemporalAccessor ta = (TemporalAccessor) o;
+            if (!(ta instanceof Temporal) && ta.isSupported(ChronoField.HOUR_OF_DAY) 
+                    && ta.isSupported(ChronoField.MINUTE_OF_HOUR) && ta.isSupported(ChronoField.SECOND_OF_MINUTE) 
+                    && ta.query(TemporalQueries.zone()) != null) {
+                return TIME;
+            }
         }
         return UNKNOWN;
     }
@@ -157,4 +178,10 @@ public enum BuiltInType implements SimpleType {
         }
         return isInstanceOf(value, this);
     }
+
+    @Override
+    public boolean conformsTo(Type t) {
+        return t == UNKNOWN || this == t;
+    }
+
 }

@@ -16,23 +16,23 @@
 
 package org.drools.workbench.models.testscenarios.backend.verifiers;
 
-import org.drools.core.util.MVELSafeHelper;
-import org.drools.workbench.models.testscenarios.backend.util.DateObjectFactory;
-import org.drools.workbench.models.testscenarios.backend.util.FieldTypeResolver;
-import org.drools.workbench.models.testscenarios.shared.VerifyField;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
-import org.mvel2.MVEL;
-import org.mvel2.ParserConfiguration;
-import org.mvel2.ParserContext;
-import org.mvel2.compiler.CompiledExpression;
-import org.mvel2.compiler.ExpressionCompiler;
-
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
+import org.drools.mvel.MVELSafeHelper;
+import org.drools.workbench.models.testscenarios.backend.util.DateObjectFactory;
+import org.drools.workbench.models.testscenarios.backend.util.FieldTypeResolver;
+import org.drools.workbench.models.testscenarios.shared.VerifyField;
+import org.drools.core.addon.TypeResolver;
+import org.mvel2.MVEL;
+import org.mvel2.ParserConfiguration;
+import org.mvel2.ParserContext;
+import org.mvel2.compiler.CompiledExpression;
+import org.mvel2.compiler.ExpressionCompiler;
 
 public class FactFieldValueVerifier {
 
@@ -108,13 +108,19 @@ public class FactFieldValueVerifier {
                 //Do nothing.
             }
         } else if (isFieldDate()) {
-            return DateObjectFactory.createTimeObject(FieldTypeResolver.getFieldType(currentField.getFieldName(), factObject), currentField.getExpected());
+            return DateObjectFactory.createDateObject(FieldTypeResolver.getFieldType(currentField.getFieldName(), factObject), currentField.getExpected());
+        } else if (isFieldLocalDate()) {
+            return DateObjectFactory.createLocalDateObject(currentField.getExpected());
         }
         return expectedResult;
     }
 
     private boolean isFieldDate() {
         return FieldTypeResolver.isDate(currentField.getFieldName(), factObject);
+    }
+
+    private boolean isFieldLocalDate() {
+        return FieldTypeResolver.isLocalDate(currentField.getFieldName(), factObject);
     }
 
     private String getSuccessfulExplanation() {

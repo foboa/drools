@@ -17,9 +17,12 @@
 package org.kie.dmn.core.ast;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.kie.dmn.api.core.DMNMessage;
 import org.kie.dmn.api.core.DMNResult;
@@ -30,14 +33,15 @@ import org.kie.dmn.core.api.DMNExpressionEvaluator;
 import org.kie.dmn.core.api.EvaluatorResult;
 import org.kie.dmn.core.api.EvaluatorResult.ResultType;
 import org.kie.dmn.core.impl.DMNResultImpl;
-import org.kie.dmn.core.impl.DMNRuntimeEventManagerImpl;
 import org.kie.dmn.core.impl.DMNRuntimeEventManagerUtils;
+import org.kie.dmn.core.impl.DMNRuntimeImpl;
 import org.kie.dmn.core.util.Msg;
 import org.kie.dmn.core.util.MsgUtil;
 import org.kie.dmn.feel.FEEL;
+import org.kie.dmn.feel.lang.EvaluationContext;
 import org.kie.dmn.feel.lang.impl.EvaluationContextImpl;
-import org.kie.dmn.feel.lang.impl.FEELEventListenersManager;
 import org.kie.dmn.feel.lang.impl.FEELImpl;
+import org.kie.dmn.feel.runtime.FEELFunction.Param;
 import org.kie.dmn.feel.runtime.events.DecisionTableRulesMatchedEvent;
 import org.kie.dmn.feel.runtime.events.DecisionTableRulesSelectedEvent;
 import org.kie.dmn.feel.runtime.functions.DTInvokerFunction;
@@ -55,10 +59,10 @@ public class DMNDTExpressionEvaluator
     private       DTInvokerFunction dt;
     private       FEELImpl          feel;
 
-    public DMNDTExpressionEvaluator(DMNNode node, DTInvokerFunction dt) {
+    public DMNDTExpressionEvaluator(DMNNode node, FEEL feel, DTInvokerFunction dt) {
         this.node = node;
         this.dt = dt;
-        feel = (FEELImpl) FEEL.newInstance();
+        this.feel = (FEELImpl) feel;
     }
 
     @Override
@@ -70,37 +74,38 @@ public class DMNDTExpressionEvaluator
         EventResults r = null;
         try {
             DMNRuntimeEventManagerUtils.fireBeforeEvaluateDecisionTable( dmrem, node.getName(), dt.getName(), result );
-            List<String> paramNames = dt.getParameterNames().get( 0 );
+            List<String> paramNames = dt.getParameters().get(0).stream().map(Param::getName).collect(Collectors.toList());
             Object[] params = new Object[paramNames.size()];
-            FEELEventListenersManager listenerMgr = new FEELEventListenersManager();
-            listenerMgr.addListener(events::add);
-            EvaluationContextImpl ctx = new EvaluationContextImpl( listenerMgr );
+            EvaluationContextImpl ctx = feel.newEvaluationContext(Arrays.asList(events::add), Collections.emptyMap());
+            ctx.setPerformRuntimeTypeCheck(((DMNRuntimeImpl) dmrem.getRuntime()).performRuntimeTypeCheck(result.getModel()));
 
-            ctx.enterFrame();
+            Map<String, Object> contextValues = result.getContext().getAll();
+            ctx.enterFrame((int) Math.ceil((contextValues.size() + params.length) / 0.75));
             // need to set the values for in context variables...
-            for ( Map.Entry<String,Object> entry : result.getContext().getAll().entrySet() ) {
+            for (Map.Entry<String, Object> entry : contextValues.entrySet()) {
                 ctx.setValue( entry.getKey(), entry.getValue() );
             }
+            EvaluationContext dtContext = ctx.current();
             for ( int i = 0; i < params.length; i++ ) {
-                EvaluationContextImpl evalCtx = new EvaluationContextImpl(listenerMgr);
-                evalCtx.setValues(result.getContext().getAll());
-                params[i] = feel.evaluate( paramNames.get( i ), evalCtx );
+                EvaluationContext evalCtx = ctx.current();
+                evalCtx.enterFrame();
+                params[i] = feel.evaluate(dt.getDecisionTable().getCompiledParameterNames().get(i), evalCtx);
                 ctx.setValue( paramNames.get( i ), params[i] );
             }
-            Object dtr = dt.invoke( ctx, params ).cata( e -> { events.add( e); return null; }, Function.identity());
+            Object dtr = dt.invoke( dtContext, params ).cata( e -> { events.add( e); return null; }, Function.identity());
 
             // since ctx is a local variable that will be discarded, no need for a try/finally,
             // but still wanted to match the enter/exit frame for future maintainability purposes
             ctx.exitFrame();
 
-            r = processEvents( events, dmrem, result );
+            r = processEvents( events, dmrem, result, node );
             return new EvaluatorResultImpl( dtr, r.hasErrors ? ResultType.FAILURE : ResultType.SUCCESS );
         } finally {
             DMNRuntimeEventManagerUtils.fireAfterEvaluateDecisionTable( dmrem, node.getName(), dt.getName(), result, (r != null ? r.matchedRules : null), (r != null ? r.fired : null) );
         }
     }
 
-    private EventResults processEvents(List<FEELEvent> events, DMNRuntimeEventManager eventManager, DMNResultImpl result) {
+    public static EventResults processEvents(List<FEELEvent> events, DMNRuntimeEventManager eventManager, DMNResultImpl result, DMNNode node) {
         EventResults r = new EventResults();
         for ( FEELEvent e : events ) {
             if ( e instanceof DecisionTableRulesMatchedEvent ) {
@@ -132,7 +137,7 @@ public class DMNDTExpressionEvaluator
         return r;
     }
 
-    private static class EventResults {
+    public static class EventResults {
         public boolean hasErrors = false;
         public List<Integer> matchedRules;
         public List<Integer> fired;

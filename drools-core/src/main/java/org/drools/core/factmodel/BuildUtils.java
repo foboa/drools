@@ -16,14 +16,7 @@
 
 package org.drools.core.factmodel;
 
-import org.mvel2.asm.MethodVisitor;
-import org.mvel2.asm.Opcodes;
-
-public class BuildUtils {
-
-
-
-
+public final class BuildUtils {
 
     public static String[] getInternalTypes( String[] superClasses ) {
         if ( superClasses == null ) {
@@ -45,7 +38,11 @@ public class BuildUtils {
 
         for ( String intf : interfaces ) {
             String temp = getTypeDescriptor( intf );
-            sb.append( temp.replace( ";", "<TK;>;" ) );
+            if (temp == null) {
+                throw new RuntimeException("Cannot resolve internal type from interface " + intf + "!");
+            } else {
+                sb.append( temp.replace( ";", "<TK;>;" ) );
+            }
         }
         return sb.toString();
     }
@@ -127,7 +124,9 @@ public class BuildUtils {
             internalType = "V";
         } else if ( type != null && type.startsWith( "[" ) ) {
             int j = 0;
-            while ( type.charAt( ++j ) == '[' ) {}
+            while ( type.charAt( ++j ) == '[' ) {
+                // Just ignore these chars.
+            }
             if ( type.charAt( j ) == 'L' ) {
                 internalType = type.replace( '.', '/' );
             } else {
@@ -150,11 +149,11 @@ public class BuildUtils {
             if ( type.length() == arrayDimSize(type) +1  ) {
                 return type;
             } else {
-                String ans = "Ljava/lang/Object;";
+                StringBuilder ans = new StringBuilder("Ljava/lang/Object;");
                 for ( int j = 0; j < arrayDimSize( type ); j++ ) {
-                    ans = "[" + ans;
+                    ans.insert(0, "[");
                 }
-                return ans;
+                return ans.toString();
             }
         return null;
     }
@@ -247,7 +246,6 @@ public class BuildUtils {
             return fld.getDefaultValueAsBoolean();
         }
 
-//        return StringUtils.isEmpty( fld.getInitExpr() ) ? null : MVEL.eval( fld.getInitExpr() );
         return null;
 
     }
@@ -336,109 +334,9 @@ public class BuildUtils {
         }
     }
 
-
-    public static int returnType(String type) {
-        if ( "byte".equals( type ) ) {
-            return Opcodes.IRETURN;
-        } else if ( "char".equals( type ) ) {
-            return Opcodes.IRETURN;
-        } else if ( "double".equals( type ) ) {
-            return Opcodes.DRETURN;
-        } else if ( "float".equals( type ) ) {
-            return Opcodes.FRETURN;
-        } else if ( "int".equals( type ) ) {
-            return Opcodes.IRETURN;
-        } else if ( "long".equals( type ) ) {
-            return Opcodes.LRETURN;
-        } else if ( "short".equals( type ) ) {
-            return Opcodes.IRETURN;
-        } else if ( "boolean".equals( type ) ) {
-            return Opcodes.IRETURN;
-        } else if ( "void".equals( type ) ) {
-            return Opcodes.RETURN;
-        } else {
-            return Opcodes.ARETURN;
-        }
-
-    }
-
-
-    public static int varType(String type) {
-        if ( "byte".equals( type ) ) {
-            return Opcodes.ILOAD;
-        } else if ( "char".equals( type ) ) {
-            return Opcodes.ILOAD;
-        } else if ( "double".equals( type ) ) {
-            return Opcodes.DLOAD;
-        } else if ( "float".equals( type ) ) {
-            return Opcodes.FLOAD;
-        } else if ( "int".equals( type ) ) {
-            return Opcodes.ILOAD;
-        } else if ( "long".equals( type ) ) {
-            return Opcodes.LLOAD;
-        } else if ( "short".equals( type ) ) {
-            return Opcodes.ILOAD;
-        } else if ( "boolean".equals( type ) ) {
-            return Opcodes.ILOAD;
-        } else {
-            return Opcodes.ALOAD;
-        }
-    }
-
-
-    public static int storeType(String type) {
-        if ( "byte".equals( type ) ) {
-            return Opcodes.ISTORE;
-        } else if ( "char".equals( type ) ) {
-            return Opcodes.ISTORE;
-        } else if ( "double".equals( type ) ) {
-            return Opcodes.DSTORE;
-        } else if ( "float".equals( type ) ) {
-            return Opcodes.FSTORE;
-        } else if ( "int".equals( type ) ) {
-            return Opcodes.ISTORE;
-        } else if ( "long".equals( type ) ) {
-            return Opcodes.LSTORE;
-        } else if ( "short".equals( type ) ) {
-            return Opcodes.ISTORE;
-        } else if ( "boolean".equals( type ) ) {
-            return Opcodes.ISTORE;
-        } else {
-            return Opcodes.ASTORE;
-        }
-    }
-
     public static boolean isBoolean(String type) {
         return "boolean".equals( type );
-//                || "java.lang.Boolean".equals( type )
-//                || "Boolean".equals( type );
     }
-
-    public static int zero( String type ) {
-        if ( "byte".equals( type ) ) {
-            return Opcodes.ICONST_0;
-        } else if ( "char".equals( type ) ) {
-            return Opcodes.ICONST_0;
-        } else if ( "double".equals( type ) ) {
-            return Opcodes.DCONST_0;
-        } else if ( "float".equals( type ) ) {
-            return Opcodes.FCONST_0;
-        } else if ( "int".equals( type ) ) {
-            return Opcodes.ICONST_0;
-        } else if ( "long".equals( type ) ) {
-            return Opcodes.LCONST_0;
-        } else if ( "short".equals( type ) ) {
-            return Opcodes.ICONST_0;
-        } else if ( "boolean".equals( type ) ) {
-            return Opcodes.ICONST_0;
-        } else {
-            return Opcodes.ACONST_NULL;
-        }
-
-    }
-
-
-
 
     public static String getterName( String fieldName, String type ) {
         String prefix = BuildUtils.isBoolean( type ) ? "is" : "get";
@@ -446,7 +344,7 @@ public class BuildUtils {
     }
 
 
-    public static String setterName(String fieldName, String type) {
+    public static String setterName(String fieldName) {
         return "set" + fieldName.substring(0,1).toUpperCase() + fieldName.substring(1);
     }
 
@@ -517,25 +415,6 @@ public class BuildUtils {
         }
 
     }
-
-    public static void pushInt(MethodVisitor mv, int j) {
-        switch ( j ) {
-            case 0 : mv.visitInsn( Opcodes.ICONST_0 );
-                break;
-            case 1 : mv.visitInsn( Opcodes.ICONST_1 );
-                break;
-            case 2 : mv.visitInsn( Opcodes.ICONST_2 );
-                break;
-            case 3 : mv.visitInsn( Opcodes.ICONST_3 );
-                break;
-            case 4 : mv.visitInsn( Opcodes.ICONST_4 );
-                break;
-            case 5 : mv.visitInsn( Opcodes.ICONST_5 );
-                break;
-            default : mv.visitIntInsn( Opcodes.BIPUSH, j );
-        }
-    }
-
 
     public static String serializationWriterName( String type ) {
         if ( isPrimitive( type ) ) {
@@ -613,5 +492,9 @@ public class BuildUtils {
             } else {
                 return type;
             }
+    }
+
+    private BuildUtils() {
+        // It is not allowed to create instances of util classes.
     }
 }

@@ -60,6 +60,8 @@ public class RightInputAdapterNode extends ObjectSource
 
     private PathEndNode[] pathEndNodes;
 
+    private PathMemSpec pathMemSpec;
+
     public RightInputAdapterNode() {
     }
 
@@ -107,6 +109,19 @@ public class RightInputAdapterNode extends ObjectSource
     }
 
     @Override
+    public PathMemSpec getPathMemSpec() {
+        if (pathMemSpec == null) {
+            pathMemSpec = calculatePathMemSpec( startTupleSource );
+        }
+        return pathMemSpec;
+    }
+
+    @Override
+    public void resetPathMemSpec(TerminalNode removingTN) {
+        pathMemSpec = removingTN == null ? null : calculatePathMemSpec( null, removingTN );
+    }
+
+    @Override
     public void setPathEndNodes(PathEndNode[] pathEndNodes) {
         this.pathEndNodes = pathEndNodes;
     }
@@ -131,7 +146,9 @@ public class RightInputAdapterNode extends ObjectSource
         RiaNodeMemory rianMem = new RiaNodeMemory();
 
         RiaPathMemory pmem = new RiaPathMemory(this, wm);
-        AbstractTerminalNode.initPathMemory(pmem, getStartTupleSource(), wm, null);
+        PathMemSpec pathMemSpec = getPathMemSpec();
+        pmem.setAllLinkedMaskTest( pathMemSpec.allLinkedTestMask );
+        pmem.setSegmentMemories( new SegmentMemory[pathMemSpec.smemCount] );
         rianMem.setRiaPathMemory(pmem);
         
         return rianMem;
@@ -154,8 +171,7 @@ public class RightInputAdapterNode extends ObjectSource
 
 
     protected boolean doRemove(final RuleRemovalContext context,
-                            final ReteooBuilder builder,
-                            final InternalWorkingMemory[] workingMemories) {
+                            final ReteooBuilder builder) {
         if ( !isInUse() ) {
             tupleSource.removeTupleSink(this);
             return true;
@@ -217,13 +233,12 @@ public class RightInputAdapterNode extends ObjectSource
 
     @Override
     public boolean equals(Object object) {
-        return this == object ||
-               ( internalEquals( object ) && this.tupleSource.thisNodeEquals( ((RightInputAdapterNode)object).tupleSource ) );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
         return object instanceof RightInputAdapterNode && this.hashCode() == object.hashCode() &&
+               this.tupleSource.getId() == ((RightInputAdapterNode)object).tupleSource.getId() &&
                this.tupleMemoryEnabled == ( (RightInputAdapterNode) object ).tupleMemoryEnabled;
     }
 
@@ -234,9 +249,8 @@ public class RightInputAdapterNode extends ObjectSource
     }
     
     public LeftTuple createLeftTuple(InternalFactHandle factHandle,
-                                     Sink sink,
                                      boolean leftTupleMemoryEnabled) {
-        return new SubnetworkTuple(factHandle, sink, leftTupleMemoryEnabled );
+        return new SubnetworkTuple(factHandle, this, leftTupleMemoryEnabled );
     }
 
     public LeftTuple createLeftTuple(final InternalFactHandle factHandle,
@@ -284,7 +298,7 @@ public class RightInputAdapterNode extends ObjectSource
     }      
     
     @Override
-    public BitMask calculateDeclaredMask(List<String> settableProperties) {
+    public BitMask calculateDeclaredMask(Class modifiedClass, List<String> settableProperties) {
         throw new UnsupportedOperationException();
     }
 

@@ -38,6 +38,7 @@ import org.drools.core.spi.KnowledgeHelper;
 import org.drools.core.spi.Tuple;
 import org.drools.core.util.BinaryHeapQueue;
 import org.drools.core.util.index.TupleList;
+import org.kie.api.event.rule.BeforeMatchFiredEvent;
 import org.kie.api.event.rule.MatchCancelledCause;
 import org.kie.api.runtime.rule.AgendaFilter;
 import org.slf4j.Logger;
@@ -46,7 +47,7 @@ import org.slf4j.LoggerFactory;
 public class RuleExecutor {
 
     protected static final transient Logger   log               = LoggerFactory.getLogger(RuleExecutor.class);
-    private static final RuleNetworkEvaluator NETWORK_EVALUATOR = new RuleNetworkEvaluator();
+
     private final PathMemory                  pmem;
     private final RuleAgendaItem              ruleAgendaItem;
     private final TupleList                   tupleList;
@@ -68,7 +69,7 @@ public class RuleExecutor {
     }
 
     public void evaluateNetwork(InternalAgenda agenda) {
-        NETWORK_EVALUATOR.evaluateNetwork( pmem, this, agenda );
+        RuleNetworkEvaluator.INSTANCE.evaluateNetwork( pmem, this, agenda );
         setDirty( false );
     }
 
@@ -209,7 +210,7 @@ public class RuleExecutor {
     public void reEvaluateNetwork(InternalAgenda agenda) {
         if ( isDirty() ) {
             setDirty(false);
-            NETWORK_EVALUATOR.evaluateNetwork(pmem, this, agenda);
+            RuleNetworkEvaluator.INSTANCE.evaluateNetwork(pmem, this, agenda);
         }
     }
 
@@ -364,7 +365,7 @@ public class RuleExecutor {
         // we need to make sure it re-activates
         wm.startOperation();
         try {
-            wm.getAgendaEventSupport().fireBeforeActivationFired( activation, wm );
+            BeforeMatchFiredEvent beforeMatchFiredEvent = wm.getAgendaEventSupport().fireBeforeActivationFired(activation, wm);
 
             if ( activation.getActivationGroupNode() != null ) {
                 // We know that this rule will cancel all other activations in the group
@@ -380,24 +381,23 @@ public class RuleExecutor {
             } finally {
                 // if the tuple contains expired events
                 for ( Tuple tuple = activation.getTuple(); tuple != null; tuple = tuple.getParent() ) {
-                    if ( tuple.getFactHandle() != null &&  tuple.getFactHandle().isEvent() ) {
+                    if ( tuple.getFactHandle() != null && tuple.getFactHandle().isEvent() ) {
                         // can be null for eval, not and exists that have no right input
 
-                        EventFactHandle handle = (EventFactHandle) tuple.getFactHandle();
+                        EventFactHandle handle = ( EventFactHandle ) tuple.getFactHandle();
                         // decrease the activation count for the event
                         handle.decreaseActivationsCount();
                         // handles "expire" only in stream mode.
-                        if ( handle.expirePartition() && handle.isExpired() ) {
-                            if ( handle.getActivationsCount() <= 0 ) {
-                                // and if no more activations, retract the handle
-                                handle.getEntryPoint().delete( handle );
-                            }
+                        if ( handle.expirePartition() && handle.isExpired() &&
+                             handle.getFirstRightTuple() == null && handle.getActivationsCount() <= 0 ) {
+                            // and if no more activations, retract the handle
+                            handle.getEntryPoint( wm ).delete( handle );
                         }
                     }
                 }
             }
 
-            wm.getAgendaEventSupport().fireAfterActivationFired( activation, wm );
+            wm.getAgendaEventSupport().fireAfterActivationFired( activation, wm, beforeMatchFiredEvent );
         } finally {
             wm.endOperation();
         }

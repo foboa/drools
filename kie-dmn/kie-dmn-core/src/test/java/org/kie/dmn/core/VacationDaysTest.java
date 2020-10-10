@@ -16,26 +16,25 @@
 
 package org.kie.dmn.core;
 
+import java.math.BigDecimal;
+
 import org.junit.Test;
 import org.kie.dmn.api.core.DMNContext;
 import org.kie.dmn.api.core.DMNModel;
 import org.kie.dmn.api.core.DMNResult;
 import org.kie.dmn.api.core.DMNRuntime;
-import org.kie.dmn.core.api.*;
+import org.kie.dmn.core.api.DMNFactory;
 import org.kie.dmn.core.util.DMNRuntimeUtil;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertThat;
 
-public class VacationDaysTest {
+public class VacationDaysTest extends BaseInterpretedVsCompiledTest {
+
+    public VacationDaysTest(final boolean useExecModelCompiler ) {
+        super( useExecModelCompiler );
+    }
 
     @Test
     public void testSolutionCase1() {
@@ -72,19 +71,19 @@ public class VacationDaysTest {
         executeTest( 60, 20, 30 );
     }
 
-    private void executeTest( int age, int yearsService, int expectedVacationDays ) {
-        DMNRuntime runtime = DMNRuntimeUtil.createRuntime( "0020-vacation-days.dmn", this.getClass() );
-        DMNModel dmnModel = runtime.getModel( "https://www.drools.org/kie-dmn", "0020-vacation-days" );
+    private void executeTest(final int age, final int yearsService, final int expectedVacationDays ) {
+        final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("0020-vacation-days.dmn", this.getClass() );
+        final DMNModel dmnModel = runtime.getModel("https://www.drools.org/kie-dmn", "0020-vacation-days" );
         assertThat( dmnModel, notNullValue() );
 
-        DMNContext context = DMNFactory.newContext();
+        final DMNContext context = DMNFactory.newContext();
 
         context.set( "Age", age );
         context.set( "Years of Service", yearsService );
 
-        DMNResult dmnResult = runtime.evaluateAll( dmnModel, context );
+        final DMNResult dmnResult = runtime.evaluateAll(dmnModel, context );
 
-        DMNContext result = dmnResult.getContext();
+        final DMNContext result = dmnResult.getContext();
 
         assertThat( result.get( "Total Vacation Days" ), is( BigDecimal.valueOf( expectedVacationDays ) ) );
     }

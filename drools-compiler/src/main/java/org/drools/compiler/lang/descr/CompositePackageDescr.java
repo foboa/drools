@@ -62,7 +62,7 @@ public class CompositePackageDescr extends PackageDescr {
         
         List<AccumulateImportDescr> accumulateImports = getAccumulateImports();
         for (AccumulateImportDescr descr : packageDescr.getAccumulateImports()) {
-            if (!currentFunctionImports.contains(descr)) {
+            if (!accumulateImports.contains(descr)) {
                 addAccumulateImport(descr);
                 descr.setResource(resource);
             }
@@ -132,6 +132,12 @@ public class CompositePackageDescr extends PackageDescr {
                 descr.setResource(resource);
             }
         }
+        packageDescr.getPreferredPkgUUID().ifPresent(pkgUUID -> {
+            if (getPreferredPkgUUID().isPresent() && !pkgUUID.equals(getPreferredPkgUUID().get())) {
+                throw new RuntimeException(String.format("Trying to overwrite preferredPkgUUID %s with a different value %s", getPreferredPkgUUID().get(), pkgUUID));
+            }
+            setPreferredPkgUUID(pkgUUID);
+        });
     }
     
     public CompositeAssetFilter getFilter() {

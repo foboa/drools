@@ -1,12 +1,12 @@
 /*
  * Copyright 2011 Red Hat, Inc. and/or its affiliates.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -40,31 +40,16 @@ import org.kie.soup.project.datamodel.packages.HasPackageName;
 public class GuidedDecisionTable52 implements HasImports,
                                               HasPackageName {
 
-    private static final long serialVersionUID = 510l;
+    public static final long serialVersionUID = 739l;
 
     /**
      * Number of internal elements before ( used for offsets in serialization )
      */
     public static final int INTERNAL_ELEMENTS = 2;
 
-    /**
-     * Various attribute names
-     */
-    public static final String SALIENCE_ATTR = "salience";
-    public static final String ENABLED_ATTR = "enabled";
-    public static final String DATE_EFFECTIVE_ATTR = "date-effective";
-    public static final String DATE_EXPIRES_ATTR = "date-expires";
-    public static final String NO_LOOP_ATTR = "no-loop";
-    public static final String AGENDA_GROUP_ATTR = "agenda-group";
-    public static final String ACTIVATION_GROUP_ATTR = "activation-group";
-    public static final String DURATION_ATTR = "duration";
-    public static final String TIMER_ATTR = "timer";
-    public static final String CALENDARS_ATTR = "calendars";
-    public static final String AUTO_FOCUS_ATTR = "auto-focus";
-    public static final String LOCK_ON_ACTIVE_ATTR = "lock-on-active";
-    public static final String RULEFLOW_GROUP_ATTR = "ruleflow-group";
-    public static final String DIALECT_ATTR = "dialect";
-    public static final String NEGATE_RULE_ATTR = "negate";
+    public static final int RULE_NUMBER_INDEX = 0;
+    public static final int RULE_NAME_COLUMN_INDEX = 1;
+    public static final int RULE_DESCRIPTION_INDEX = 2;
 
     private String tableName;
 
@@ -73,6 +58,8 @@ public class GuidedDecisionTable52 implements HasImports,
     private RowNumberCol52 rowNumberCol = new RowNumberCol52();
 
     private DescriptionCol52 descriptionCol = new DescriptionCol52();
+
+    private RuleNameColumn ruleNameColumn = new RuleNameColumn();
 
     private List<MetadataCol52> metadataCols = new ArrayList<MetadataCol52>();
 
@@ -87,6 +74,8 @@ public class GuidedDecisionTable52 implements HasImports,
     private Imports imports = new Imports();
 
     private String packageName;
+
+    private long version = 0;
 
     public enum TableFormat {
         EXTENDED_ENTRY,
@@ -143,6 +132,14 @@ public class GuidedDecisionTable52 implements HasImports,
 
     public List<AttributeCol52> getAttributeCols() {
         return attributeCols;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public void setVersion(final long version) {
+        this.version = version;
     }
 
     /**
@@ -283,6 +280,7 @@ public class GuidedDecisionTable52 implements HasImports,
     public List<BaseColumn> getExpandedColumns() {
         final List<BaseColumn> columns = new ArrayList<BaseColumn>();
         columns.add(rowNumberCol);
+        columns.add(ruleNameColumn);
         columns.add(descriptionCol);
         columns.addAll(metadataCols);
         columns.addAll(attributeCols);
@@ -321,6 +319,13 @@ public class GuidedDecisionTable52 implements HasImports,
         return this.descriptionCol;
     }
 
+    public RuleNameColumn getRuleNameColumn() {
+        if (null == ruleNameColumn) {
+            ruleNameColumn = new RuleNameColumn();
+        }
+        return ruleNameColumn;
+    }
+
     public List<MetadataCol52> getMetadataCols() {
         if (null == metadataCols) {
             metadataCols = new ArrayList<MetadataCol52>();
@@ -354,6 +359,10 @@ public class GuidedDecisionTable52 implements HasImports,
 
     public void setDescriptionCol(final DescriptionCol52 descriptionCol) {
         this.descriptionCol = descriptionCol;
+    }
+
+    public void setRuleNameColumn(final RuleNameColumn ruleNameColumn) {
+        this.ruleNameColumn = ruleNameColumn;
     }
 
     public void setMetadataCols(final List<MetadataCol52> metadataCols) {
@@ -452,6 +461,9 @@ public class GuidedDecisionTable52 implements HasImports,
         if (descriptionCol != null ? !descriptionCol.equals(that.descriptionCol) : that.descriptionCol != null) {
             return false;
         }
+        if (ruleNameColumn != null ? !ruleNameColumn.equals(that.ruleNameColumn) : that.ruleNameColumn != null) {
+            return false;
+        }
         if (metadataCols != null ? !metadataCols.equals(that.metadataCols) : that.metadataCols != null) {
             return false;
         }
@@ -491,6 +503,8 @@ public class GuidedDecisionTable52 implements HasImports,
         result = 31 * result + (rowNumberCol != null ? rowNumberCol.hashCode() : 0);
         result = ~~result;
         result = 31 * result + (descriptionCol != null ? descriptionCol.hashCode() : 0);
+        result = ~~result;
+        result = 31 * result + (ruleNameColumn != null ? ruleNameColumn.hashCode() : 0);
         result = ~~result;
         result = 31 * result + (metadataCols != null ? metadataCols.hashCode() : 0);
         result = ~~result;

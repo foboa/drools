@@ -15,21 +15,20 @@
  */
 package org.kie.dmn.core.compiler;
 
+import java.util.List;
+
 import org.kie.dmn.api.core.DMNMessage;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 import org.kie.dmn.core.impl.DMNModelImpl;
 import org.kie.dmn.core.util.Msg;
 import org.kie.dmn.core.util.MsgUtil;
 import org.kie.dmn.feel.parser.feel11.FEELParser;
-import org.kie.dmn.model.v1_1.DMNModelInstrumentedBase;
-import org.kie.dmn.model.v1_1.DRGElement;
-import org.kie.dmn.model.v1_1.NamedElement;
+import org.kie.dmn.model.api.DMNModelInstrumentedBase;
+import org.kie.dmn.model.api.NamedElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
-
-public class DMNCompilerHelper {
+public final class DMNCompilerHelper {
     private static final Logger logger = LoggerFactory.getLogger( DMNCompilerHelper.class );
 
     public static boolean checkVariableName(DMNModelImpl model, NamedElement element, String variableName) {
@@ -49,7 +48,7 @@ public class DMNCompilerHelper {
         return true;
     }
 
-    public static void reportMissingVariable(DMNModelImpl model, DRGElement node, DMNModelInstrumentedBase source, Msg.Message1 message ) {
+    public static void reportMissingVariable(DMNModelImpl model, NamedElement node, DMNModelInstrumentedBase source, Msg.Message1 message) {
         MsgUtil.reportMessage( logger,
                                DMNMessage.Severity.ERROR,
                                source,
@@ -60,4 +59,7 @@ public class DMNCompilerHelper {
                                node.getIdentifierString() );
     }
 
+    private DMNCompilerHelper() {
+        // Constructing instances is not allowed for this class
+    }
 }

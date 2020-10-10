@@ -16,12 +16,13 @@
 
 package org.drools.template.model;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static org.drools.core.util.StringUtils.splitArgumentsList;
 
 /**
  * This utility class exists to convert rule script snippets to actual code. The
@@ -51,19 +52,23 @@ public class SnippetBuilder {
 
     private final SnippetType type;
 
-    private final Pattern delimiter;
+    private final boolean trim;
 
     /**
      * @param snippetTemplate The snippet including the "place holder" for a parameter. If
      * no "place holder" is present,
      */
-    public SnippetBuilder( final String snippetTemplate ) {
+    public SnippetBuilder( String snippetTemplate ) {
+        this(snippetTemplate, true);
+    }
+
+    public SnippetBuilder( String snippetTemplate, boolean trim ) {
         if ( snippetTemplate == null ) {
             throw new RuntimeException( "Script template is null - check for missing script definition." );
         }
+        this.trim = trim;
         this._template = snippetTemplate;
         this.type = getType( _template );
-        this.delimiter = Pattern.compile( "(.*?[^\\\\])(,|\\z)" );
     }
 
     public static SnippetType getType( String template ) {
@@ -125,7 +130,7 @@ public class SnippetBuilder {
             final String replace = PARAM_PREFIX + ( paramNumber + 1 );
             result = replace( result,
                               replace,
-                              cellVals[ paramNumber ].trim(),
+                              trim ? cellVals[ paramNumber ].trim() : cellVals[ paramNumber ],
                               256 );
 
         }
@@ -133,13 +138,8 @@ public class SnippetBuilder {
     }
 
     private String[] split( String input ) {
-        Matcher m = delimiter.matcher( input );
-        List<String> result = new ArrayList<String>();
-        while ( m.find() ) {
-            result.add( m.group( 1 ).replaceAll( "\\\\,", "," ) );
-        }
-        return result.toArray( new String[ result.size() ] );
-
+        List<String> splitList = splitArgumentsList(input, false);
+        return splitList.toArray(new String[splitList.size()]);
     }
 
     /**
@@ -172,7 +172,7 @@ public class SnippetBuilder {
         while ( ( end = text.indexOf( repl,
                                       start ) ) != -1 ) {
             buf.append( text.substring( start,
-                                        end ) ).append( with );
+                                        end ) ).append( with.replace("\n", "\\n") );
             start = end + repl.length();
 
             if ( --max == 0 ) {

@@ -28,7 +28,7 @@ import org.drools.compiler.lang.descr.TypeDeclarationDescr;
 import org.drools.compiler.lang.descr.TypeFieldDescr;
 import org.drools.core.rule.TypeDeclaration;
 import org.drools.core.util.ClassUtils;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
+import org.drools.core.addon.TypeResolver;
 
 public class TypeDeclarationNameResolver {
 
@@ -170,19 +170,10 @@ public class TypeDeclarationNameResolver {
                                          List<TypeDefinition> unresolvedTypes) {
 
         for (TypeFieldDescr field : typeDescr.getFields().values()) {
-            String declaredType = field.getPattern().getObjectType();
-            String resolved = resolveName(declaredType,
-                                          typeDescr,
-                                          packageDescr,
-                                          typeResolver,
-                                          unresolvedTypes,
-                                          true);
-
-            if (resolved != null) {
-                field.getPattern().setObjectType(resolved);
-            } else {
+            boolean resolved = field.getPattern().resolveObjectType( type -> resolveName(type, typeDescr, packageDescr, typeResolver, unresolvedTypes, true) );
+            if (!resolved) {
                 kbuilder.addBuilderResult(new TypeDeclarationError(typeDescr,
-                                                                   "Cannot resolve type '" + declaredType + " for field " + field.getFieldName() +
+                                                                   "Cannot resolve type '" + field.getPattern().getObjectType() + " for field " + field.getFieldName() +
                                                                            " in declared type " + typeDescr.getTypeName()));
             }
         }

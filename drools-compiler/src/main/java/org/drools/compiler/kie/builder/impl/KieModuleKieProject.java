@@ -22,18 +22,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.drools.core.common.ProjectClassLoader;
+import org.drools.reflective.classloader.ProjectClassLoader;
 import org.kie.api.builder.ReleaseId;
 import org.kie.api.builder.model.KieBaseModel;
 import org.kie.api.builder.model.KieSessionModel;
-import org.kie.api.internal.utils.ServiceRegistry;
-import org.kie.internal.utils.ClassLoaderResolver;
-import org.kie.internal.utils.NoDepsClassLoaderResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static org.drools.core.common.ProjectClassLoader.createProjectClassLoader;
-import static org.drools.core.util.ClassUtils.convertResourceToClassName;
 
 /**
  * Discovers all KieModules on the classpath, via the kmodule.xml file.
@@ -51,7 +45,7 @@ public class KieModuleKieProject extends AbstractKieProject {
 
     private InternalKieModule              kieModule;
 
-    private ProjectClassLoader             cl;
+    private ProjectClassLoader cl;
 
     public KieModuleKieProject( InternalKieModule kieModule ) {
         this( kieModule, null );
@@ -59,14 +53,7 @@ public class KieModuleKieProject extends AbstractKieProject {
     
     public KieModuleKieProject(InternalKieModule kieModule, ClassLoader parent) {
         this.kieModule = kieModule;
-        if( parent == null ) {
-            ClassLoaderResolver resolver = ServiceRegistry.getInstance().get(ClassLoaderResolver.class);
-            if (resolver==null)  {
-                resolver = new NoDepsClassLoaderResolver();
-            }
-            parent = resolver.getClassLoader( kieModule );
-        }
-        this.cl = createProjectClassLoader( parent, kieModule.createResourceProvider() );
+        this.cl = kieModule.createModuleClassLoader( parent );
     }
 
     public void init() {
@@ -76,25 +63,14 @@ public class KieModuleKieProject extends AbstractKieProject {
             kieModules = new ArrayList<InternalKieModule>();
             kieModules.addAll( depKieModules );
             kieModules.add( kieModule );
-            initClassLoader( cl );
-        }
-    }
-
-    private void initClassLoader(ProjectClassLoader projectCL) {
-        for ( Map.Entry<String, byte[]> entry : getClassesMap().entrySet() ) {
-            if ( entry.getValue() != null ) {
-                String resourceName = entry.getKey();
-                String className = convertResourceToClassName( resourceName );
-                projectCL.storeClass( className, resourceName, entry.getValue() );
-            }
+            cl.storeClasses( getClassesMap() );
         }
     }
 
     private Map<String, byte[]> getClassesMap() {
         Map<String, byte[]> classes = new HashMap<String, byte[]>();
         for ( InternalKieModule kModule : kieModules ) {
-            // avoid to take type declarations defined directly in this kieModule since they have to be recompiled
-            classes.putAll( kModule.getClassesMap( kModule != this.kieModule ) );
+            classes.putAll( kModule.getClassesMap() );
         }
         return classes;
     }

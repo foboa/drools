@@ -26,7 +26,7 @@ import org.drools.compiler.commons.jci.compilers.EclipseJavaCompiler;
 import org.drools.compiler.commons.jci.compilers.EclipseJavaCompilerSettings;
 import org.drools.compiler.compiler.io.File;
 import org.drools.compiler.compiler.io.Folder;
-import org.drools.compiler.compiler.io.Resource;
+import org.drools.compiler.compiler.io.FileSystemItem;
 import org.drools.compiler.compiler.io.memory.MemoryFile;
 import org.drools.compiler.compiler.io.memory.MemoryFileSystem;
 import org.drools.compiler.kie.builder.impl.KieFileSystemImpl;
@@ -127,7 +127,7 @@ public class AbstractKnowledgeTest {
         KieBaseModel kieBaseModel1 = kproj.newKieBaseModel(namespace + ".KBase1")
                 .setEqualsBehavior( EqualityBehaviorOption.EQUALITY )
                 .setEventProcessingMode( EventProcessingOption.STREAM )
-                .addPackage( namespace + ".KBase1" )
+                .addPackage( namespace + ".test1" )
                 .setDefault( true );
             
 
@@ -147,7 +147,7 @@ public class AbstractKnowledgeTest {
 
         KieBaseModel kieBaseModel2 = kproj.newKieBaseModel( namespace + ".KBase2")
                                           .setEqualsBehavior( EqualityBehaviorOption.IDENTITY )
-                                          .addPackage( namespace + ".KBase2")
+                                          .addPackage( namespace + ".test2")
                 .setEventProcessingMode( EventProcessingOption.CLOUD );
 
         kieBaseModel2.newKieSessionModel(namespace + ".KSession3")
@@ -179,8 +179,8 @@ public class AbstractKnowledgeTest {
         String kbase2R1 = getRule( namespace + ".test2", "rule1", version );
         String kbase2R2 = getRule( namespace + ".test2", "rule2", version );
                 
-        String fldKB1 = "src/main/resources/" + kieBaseModel1.getName().replace( '.', '/' );
-        String fldKB2 = "src/main/resources/" + kieBaseModel2.getName().replace( '.', '/' );
+        String fldKB1 = "src/main/resources/" + (namespace + ".test1").replace( '.', '/' );
+        String fldKB2 = "src/main/resources/" + (namespace + ".test2").replace( '.', '/' );
         
         kfs.write( fldKB1 + "/rule1.drl", kBase1R1.getBytes() );
         kfs.write( fldKB1 + "/rule2.drl", kBase1R2.getBytes() );
@@ -329,12 +329,12 @@ public class AbstractKnowledgeTest {
             trgMfs.getFolder( trgFolder.getPath() ).create();
         }
 
-        Collection<Resource> col = (Collection<Resource>) srcFolder.getMembers();
+        Collection<FileSystemItem> col = (Collection<FileSystemItem>) srcFolder.getMembers();
         if (col == null) {
             return;
         }
 
-        for ( Resource rs : col ) {
+        for ( FileSystemItem rs : col ) {
             if ( rs instanceof Folder ) {
                 copyFolder( srcMfs, (Folder) rs, trgMfs, trgFolder.getFolder( ((Folder) rs).getName() ), kproj );
             } else {
@@ -358,7 +358,7 @@ public class AbstractKnowledgeTest {
     public void writeFs(MemoryFileSystem mfs,
                         Folder f,
                         java.io.File file1) {
-        for ( Resource rs : f.getMembers() ) {
+        for ( FileSystemItem rs : f.getMembers() ) {
             if ( rs instanceof Folder ) {
                 java.io.File file2 = new java.io.File( file1, ((Folder) rs).getName());
                 file2.mkdir();

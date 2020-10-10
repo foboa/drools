@@ -18,6 +18,10 @@
 package org.drools.compiler.commons.jci.compilers;
 
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Most common denominator for JavaCompiler settings.
@@ -28,17 +32,21 @@ package org.drools.compiler.commons.jci.compilers;
  */
 public class JavaCompilerSettings {
 
-    private String targetVersion = "1.6";
-    private String sourceVersion = "1.6";
+    private String targetVersion = "1.8";
+    private String sourceVersion = "1.8";
     private String sourceEncoding = "UTF-8";
     private boolean warnings = false;
     private boolean deprecations = false;
     private boolean debug = false;
+    private List<String> classpaths;
+
+    private final List<String> options;
 
     /** @deprecated */
     private boolean verbose = false;
 
     public JavaCompilerSettings() {
+        options = new ArrayList<>();
     }
     
     public JavaCompilerSettings( final JavaCompilerSettings pSettings ) {
@@ -48,6 +56,7 @@ public class JavaCompilerSettings {
         warnings = pSettings.warnings;
         deprecations = pSettings.deprecations;
         debug = pSettings.debug;
+        options = pSettings.options;
     }
     
     public void setTargetVersion( final String pTargetVersion ) {
@@ -112,4 +121,25 @@ public class JavaCompilerSettings {
         return verbose;
     }
 
+    public List<File> getClasspathLocations() {
+        if ( classpaths == null) {
+            return null;
+        }
+        return classpaths.stream().map( File::new ).collect( Collectors.toList() );
+    }
+
+    public void addClasspath(String classpath) {
+        if ( classpaths == null) {
+            classpaths = new ArrayList<>();
+        }
+        classpaths.add(classpath);
+    }
+
+    public List<String> getOptions() {
+        return options;
+    }
+
+    public void addOption(String option) {
+        options.add(option);
+    }
 }

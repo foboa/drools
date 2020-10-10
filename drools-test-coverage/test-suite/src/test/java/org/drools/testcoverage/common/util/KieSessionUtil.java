@@ -44,11 +44,11 @@ public final class KieSessionUtil {
 
     public static Session getKieSessionFromKieBaseModel(final String moduleGroupId, final KieBaseTestConfiguration kieBaseTestConfiguration,
                                                         final KieSessionTestConfiguration kieSessionTestConfiguration, final Resource... resources) {
-        final KieModuleModel module = KieUtil.createKieModuleModel();
+        final KieModuleModel module = KieUtil.createKieModuleModel(kieBaseTestConfiguration.useAlphaNetworkCompiler());
         final KieBaseModel kieBaseModel = kieBaseTestConfiguration.getKieBaseModel(module);
 
         kieSessionTestConfiguration.getKieSessionModel(kieBaseModel);
-        final KieModule kieModule = KieUtil.buildAndInstallKieModuleIntoRepo(moduleGroupId, module, resources);
+        final KieModule kieModule = KieUtil.buildAndInstallKieModuleIntoRepo(kieBaseTestConfiguration, moduleGroupId, module, resources);
 
         return getDefaultKieSessionFromReleaseId(kieModule.getReleaseId(), kieSessionTestConfiguration.isStateful(), false);
     }
@@ -68,13 +68,6 @@ public final class KieSessionUtil {
             return (name == null) ? new Session(container.newStatelessKieSession(), stateful, persisted) :
                                     new Session(container.newStatelessKieSession(name), stateful, persisted);
         }
-    }
-
-    public static Session getKieSessionAndBuildInstallModuleFromDrl(final String moduleGroupId, final KieBaseTestConfiguration kieBaseTestConfiguration,
-                                                                    final KieSessionTestConfiguration kieSessionTestConfiguration, final String drl) {
-        final Resource drlResource = KieServices.Factory.get().getResources().newReaderResource(new StringReader(drl));
-        drlResource.setTargetPath(TestConstants.DRL_TEST_TARGET_PATH);
-        return getKieSessionFromKieBaseModel(moduleGroupId, kieBaseTestConfiguration, kieSessionTestConfiguration, drlResource);
     }
 
     private KieSessionUtil() {

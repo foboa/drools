@@ -127,11 +127,10 @@ public class QueryTerminalNode extends AbstractTerminalNode implements LeftTuple
 
     @Override
     public boolean equals(final Object object) {
-        return this == object || internalEquals( object );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
         if ( object == null || !(object instanceof QueryTerminalNode) || this.hashCode() != object.hashCode() ) {
             return false;
         }
@@ -218,9 +217,8 @@ public class QueryTerminalNode extends AbstractTerminalNode implements LeftTuple
     }
 
     public LeftTuple createLeftTuple(InternalFactHandle factHandle,
-                                     Sink sink,
                                      boolean leftTupleMemoryEnabled) {
-        return new RuleTerminalNodeLeftTuple(factHandle, sink, leftTupleMemoryEnabled );
+        return new RuleTerminalNodeLeftTuple(factHandle, this, leftTupleMemoryEnabled );
     }
 
     public LeftTuple createLeftTuple(final InternalFactHandle factHandle,
@@ -266,11 +264,6 @@ public class QueryTerminalNode extends AbstractTerminalNode implements LeftTuple
 
     @Override
     public Declaration[] getSalienceDeclarations() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Declaration[][] getTimerDeclarations() {
         throw new UnsupportedOperationException();
     }
 

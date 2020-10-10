@@ -15,20 +15,19 @@
 
 package org.drools.core.rule;
 
-import org.drools.core.WorkingMemory;
-import org.drools.core.base.accumulators.MVELAccumulatorFunctionExecutor;
-import org.drools.core.common.InternalFactHandle;
-import org.drools.core.spi.Accumulator;
-import org.drools.core.spi.CompiledInvoker;
-import org.drools.core.spi.Tuple;
-import org.drools.core.spi.Wireable;
-import org.kie.internal.security.KiePolicyHelper;
-
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.io.Serializable;
 import java.util.Arrays;
+
+import org.drools.core.WorkingMemory;
+import org.drools.core.common.InternalFactHandle;
+import org.drools.core.spi.Accumulator;
+import org.drools.core.spi.MvelAccumulator;
+import org.drools.core.spi.Tuple;
+import org.drools.core.spi.Wireable;
+import org.kie.internal.security.KiePolicyHelper;
 
 public class SingleAccumulate extends Accumulate {
     private Accumulator accumulator;
@@ -55,10 +54,10 @@ public class SingleAccumulate extends Accumulate {
 
     public void writeExternal(ObjectOutput out) throws IOException {
         super.writeExternal(out);
-        if ( accumulator instanceof CompiledInvoker) {
-            out.writeObject( null );
+        if (Accumulator.isCompiledInvoker(accumulator)) {
+            out.writeObject(null);
         } else {
-            out.writeObject( accumulator );
+            out.writeObject(accumulator);
         }
     }
 
@@ -155,8 +154,8 @@ public class SingleAccumulate extends Accumulate {
     }
 
     protected void replaceAccumulatorDeclaration(Declaration declaration, Declaration resolved) {
-        if (accumulator instanceof MVELAccumulatorFunctionExecutor) {
-            ( (MVELAccumulatorFunctionExecutor) accumulator ).replaceDeclaration( declaration, resolved );
+        if (accumulator instanceof MvelAccumulator ) {
+            ( (MvelAccumulator) accumulator ).replaceDeclaration( declaration, resolved );
         }
     }
 
@@ -164,8 +163,10 @@ public class SingleAccumulate extends Accumulate {
         return this.accumulator.createWorkingMemoryContext();
     }
 
-    public final class Wirer implements Wireable, Serializable {
+    public final class Wirer implements Wireable.Immutable, Serializable {
         private static final long serialVersionUID = -9072646735174734614L;
+
+        private transient boolean initialized;
 
         public void wire( Object object ) {
             Accumulator acc = KiePolicyHelper.isPolicyEnabled() ? new Accumulator.SafeAccumulator((Accumulator) object) : (Accumulator) object;
@@ -173,6 +174,11 @@ public class SingleAccumulate extends Accumulate {
             for ( Accumulate clone : cloned ) {
                 ((SingleAccumulate)clone).accumulator = acc;
             }
+            initialized = true;
+        }
+
+        public boolean isInitialized() {
+            return initialized;
         }
     }
 
@@ -181,6 +187,7 @@ public class SingleAccumulate extends Accumulate {
         int result = 1;
         result = prime * result + accumulator.hashCode();
         result = prime * result + Arrays.hashCode( requiredDeclarations );
+        result = prime * result + Arrays.hashCode( innerDeclarationCache );
         result = prime * result + ((source == null) ? 0 : source.hashCode());
         return result;
     }
@@ -192,6 +199,7 @@ public class SingleAccumulate extends Accumulate {
         SingleAccumulate other = (SingleAccumulate) obj;
         if ( !accumulator.equals( other.accumulator ) ) return false;
         if ( !Arrays.equals( requiredDeclarations, other.requiredDeclarations ) ) return false;
+        if ( !Arrays.equals( innerDeclarationCache, other.innerDeclarationCache ) ) return false;
         if ( source == null ) {
             if ( other.source != null ) return false;
         } else if ( !source.equals( other.source ) ) return false;

@@ -114,6 +114,7 @@ public abstract class BaseFEELFunction
 
                     return result;
                 } else {
+                    // CandidateMethod cm could be null also if reflection failed on Platforms not supporting getClass().getDeclaredMethods()
                     String ps = getClass().toString();
                     logger.error( "Unable to find function '" + getName() + "( " + ps.substring( 1, ps.length() - 1 ) + " )'" );
                     ctx.notifyEvt(() -> {
@@ -122,7 +123,7 @@ public abstract class BaseFEELFunction
                 }
             } else {
                 if ( isNamedParams ) {
-                    params = rearrangeParameters( params, this.getParameterNames().get( 0 ) );
+                    params = rearrangeParameters(params, this.getParameters().get(0).stream().map(Param::getName).collect(Collectors.toList()));
                 }
                 Object result = invoke( ctx, params );
                 if ( result instanceof Either ) {
@@ -197,14 +198,14 @@ public abstract class BaseFEELFunction
             if( injectCtx ) {
                 actualParams = new Object[ params.length + 1 ];
                 int j = 0;
-                for( int i = 0; i < m.getParameterCount() && j < params.length; i++ ) {
+                for (int i = 0; i < m.getParameterCount(); i++) {
                     if( EvaluationContext.class.isAssignableFrom( m.getParameterTypes()[i] ) ) {
                         if( isNamedParams ) {
                             actualParams[i] = new NamedParameter( "ctx", ctx );
                         } else {
                             actualParams[i] = ctx;
                         }
-                    } else {
+                    } else if (j < params.length) {
                         actualParams[i] = params[j];
                         j++;
                     }
@@ -222,7 +223,7 @@ public abstract class BaseFEELFunction
             CandidateMethod cm = new CandidateMethod( actualParams );
 
             Class<?>[] parameterTypes = m.getParameterTypes();
-            if( !isNamedParams ) {
+            if (!isNamedParams && actualParams.length > 0) {
                 // if named parameters, then it has been adjusted already in the calculateActualParams method,
                 // otherwise adjust here
                 adjustForVariableParameters( cm, parameterTypes );
@@ -243,7 +244,7 @@ public abstract class BaseFEELFunction
                         if ( valueCollection.size() == 1 ) {
                             Object singletonValue = valueCollection.iterator().next();
                             // re-perform the assignable-from check, this time using the element itself the singleton value from the original parameter list
-                            if ( parameterTypes[i].isAssignableFrom( singletonValue.getClass() ) ) {
+                            if ( singletonValue != null && parameterTypes[i].isAssignableFrom( singletonValue.getClass() ) ) {
                                 Object[] newParams = new Object[cm.getActualParams().length];
                                 System.arraycopy( cm.getActualParams(), 0, newParams, 0, cm.getActualParams().length ); // can't rely on adjustForVariableParameters() have actually copied
                                 newParams[i] = singletonValue;
@@ -258,8 +259,20 @@ public abstract class BaseFEELFunction
             }
             if ( found ) {
                 cm.setApply( m );
-                if ( candidate == null || cm.getScore() > candidate.getScore() ) {
+                if (candidate == null) {
                     candidate = cm;
+                } else {
+                    if (cm.getScore() > candidate.getScore()) {
+                        candidate = cm;
+                    } else if (cm.getScore() == candidate.getScore() 
+                            && candidate.getApply().getParameterTypes().length == 1
+                            && cm.getApply().getParameterTypes().length == 1
+                            && candidate.getApply().getParameterTypes()[0].equals(Object.class)
+                            && !cm.getApply().getParameterTypes()[0].equals(Object.class)) {
+                        candidate = cm; // `cm` is more narrowed, hence reflect `candidate` to be now `cm`.
+                    } else {
+                        // do nothing.
+                    }
                 }
             }
         }
@@ -267,12 +280,15 @@ public abstract class BaseFEELFunction
     }
 
     @Override
-    public List<List<String>> getParameterNames() {
+    public List<List<Param>> getParameters() {
         // TODO: we could implement this method using reflection, just for consistency,
         // but it is not used at the moment
         return Collections.emptyList();
     }
 
+    /**
+     * Adjust CandidateMethod considering var args signature. 
+     */
     private void adjustForVariableParameters(CandidateMethod cm, Class<?>[] parameterTypes) {
         if ( parameterTypes.length > 0 && parameterTypes[parameterTypes.length - 1].isArray() ) {
             // then it is a variable parameters function call

@@ -16,21 +16,23 @@
 
 package org.kie.dmn.signavio.feel.runtime.functions;
 
-import java.math.BigDecimal;
-import java.math.MathContext;
-import java.util.List;
-import java.util.stream.Collectors;
-
 import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
 import org.kie.dmn.feel.runtime.events.InvalidParametersEvent;
 import org.kie.dmn.feel.runtime.functions.BaseFEELFunction;
 import org.kie.dmn.feel.runtime.functions.FEELFnResult;
 import org.kie.dmn.feel.runtime.functions.ParameterName;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class MedianFunction
         extends BaseFEELFunction {
+    public static final MedianFunction INSTANCE = new MedianFunction();
 
-    public MedianFunction() {
+    MedianFunction() {
         super("median");
     }
 

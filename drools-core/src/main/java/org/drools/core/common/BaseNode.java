@@ -21,7 +21,6 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.util.Collection;
 
-import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.reteoo.EntryPointNode;
 import org.drools.core.reteoo.LeftTupleSource;
 import org.drools.core.reteoo.ObjectSource;
@@ -113,9 +112,7 @@ public abstract class BaseNode
 
     protected void initMemoryId( BuildContext context ) {
         if (context != null && this instanceof MemoryFactory) {
-            RuleImpl rule = context.getRule();
-            String unit = rule != null && rule.getRuleUnitClassName() != null ? rule.getRuleUnitClassName() : DEFAULT_RULE_UNIT;
-            memoryId = context.getNextId( unit );
+            memoryId = context.getNextId( DEFAULT_RULE_UNIT );
         }
     }
 
@@ -141,11 +138,10 @@ public abstract class BaseNode
     public abstract void networkUpdated(UpdateContext updateContext);
 
     public boolean remove(RuleRemovalContext context,
-                       ReteooBuilder builder,
-                       InternalWorkingMemory[] workingMemories) {
-        boolean removed = doRemove( context, builder, workingMemories );
+                          ReteooBuilder builder) {
+        boolean removed = doRemove( context, builder );
         if ( !this.isInUse() && !(this instanceof EntryPointNode) ) {
-            builder.getIdGenerator().releaseId( context.getRule(), this );
+            builder.getIdGenerator().releaseId(this );
         }
         return removed;
     }
@@ -154,8 +150,7 @@ public abstract class BaseNode
      * Removes the node from the network. Usually from the parent <code>ObjectSource</code> or <code>TupleSource</code>
      */
     protected abstract boolean doRemove(RuleRemovalContext context,
-                                        ReteooBuilder builder,
-                                        InternalWorkingMemory[] workingMemories);
+                                        ReteooBuilder builder);
 
     /**
      * Returns true in case the current node is in use (is referenced by any other node)
@@ -224,12 +219,6 @@ public abstract class BaseNode
     public boolean isAssociatedWith( Rule rule ) {
         return this.associations.contains( rule );
     }
-
-    public boolean thisNodeEquals(final Object object) {
-        return this == object || internalEquals( object );
-    }
-
-    protected abstract boolean internalEquals( Object object );
 
     @Override
     public final int hashCode() {

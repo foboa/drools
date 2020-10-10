@@ -31,6 +31,7 @@ import org.drools.core.common.BaseNode;
 import org.drools.core.common.EventFactHandle;
 import org.drools.core.common.InternalFactHandle;
 import org.drools.core.common.InternalWorkingMemory;
+import org.drools.core.common.ObjectTypeConfigurationRegistry;
 import org.drools.core.common.RuleBasePartitionId;
 import org.drools.core.phreak.PropagationEntry;
 import org.drools.core.reteoo.builder.BuildContext;
@@ -78,6 +79,8 @@ public class EntryPointNode extends ObjectSource
 
     private ObjectTypeNode activationNode;
 
+    private ObjectTypeConfigurationRegistry typeConfReg;
+
     // ------------------------------------------------------------
     // Constructors
     // ------------------------------------------------------------
@@ -109,11 +112,16 @@ public class EntryPointNode extends ObjectSource
         this.objectTypeNodes = new ConcurrentHashMap<ObjectType, ObjectTypeNode>();
 
         hashcode = calculateHashCode();
+        typeConfReg = new ObjectTypeConfigurationRegistry( (( Rete ) objectSource).getKnowledgeBase() );
     }
 
     // ------------------------------------------------------------
     // Instance methods
     // ------------------------------------------------------------
+
+    public ObjectTypeConfigurationRegistry getTypeConfReg() {
+        return typeConfReg;
+    }
 
     @SuppressWarnings("unchecked")
     public void readExternal(ObjectInput in) throws IOException,
@@ -121,12 +129,14 @@ public class EntryPointNode extends ObjectSource
         super.readExternal( in );
         entryPoint = (EntryPointId) in.readObject();
         objectTypeNodes = (Map<ObjectType, ObjectTypeNode>) in.readObject();
+        typeConfReg = (ObjectTypeConfigurationRegistry) in.readObject();
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
         super.writeExternal(out);
         out.writeObject( entryPoint );
         out.writeObject( objectTypeNodes );
+        out.writeObject( typeConfReg );
     }
 
     public short getType() {
@@ -398,8 +408,7 @@ public class EntryPointNode extends ObjectSource
     }
 
     protected boolean doRemove(final RuleRemovalContext context,
-                               final ReteooBuilder builder,
-                               final InternalWorkingMemory[] workingMemories) {
+                               final ReteooBuilder builder) {
         return false;
     }
 
@@ -413,13 +422,13 @@ public class EntryPointNode extends ObjectSource
 
     @Override
     public boolean equals(final Object object) {
-        return this == object || internalEquals( object );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
-        return object instanceof EntryPointNode && this.hashCode() == object.hashCode() &&
-               this.entryPoint.equals( ( (EntryPointNode) object ).entryPoint );
+        return this == object ||
+                (object instanceof EntryPointNode && this.hashCode() == object.hashCode() &&
+                 this.entryPoint.equals( ( (EntryPointNode) object ).entryPoint ) );
     }
 
     public void updateSink(final ObjectSink sink,
@@ -459,7 +468,7 @@ public class EntryPointNode extends ObjectSource
     }
 
     @Override
-    public BitMask calculateDeclaredMask(List<String> settableProperties) {
+    public BitMask calculateDeclaredMask(Class modifiedClass, List<String> settableProperties) {
         throw new UnsupportedOperationException();
     }
 

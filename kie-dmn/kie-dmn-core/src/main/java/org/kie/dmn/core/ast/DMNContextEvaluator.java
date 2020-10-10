@@ -16,26 +16,30 @@
 
 package org.kie.dmn.core.ast;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.kie.dmn.api.core.DMNContext;
 import org.kie.dmn.api.core.DMNMessage;
 import org.kie.dmn.api.core.DMNResult;
 import org.kie.dmn.api.core.DMNType;
+import org.kie.dmn.api.core.event.DMNRuntimeEventManager;
 import org.kie.dmn.core.api.DMNExpressionEvaluator;
 import org.kie.dmn.core.api.EvaluatorResult;
 import org.kie.dmn.core.api.EvaluatorResult.ResultType;
-import org.kie.dmn.api.core.event.DMNRuntimeEventManager;
-import org.kie.dmn.core.impl.DMNContextImpl;
 import org.kie.dmn.core.impl.DMNResultImpl;
+import org.kie.dmn.core.impl.DMNRuntimeEventManagerUtils;
+import org.kie.dmn.core.impl.DMNRuntimeImpl;
 import org.kie.dmn.core.util.Msg;
 import org.kie.dmn.core.util.MsgUtil;
-import org.kie.dmn.model.v1_1.Context;
-import org.kie.dmn.model.v1_1.ContextEntry;
-import org.kie.dmn.model.v1_1.FunctionDefinition;
-import org.kie.dmn.model.v1_1.LiteralExpression;
+import org.kie.dmn.model.api.Context;
+import org.kie.dmn.model.api.ContextEntry;
+import org.kie.dmn.model.api.FunctionDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.*;
 
 public class DMNContextEvaluator
         implements DMNExpressionEvaluator {
@@ -67,12 +71,15 @@ public class DMNContextEvaluator
         // OR if a default result is implemented, it should return the result instead
         Map<String, Object> results = new HashMap<>();
         DMNContext previousContext = result.getContext();
-        DMNContextImpl dmnContext = (DMNContextImpl) previousContext.clone();
+        DMNContext dmnContext = previousContext.clone();
         result.setContext( dmnContext );
 
         try {
             for ( ContextEntryDef ed : entries ) {
                 try {
+                    String entryVarId = getEntryVarId(ed);
+                    String entryExprId = getEntryExprId(ed);
+                    DMNRuntimeEventManagerUtils.fireBeforeEvaluateContextEntry( eventManager, name, ed.getName(), entryVarId, entryExprId, result );
                     EvaluatorResult er = ed.getEvaluator().evaluate( eventManager, result );
                     if ( er.getResultType() == ResultType.SUCCESS ) {
                         Object value = er.getResult();
@@ -83,27 +90,30 @@ public class DMNContextEvaluator
                             value = ((Collection)value).toArray()[0];
                         }
                         
-                        if ( ! (ed.getContextEntry().getExpression() instanceof FunctionDefinition) ) {
-                            // checking directly the result type...
-                            if ( ed.getType() != null && !ed.getType().isAssignableValue(value) ) {
-                                MsgUtil.reportMessage( logger,
-                                        DMNMessage.Severity.ERROR,
-                                        contextDef,
-                                        result,
-                                        null,
-                                        null,
-                                        Msg.ERROR_EVAL_NODE_RESULT_WRONG_TYPE,
-                                        ed.getName(),
-                                        ed.getType(),
-                                        value);
-                                return new EvaluatorResultImpl( results, ResultType.FAILURE );
+                        if (((DMNRuntimeImpl) eventManager.getRuntime()).performRuntimeTypeCheck(result.getModel())) {
+                            if (!(ed.getContextEntry().getExpression() instanceof FunctionDefinition)) {
+                                // checking directly the result type...
+                                if (ed.getType() != null && !ed.getType().isAssignableValue(value)) {
+                                    MsgUtil.reportMessage(logger,
+                                                          DMNMessage.Severity.ERROR,
+                                                          contextDef,
+                                                          result,
+                                                          null,
+                                                          null,
+                                                          Msg.ERROR_EVAL_NODE_RESULT_WRONG_TYPE,
+                                                          ed.getName(),
+                                                          ed.getType(),
+                                                          value);
+                                    return new EvaluatorResultImpl(results, ResultType.FAILURE);
+                                }
+                            } else {
+                                // TODO ...will need calculation/inference of function return type.
                             }
-                        } else {
-                            // TODO ...will need calculation/inference of function return type.
-                        } 
+                        }
                         
                         results.put( ed.getName(), value );
                         dmnContext.set( ed.getName(), value );
+                        DMNRuntimeEventManagerUtils.fireAfterEvaluateContextEntry( eventManager, name, ed.getName(), entryVarId, entryExprId, value, result );
                     } else {
                         MsgUtil.reportMessage( logger,
                                                DMNMessage.Severity.ERROR,
@@ -114,10 +124,24 @@ public class DMNContextEvaluator
                                                Msg.ERR_EVAL_CTX_ENTRY_ON_CTX,
                                                ed.getName(),
                                                name );
+                        DMNRuntimeEventManagerUtils.fireAfterEvaluateContextEntry( eventManager, name, ed.getName(), entryVarId, entryExprId, er.getResult(), result );
                         return new EvaluatorResultImpl( results, ResultType.FAILURE );
                     }
                 } catch ( Exception e ) {
-                    logger.error( "Error invoking expression for node '" + name + "'.", e );
+                    logger.error("Error invoking expression for node '" + name + "'.", e);
+                    MsgUtil.reportMessage(logger,
+                                          DMNMessage.Severity.ERROR,
+                                          contextDef,
+                                          result,
+                                          e,
+                                          null,
+                                          Msg.ERR_EVAL_CTX_ENTRY_ON_CTX_MSG,
+                                          ed.getName(),
+                                          name,
+                                          e.getLocalizedMessage());
+                    String entryVarId = getEntryVarId(ed);
+                    String entryExprId = getEntryExprId(ed);
+                    DMNRuntimeEventManagerUtils.fireAfterEvaluateContextEntry( eventManager, name, ed.getName(), entryVarId, entryExprId, null, result );
                     return new EvaluatorResultImpl( results, ResultType.FAILURE );
                 }
             }
@@ -129,6 +153,14 @@ public class DMNContextEvaluator
         } else {
             return new EvaluatorResultImpl( results, ResultType.SUCCESS );
         }
+    }
+
+    private String getEntryExprId(ContextEntryDef ed) {
+        return ed.getContextEntry().getExpression() != null ? ed.getContextEntry().getExpression().getId() : null;
+    }
+
+    private String getEntryVarId(ContextEntryDef ed) {
+        return ed.getContextEntry().getVariable() != null ? ed.getContextEntry().getVariable().getId() : null;
     }
 
     public static class ContextEntryDef {

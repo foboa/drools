@@ -27,6 +27,10 @@ import org.drools.core.common.TupleSets;
 import org.drools.core.common.TupleSetsImpl;
 import org.drools.core.reteoo.AccumulateNode;
 import org.drools.core.reteoo.AccumulateNode.AccumulateMemory;
+import org.drools.core.reteoo.AsyncReceiveNode;
+import org.drools.core.reteoo.AsyncReceiveNode.AsyncReceiveMemory;
+import org.drools.core.reteoo.AsyncSendNode;
+import org.drools.core.reteoo.AsyncSendNode.AsyncSendMemory;
 import org.drools.core.reteoo.BetaMemory;
 import org.drools.core.reteoo.BetaNode;
 import org.drools.core.reteoo.ConditionalBranchNode;
@@ -71,25 +75,27 @@ public class RuleNetworkEvaluator {
 
     private static final Logger log = LoggerFactory.getLogger(RuleNetworkEvaluator.class);
 
-    private static final PhreakJoinNode         pJoinNode   = new PhreakJoinNode();
-    private static final PhreakEvalNode         pEvalNode   = new PhreakEvalNode();
-    private static final PhreakFromNode         pFromNode   = new PhreakFromNode();
-    private static final PhreakReactiveFromNode pReactiveFromNode = new PhreakReactiveFromNode();
-    private static final PhreakNotNode          pNotNode    = new PhreakNotNode();
-    private static final PhreakExistsNode       pExistsNode = new PhreakExistsNode();
-    private static final PhreakAccumulateNode   pAccNode    = new PhreakAccumulateNode();
-    private static final PhreakBranchNode       pBranchNode = new PhreakBranchNode();
-    private static final PhreakQueryNode        pQueryNode  = new PhreakQueryNode();
-    private static final PhreakTimerNode        pTimerNode  = new PhreakTimerNode();
-    private static final PhreakRuleTerminalNode pRtNode     = new PhreakRuleTerminalNode();
+    public static final RuleNetworkEvaluator INSTANCE = new RuleNetworkEvaluator();
+
+    private static final PhreakJoinNode         pJoinNode   = PhreakNetworkNodeFactory.Factory.get().createPhreakJoinNode();
+    private static final PhreakEvalNode         pEvalNode   = PhreakNetworkNodeFactory.Factory.get().createPhreakEvalNode();
+    private static final PhreakFromNode         pFromNode   = PhreakNetworkNodeFactory.Factory.get().createPhreakFromNode();
+    private static final PhreakReactiveFromNode pReactiveFromNode = PhreakNetworkNodeFactory.Factory.get().createPhreakReactiveFromNode();
+    private static final PhreakNotNode          pNotNode    = PhreakNetworkNodeFactory.Factory.get().createPhreakNotNode();
+    private static final PhreakExistsNode       pExistsNode = PhreakNetworkNodeFactory.Factory.get().createPhreakExistsNode();
+    private static final PhreakAccumulateNode   pAccNode    = PhreakNetworkNodeFactory.Factory.get().createPhreakAccumulateNode();
+    private static final PhreakBranchNode       pBranchNode = PhreakNetworkNodeFactory.Factory.get().createPhreakBranchNode();
+    private static final PhreakQueryNode        pQueryNode  = PhreakNetworkNodeFactory.Factory.get().createPhreakQueryNode();
+    private static final PhreakTimerNode        pTimerNode  = PhreakNetworkNodeFactory.Factory.get().createPhreakTimerNode();
+    private static final PhreakAsyncSendNode    pSendNode   = PhreakNetworkNodeFactory.Factory.get().createPhreakAsyncSendNode();
+    private static final PhreakAsyncReceiveNode pReceiveNode = PhreakNetworkNodeFactory.Factory.get().createPhreakAsyncReceiveNode();
+    private static final PhreakRuleTerminalNode pRtNode     = PhreakNetworkNodeFactory.Factory.get().createPhreakRuleTerminalNode();
+    private static PhreakQueryTerminalNode      pQtNode     = PhreakNetworkNodeFactory.Factory.get().createPhreakQueryTerminalNode();
 
     private static int cycle = 0;
 
-    private static PhreakQueryTerminalNode pQtNode = new PhreakQueryTerminalNode();
 
-    public RuleNetworkEvaluator() {
-
-    }
+    private RuleNetworkEvaluator() { }
 
     public void evaluateNetwork(PathMemory pmem, RuleExecutor executor, InternalWorkingMemory wm) {
         evaluateNetwork( pmem, executor, pmem.getActualAgenda(wm) );
@@ -97,25 +103,27 @@ public class RuleNetworkEvaluator {
 
     public void evaluateNetwork(PathMemory pmem, RuleExecutor executor, InternalAgenda agenda) {
         SegmentMemory[] smems = pmem.getSegmentMemories();
+        SegmentMemory smem = smems[0];
+        if (smem == null) {
+            // if there's no first smem it's a pure alpha firing and then doesn't require any furthe evaluation
+            return;
+        }
 
-        int smemIndex = 0;
-        SegmentMemory smem = smems[smemIndex]; // 0
         LeftInputAdapterNode liaNode = (LeftInputAdapterNode) smem.getRootNode();
 
         LinkedList<StackEntry> stack = new LinkedList<StackEntry>();
 
         NetworkNode node;
         Memory nodeMem;
-        long bit = 1;
-        if (liaNode == smem.getTipNode()) {
+        boolean firstSegmentIsOnlyLia = liaNode == smem.getTipNode();
+        if (firstSegmentIsOnlyLia) {
             // segment only has liaNode in it
             // nothing is staged in the liaNode, so skip to next segment
-            smem = smems[++smemIndex]; // 1
+            smem = smems[1];
             node = smem.getRootNode();
             nodeMem = smem.getNodeMemories().getFirst();
         } else {
             // lia is in shared segment, so point to next node
-            bit = 2;
             node = liaNode.getSinkPropagator().getFirstLeftTupleSink();
             nodeMem = smem.getNodeMemories().getFirst().getNext(); // skip the liaNode memory
         }
@@ -124,7 +132,7 @@ public class RuleNetworkEvaluator {
         if (log.isTraceEnabled()) {
             log.trace("Rule[name={}] segments={} {}", ((TerminalNode)pmem.getPathEndNode()).getRule().getName(), smems.length, srcTuples.toStringSizes());
         }
-        outerEval(pmem, node, bit, nodeMem, smems, smemIndex, srcTuples, agenda, stack, true, executor);
+        outerEval(pmem, node, firstSegmentIsOnlyLia ? 1L : 2L, nodeMem, smems, firstSegmentIsOnlyLia ? 1 : 0, srcTuples, agenda, stack, true, executor);
     }
 
     public static String indent(int size) {
@@ -405,6 +413,14 @@ public class RuleNetworkEvaluator {
                 case NodeTypeEnums.ConditionalBranchNode: {
                     pBranchNode.doNode((ConditionalBranchNode) node, (ConditionalBranchMemory) nodeMem, sink,
                                        agenda, srcTuples, trgTuples, stagedLeftTuples, executor);
+                    break;
+                }
+                case NodeTypeEnums.AsyncSendNode: {
+                    pSendNode.doNode((AsyncSendNode) node, (AsyncSendMemory) nodeMem, agenda.getWorkingMemory(), srcTuples);
+                    break;
+                }
+                case NodeTypeEnums.AsyncReceiveNode: {
+                    pReceiveNode.doNode( (AsyncReceiveNode) node, (AsyncReceiveMemory) nodeMem, sink, agenda.getWorkingMemory(), srcTuples, trgTuples);
                     break;
                 }
             }
@@ -842,12 +858,16 @@ public class RuleNetworkEvaluator {
         for (RightTuple rightTuple = srcRightTuples.getUpdateFirst(); rightTuple != null; rightTuple = rightTuple.getStagedNext()) {
             if ( rightTuple.getTempRightTupleMemory() != null ) {
                 rtm.add(rightTuple);
-                for (LeftTuple childLeftTuple = rightTuple.getFirstChild(); childLeftTuple != null; ) {
-                    LeftTuple childNext = childLeftTuple.getRightParentNext();
-                    childLeftTuple.reAddLeft();
-                    childLeftTuple = childNext;
-                }
+                doUpdatesReorderChildLeftTuple( rightTuple );
             }
+        }
+    }
+
+    public static void doUpdatesReorderChildLeftTuple( RightTuple rightTuple ) {
+        for (LeftTuple childLeftTuple = rightTuple.getFirstChild(); childLeftTuple != null; ) {
+            LeftTuple childNext = childLeftTuple.getRightParentNext();
+            childLeftTuple.reAddLeft();
+            childLeftTuple = childNext;
         }
     }
 
@@ -911,11 +931,7 @@ public class RuleNetworkEvaluator {
                 }
             }
 
-            for (LeftTuple childLeftTuple = rightTuple.getFirstChild(); childLeftTuple != null; ) {
-                LeftTuple childNext = childLeftTuple.getRightParentNext();
-                childLeftTuple.reAddLeft();
-                childLeftTuple = childNext;
-            }
+            doUpdatesReorderChildLeftTuple( rightTuple );
         }
 
         if ( rtm.getIndexType() != TupleMemory.IndexType.NONE) {

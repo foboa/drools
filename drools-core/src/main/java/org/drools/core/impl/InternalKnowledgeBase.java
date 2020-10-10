@@ -25,11 +25,13 @@ import java.util.concurrent.Future;
 import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.SessionConfiguration;
 import org.drools.core.base.ClassFieldAccessorCache;
+import org.drools.core.common.InternalAgenda;
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.common.RuleBasePartitionId;
 import org.drools.core.definitions.InternalKnowledgePackage;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.factmodel.traits.TraitRegistry;
+import org.drools.core.reteoo.AsyncReceiveNode;
 import org.drools.core.reteoo.EntryPointNode;
 import org.drools.core.reteoo.LeftTupleNode;
 import org.drools.core.reteoo.LeftTupleSource;
@@ -38,7 +40,7 @@ import org.drools.core.reteoo.ReteooBuilder;
 import org.drools.core.reteoo.SegmentMemory;
 import org.drools.core.rule.InvalidPatternException;
 import org.drools.core.rule.TypeDeclaration;
-import org.drools.core.ruleunit.RuleUnitRegistry;
+import org.drools.core.ruleunit.RuleUnitDescriptionRegistry;
 import org.drools.core.spi.FactHandleFactory;
 import org.drools.core.util.TripleStore;
 import org.kie.api.KieBase;
@@ -49,6 +51,8 @@ import org.kie.api.io.Resource;
 import org.kie.api.runtime.Environment;
 
 public interface InternalKnowledgeBase extends KieBase {
+
+    StatefulKnowledgeSessionImpl createSession( long id, FactHandleFactory handleFactory, long propagationContext, SessionConfiguration config, InternalAgenda agenda, Environment environment );
 
     String getId();
 
@@ -68,7 +72,7 @@ public interface InternalKnowledgeBase extends KieBase {
 
     FactHandleFactory newFactHandleFactory();
 
-    FactHandleFactory newFactHandleFactory(int id, long counter) throws IOException;
+    FactHandleFactory newFactHandleFactory(long id, long counter) throws IOException;
 
     Map<String, Class<?>> getGlobals();
 
@@ -91,8 +95,6 @@ public interface InternalKnowledgeBase extends KieBase {
 
     void disposeStatefulSession(StatefulKnowledgeSessionImpl statefulSession);
 
-    StatefulKnowledgeSessionImpl getCachedSession(SessionConfiguration config, Environment environment);
-
     TripleStore getTripleStore();
 
     TraitRegistry getTraitRegistry();
@@ -101,24 +103,26 @@ public interface InternalKnowledgeBase extends KieBase {
 
     InternalKnowledgePackage getPackage(String name);
     Future<KiePackage> addPackage( KiePackage pkg );
-    void addPackages( Collection<KiePackage> newPkgs );
+    void addPackages( Collection<? extends KiePackage> newPkgs );
     Map<String, InternalKnowledgePackage> getPackagesMap();
     
     ClassFieldAccessorCache getClassFieldAccessorCache();
 
-    InternalWorkingMemory[] getWorkingMemories();
+    Collection<InternalWorkingMemory> getWorkingMemories();
 
     boolean hasSegmentPrototypes();
     void invalidateSegmentPrototype(LeftTupleNode rootNode);
     SegmentMemory createSegmentFromPrototype(InternalWorkingMemory wm, LeftTupleSource tupleSource);
     SegmentMemory.Prototype getSegmentPrototype(SegmentMemory segment);
 
-    void processAllTypesDeclaration( List<InternalKnowledgePackage> pkgs );
+    void processAllTypesDeclaration( Collection<InternalKnowledgePackage> pkgs );
 
     void addRules( Collection<RuleImpl> rules ) throws InvalidPatternException;
     void removeRules( Collection<RuleImpl> rules ) throws InvalidPatternException;
 
+    @Deprecated
     void addProcess( Process process );
+    @Deprecated
     void removeProcess( final String id );
 
     void addGlobal(String identifier, Class clazz);
@@ -139,8 +143,11 @@ public interface InternalKnowledgeBase extends KieBase {
     void setKieContainer( InternalKieContainer kieContainer );
 	void initMBeans();
 
-    RuleUnitRegistry getRuleUnitRegistry();
+    RuleUnitDescriptionRegistry getRuleUnitDescriptionRegistry();
     boolean hasUnits();
 
     SessionConfiguration getSessionConfiguration();
+
+    List<AsyncReceiveNode> getReceiveNodes();
+    void addReceiveNode(AsyncReceiveNode node);
 }

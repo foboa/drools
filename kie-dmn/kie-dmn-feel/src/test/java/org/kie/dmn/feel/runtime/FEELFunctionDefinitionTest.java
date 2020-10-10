@@ -17,18 +17,25 @@
 package org.kie.dmn.feel.runtime;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
 import java.util.Collection;
+
 import org.junit.runners.Parameterized;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 
 public class FEELFunctionDefinitionTest extends BaseFEELTest {
 
-    @Parameterized.Parameters(name = "{index}: {0} ({1}) = {2}")
+    @Parameterized.Parameters(name = "{3}: {0} ({1}) = {2}")
     public static Collection<Object[]> data() {
         final Object[][] cases = new Object[][] {
                 // function definition and invocation
-                {"{ hello world : function() \"Hello World!\", message : hello world() }.message", "Hello World!", null },
+                {"{ hello : function() \"Hello World!\"}.hello()", "Hello World!", null},
+                {"{ hello : function(n) \"Hello \"+n+\"!\"}.hello(\"John\")", "Hello John!", null},
+                {"{ hello : function( n : string ) \"Hello \"+n+\"!\"}.hello(\"John\")", "Hello John!", null},
+                {"{ idfn : function( arg ) arg, r : idfn(\"asd\") }.r", "asd", null},
+                {"{ idfn : function( arg ) arg, r : idfn(123) }.r", BigDecimal.valueOf(123), null},
+                {"{ idfn : function( arg : string ) arg, r : idfn(\"asd\") }.r", "asd", null},
+                {"{ idfn : function( arg : string ) arg, r : idfn(123) }.r", null, FEELEvent.Severity.WARN},
+                {"{ hello world : function() \"Hello World!\", message : hello world() }.message", "Hello World!", null},
                 {"{ functioncontext: { innercontext: {hello world : function() \"Hello World!\"}}, " +
                         " message : functioncontext.innercontext.hello world() }.message", "Hello World!", null },
                 {"{ hello world : function() \"Hello World!\", message : helloWorld() }.message", null, FEELEvent.Severity.ERROR },
@@ -75,8 +82,16 @@ public class FEELFunctionDefinitionTest extends BaseFEELTest {
                  + "   result : format currency( 76499.3456 )\n"
                  + "}.result",
                  "$76,499.35", null
-                }
+                },
+                {"{ myimport : { f1 : function() \"Hi\", x1 : function(name) f1() + \" \" + name }, r1 : myimport.x1(\"John\") }.r1", "Hi John", null },
+                {"{ myimport : { f1 : function() \"Hi\", f2 : function() f1() + \" \" , x1 : function(name) f2() + name }, r1 : myimport.x1(\"John\") }.r1", "Hi John", null },
+                {"{ m : { n : { o : { f1 : function() \"Hi\", f2 : function() f1() + \" \" , x1 : function(name) f2() + name }}}, r1 : m.n.o.x1(\"John\") }.r1", "Hi John", null },
+                {"{ m : { n : { f1 : function() \"Hi\", f2 : function() f1() + \" \" , o : { x1 : function(name) f2() + name }}}, r1 : m.n.o.x1(\"John\") }.r1", "Hi John", null },
+                {"{ m : { n : { f1 : function() \"Hi\", f2 : function() f1() + \" \" , o : { x1 : function(name) f2() + name }}}, r2 : m.n.f1() }.r2", "Hi", null },
+                {"{ f : function(a) function(b) a + b, r : f(1)(2) }.r", BigDecimal.valueOf(3), null },
+                {"{ a: 9, b: 9, f : function(a) function(b) a + b, r : f(1)(2) }.r", BigDecimal.valueOf(3), null },
+                {"{ Y: function(f) (function(x) x(x))(function(y) f(function(x) y(y)(x))), fac: Y(function(f) function(n) if n > 1 then n * f(n-1) else 1), fac4: fac(4) }.fac4", BigDecimal.valueOf(24), null }
         };
-        return Arrays.asList( cases );
+        return addAdditionalParameters(cases, false);
     }
 }

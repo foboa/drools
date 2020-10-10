@@ -19,13 +19,10 @@ package org.drools.core.reteoo;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Map;
 
 import org.drools.core.base.SalienceInteger;
-import org.drools.core.base.mvel.MVELEnabledExpression;
-import org.drools.core.base.mvel.MVELSalienceExpression;
 import org.drools.core.common.AgendaItem;
 import org.drools.core.common.InternalFactHandle;
 import org.drools.core.common.InternalWorkingMemoryActions;
@@ -37,7 +34,6 @@ import org.drools.core.rule.Declaration;
 import org.drools.core.rule.GroupElement;
 import org.drools.core.spi.PropagationContext;
 import org.drools.core.spi.Tuple;
-import org.drools.core.time.impl.BaseTimer;
 
 /**
  * Leaf Rete-OO node responsible for enacting <code>Action</code> s on a
@@ -60,7 +56,6 @@ public class RuleTerminalNode extends AbstractTerminalNode {
     protected Declaration[]                 allDeclarations;
     protected Declaration[]                 requiredDeclarations;
 
-    protected Declaration[][]               timerDeclarations;
     protected Declaration[]                 salienceDeclarations;
     protected Declaration[]                 enabledDeclarations;
 
@@ -113,33 +108,8 @@ public class RuleTerminalNode extends AbstractTerminalNode {
     }
     
     public void setDeclarations(Map<String, Declaration> decls) {
-        if ( rule.getSalience() instanceof MVELSalienceExpression ) {
-            MVELSalienceExpression expr = ( MVELSalienceExpression ) rule.getSalience();
-            Declaration[] declrs = expr.getMVELCompilationUnit().getPreviousDeclarations();
-            
-            this.salienceDeclarations = new Declaration[declrs.length];
-            int i = 0;
-            for ( Declaration declr : declrs ) {
-                this.salienceDeclarations[i++] = decls.get( declr.getIdentifier() );
-            }
-            Arrays.sort( this.salienceDeclarations, SortDeclarations.instance );            
-        }
-        
-        if ( rule.getEnabled() instanceof MVELEnabledExpression ) {
-            MVELEnabledExpression expr = ( MVELEnabledExpression ) rule.getEnabled();
-            Declaration[] declrs = expr.getMVELCompilationUnit().getPreviousDeclarations();
-            
-            this.enabledDeclarations = new Declaration[declrs.length];
-            int i = 0;
-            for ( Declaration declr : declrs ) {
-                this.enabledDeclarations[i++] = decls.get( declr.getIdentifier() );
-            }
-            Arrays.sort( this.enabledDeclarations, SortDeclarations.instance );              
-        }
-
-        if ( rule.getTimer() instanceof BaseTimer ) {
-            this.timerDeclarations = ((BaseTimer)rule.getTimer()).getTimerDeclarations(decls);
-        }
+        setEnabledDeclarations( rule.findEnabledDeclarations( decls ) );
+        setSalienceDeclarations( rule.findSalienceDeclarations( decls ) );
     }
     
     // ------------------------------------------------------------
@@ -154,7 +124,6 @@ public class RuleTerminalNode extends AbstractTerminalNode {
         previousTupleSinkNode = (LeftTupleSinkNode) in.readObject();
         nextTupleSinkNode = (LeftTupleSinkNode) in.readObject();
 
-        timerDeclarations = ( Declaration[][] ) in.readObject();
         salienceDeclarations = ( Declaration[]) in.readObject();
         enabledDeclarations = ( Declaration[]) in.readObject();
         consequenceName = (String) in.readObject();
@@ -172,7 +141,6 @@ public class RuleTerminalNode extends AbstractTerminalNode {
         out.writeObject( previousTupleSinkNode );
         out.writeObject( nextTupleSinkNode );
 
-        out.writeObject( timerDeclarations );
         out.writeObject( salienceDeclarations );
         out.writeObject( enabledDeclarations );
         out.writeObject( consequenceName );
@@ -241,10 +209,6 @@ public class RuleTerminalNode extends AbstractTerminalNode {
         }
     }
     
-    public Declaration[][] getTimerDeclarations() {
-        return timerDeclarations;
-    }
-
     public Declaration[] getSalienceDeclarations() {
         return salienceDeclarations;
     }
@@ -255,6 +219,10 @@ public class RuleTerminalNode extends AbstractTerminalNode {
 
     public Declaration[] getEnabledDeclarations() {
         return enabledDeclarations;
+    }
+
+    public void setEnabledDeclarations( Declaration[] enabledDeclarations ) {
+        this.enabledDeclarations = enabledDeclarations;
     }
 
     public String getConsequenceName() {
@@ -330,11 +298,10 @@ public class RuleTerminalNode extends AbstractTerminalNode {
 
     @Override
     public boolean equals(final Object object) {
-        return this == object || internalEquals( object );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
         if ( object == null || !(object instanceof RuleTerminalNode) || this.hashCode() != object.hashCode() ) {
             return false;
         }
@@ -353,9 +320,8 @@ public class RuleTerminalNode extends AbstractTerminalNode {
     }
 
     public LeftTuple createLeftTuple(InternalFactHandle factHandle,
-                                     Sink sink,
                                      boolean leftTupleMemoryEnabled) {
-        return new RuleTerminalNodeLeftTuple( factHandle, sink, leftTupleMemoryEnabled );
+        return new RuleTerminalNodeLeftTuple( factHandle, this, leftTupleMemoryEnabled );
     }
 
     public LeftTuple createLeftTuple(LeftTuple leftTuple,

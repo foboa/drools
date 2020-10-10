@@ -21,18 +21,14 @@ import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.util.List;
 
-import org.drools.core.base.evaluators.IsAEvaluatorDefinition;
 import org.drools.core.common.InternalFactHandle;
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.common.RuleBasePartitionId;
 import org.drools.core.reteoo.builder.BuildContext;
-import org.drools.core.rule.constraint.EvaluatorConstraint;
-import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.AlphaNodeFieldConstraint;
 import org.drools.core.spi.PropagationContext;
 import org.drools.core.util.bitmask.BitMask;
 import org.kie.api.definition.rule.Rule;
-import org.kie.api.runtime.rule.Operator;
 
 /**
  * <code>AlphaNodes</code> are nodes in the <code>Rete</code> network used
@@ -50,7 +46,7 @@ public class AlphaNode extends ObjectSource
     /**
      * The <code>FieldConstraint</code>
      */
-    private AlphaNodeFieldConstraint constraint;
+    protected AlphaNodeFieldConstraint constraint;
 
     private ObjectSinkNode previousRightTupleSinkNode;
     private ObjectSinkNode nextRightTupleSinkNode;
@@ -81,14 +77,11 @@ public class AlphaNode extends ObjectSource
                 context.getKnowledgeBase().getConfiguration().getAlphaNodeHashingThreshold());
 
         this.constraint = constraint.cloneIfInUse();
-        if (this.constraint instanceof MvelConstraint) {
-            ((MvelConstraint) this.constraint).registerEvaluationContext(context);
-        }
+        this.constraint.registerEvaluationContext(context);
 
         initDeclaredMask(context);
         hashcode = calculateHashCode();
     }
-
 
     public void readExternal(ObjectInput in) throws IOException,
             ClassNotFoundException {
@@ -128,7 +121,7 @@ public class AlphaNode extends ObjectSource
             if (source instanceof AlphaNode) {
                 source.setPartitionId( context, partitionId );
             }
-            source.sink.changeSinkPartition( (ObjectSink)this, this.partitionId, partitionId, source.alphaNodeHashingThreshold );
+            source.sink.changeSinkPartition( this, this.partitionId, partitionId, source.alphaNodeHashingThreshold );
         }
         this.partitionId = partitionId;
     }
@@ -136,12 +129,8 @@ public class AlphaNode extends ObjectSource
     public void assertObject(final InternalFactHandle factHandle,
                              final PropagationContext context,
                              final InternalWorkingMemory workingMemory) {
-        if (this.constraint.isAllowed(factHandle,
-                workingMemory)) {
-
-            this.sink.propagateAssertObject(factHandle,
-                    context,
-                    workingMemory);
+        if (this.constraint.isAllowed(factHandle, workingMemory)) {
+            this.sink.propagateAssertObject( factHandle, context, workingMemory );
         }
     }
 
@@ -191,22 +180,16 @@ public class AlphaNode extends ObjectSource
 
     @Override
     public boolean equals(Object object) {
-        return this == object ||
-               (internalEquals((AlphaNode)object) &&
-               (this.source != null ?
-                this.source.thisNodeEquals(((AlphaNode) object).source) :
-                ((AlphaNode) object).source == null) );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
-        if ( object == null || !(object instanceof AlphaNode) || this.hashCode() != object.hashCode() ) {
+        if ( !(object instanceof AlphaNode) || this.hashCode() != object.hashCode() ) {
             return false;
         }
 
-        return (constraint instanceof MvelConstraint ?
-                    ((MvelConstraint) constraint).equals(((AlphaNode)object).constraint, getKnowledgeBase()) :
-                    constraint.equals(((AlphaNode)object).constraint));
+        AlphaNode other = (AlphaNode) object;
+        return this.source.getId() == other.source.getId() && constraint.equals(other.constraint, getKnowledgeBase());
     }
 
     /**
@@ -264,12 +247,17 @@ public class AlphaNode extends ObjectSource
         public void assertObject(final InternalFactHandle handle,
                                  final PropagationContext propagationContext,
                                  final InternalWorkingMemory workingMemory) {
-
-            if (this.constraint.isAllowed(handle,
-                    workingMemory)) {
-                this.sink.assertObject(handle,
-                        propagationContext,
-                        workingMemory);
+            try {
+                if (this.constraint.isAllowed(handle, workingMemory)) {
+                    this.sink.assertObject(handle, propagationContext, workingMemory);
+                }
+            } catch (RuntimeException e) {
+                // Forcing the jitting of a constraint the eveluation may throw a CCE
+                // it is safe to ignore it since this means that the old fact is no longer compatible
+                // with the updated constraint and then its propagation should be skipped
+                if (!(e.getCause() instanceof ClassCastException)) {
+                    throw e;
+                }
             }
         }
 
@@ -322,26 +310,10 @@ public class AlphaNode extends ObjectSource
         public boolean isAssociatedWith(Rule rule) {
             return sink.isAssociatedWith(rule);
         }
-
-        public boolean thisNodeEquals(final Object object) {
-            return false;
-        }
-
-        public int nodeHashCode() {
-            return this.hashCode();
-        }
     }
 
-    public BitMask calculateDeclaredMask(List<String> settableProperties) {
-        boolean typeBit = false;
-        if (constraint instanceof EvaluatorConstraint && ((EvaluatorConstraint) constraint).isSelf()) {
-            Operator op = ((EvaluatorConstraint) constraint).getEvaluator().getOperator();
-            if (op == IsAEvaluatorDefinition.ISA || op == IsAEvaluatorDefinition.NOT_ISA) {
-                typeBit = true;
-            }
-        }
-        BitMask mask = constraint.getListenedPropertyMask(settableProperties);
-        return typeBit ? mask.set(PropertySpecificUtil.TRAITABLE_BIT) : mask;
+    public BitMask calculateDeclaredMask(Class modifiedClass, List<String> settableProperties) {
+        return constraint.getListenedPropertyMask(modifiedClass, settableProperties);
     }
 
     @Override

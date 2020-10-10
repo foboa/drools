@@ -6,7 +6,7 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>drools-core</artifactId>
@@ -15,7 +15,7 @@
   <name>Drools :: Core</name>
 
   <properties>
-    <osgi.Bundle-SymbolicName>org.drools.core</osgi.Bundle-SymbolicName>
+    <java.module.name>org.drools.core</java.module.name>
     <surefire.forkCount>2</surefire.forkCount>
   </properties>
 
@@ -35,18 +35,9 @@
       core module.
     -->
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
       <groupId>com.thoughtworks.xstream</groupId>
       <artifactId>xstream</artifactId>
       <optional>true</optional>
-    </dependency>
-    <dependency>
-      <groupId>org.mvel</groupId>
-      <artifactId>mvel2</artifactId>
     </dependency>
     <dependency>
       <groupId>org.kie</groupId>
@@ -58,12 +49,18 @@
     </dependency>
     <dependency>
       <groupId>org.kie.soup</groupId>
-      <artifactId>kie-soup-commons</artifactId>
+      <artifactId>kie-soup-xstream</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.kie.soup</groupId>
-      <artifactId>kie-soup-project-datamodel-commons</artifactId>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-core-reflective</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-core-dynamic</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
@@ -72,6 +69,11 @@
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -92,7 +94,7 @@
     </dependency>
     <dependency>
       <groupId>org.jboss.spec.javax.xml.bind</groupId>
-      <artifactId>jboss-jaxb-api_2.2_spec</artifactId>
+      <artifactId>jboss-jaxb-api_2.3_spec</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -194,39 +196,6 @@
         </plugins>
       </build>
     </profile>
-
-    <profile>
-      <id>protobufProfile</id>
-      <activation>
-        <property>
-          <name>proto</name>
-        </property>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <version>1.3.2</version>
-            <executions>
-              <execution>
-                <goals>
-                  <goal>exec</goal>
-                </goals>
-              </execution>
-            </executions>
-            <configuration>
-              <executable>protoc</executable>
-              <arguments>
-                <argument>-I=src/main/resources</argument>
-                <argument>--java_out=src/main/java</argument>
-                <argument>src/main/resources/org/drools/core/marshalling/droolsmessages.proto</argument>
-              </arguments>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
   </profiles>
 
   <build>
@@ -251,10 +220,15 @@
             </Export-Package>
             <Import-Package>
                com.sun.tools.xjc.*;resolution:=optional,
+               org.drools.dynamic;resolution:=optional,
                org.drools.persistence.api;resolution:=optional,
                org.drools.template.parser;resolution:=optional,
+               org.drools.mvel;resolution:=optional,
+               org.drools.mvel.asm;resolution:=optional,
                org.drools.persistence.jpa;resolution:=optional,
                org.drools.persistence.jpa.processinstance;resolution:=optional,
+               org.drools.reflective;resolution:=optional,
+               org.drools.reflective.classloader;resolution:=optional,
                org.jbpm.persistence.api;resolution:=optional,
                org.jbpm.marshalling.impl;resolution:=optional,
                org.jbpm.process.instance.impl;resolution:=optional,
@@ -269,20 +243,13 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
-        <configuration>
-          <!-- Hack/workaround for https://bugs.openjdk.java.net/browse/JDK-8061305. The Javadoc generation fails for
-               this class, so needs to be excluded. It seems the issue is fixed only in JDK 9+. -->
-          <sourceFileExcludes>
-            <sourceFileExclude>**/MetaProperty.java</sourceFileExclude>
-          </sourceFileExcludes>
-        </configuration>
       </plugin>
 
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>findbugs-maven-plugin</artifactId>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
         <configuration>
-          <excludeFilterFile>${project.basedir}/src/main/findbugs/findbugs-exclude.xml</excludeFilterFile>
+          <excludeFilterFile>${project.basedir}/src/main/spotbugs/spotbugs-exclude.xml</excludeFilterFile>
         </configuration>
       </plugin>
 

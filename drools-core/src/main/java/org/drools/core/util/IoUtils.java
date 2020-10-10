@@ -100,35 +100,20 @@ public class IoUtils {
     }
 
     public static void copyFile(File sourceFile, File destFile) {
-        destFile.getParentFile().mkdirs();
-        if(!destFile.exists()) {
-            try {
-                destFile.createNewFile();
-            } catch (IOException ioe) {
-                throw new RuntimeException("Unable to create file " + destFile.getAbsolutePath(), ioe);
-            }
+        if (!destFile.getParentFile().mkdirs()) {
+            throw new IllegalStateException("Cannot create directory structure for file " + destFile.getParentFile().getAbsolutePath() + "!");
+        }
+        try {
+            destFile.createNewFile();
+        } catch (IOException ioe) {
+            throw new RuntimeException("Unable to create file " + destFile.getAbsolutePath(), ioe);
         }
 
-        FileChannel source = null;
-        FileChannel destination = null;
-
-        try {
-            source = new FileInputStream(sourceFile).getChannel();
-            destination = new FileOutputStream(destFile).getChannel();
+        try (FileChannel source = new FileInputStream(sourceFile).getChannel();
+             FileChannel destination = new FileOutputStream(destFile).getChannel()) {
             destination.transferFrom(source, 0, source.size());
         } catch (IOException ioe) {
             throw new RuntimeException("Unable to copy " + sourceFile.getAbsolutePath() + " to " + destFile.getAbsolutePath(), ioe);
-        } finally {
-            if(source != null) {
-                try {
-                    source.close();
-                } catch (IOException e) { }
-            }
-            if(destination != null) {
-                try {
-                    destination.close();
-                } catch (IOException e) { }
-            }
         }
     }
 
@@ -144,7 +129,7 @@ public class IoUtils {
     }
 
     public static File copyInTempFile( InputStream input, String fileExtension ) throws IOException {
-        File tempFile = File.createTempFile( UUID.randomUUID().toString(), "." + fileExtension );
+        File tempFile = File.createTempFile(UUID.randomUUID().toString(), "." + fileExtension );
         tempFile.deleteOnExit();
         copy(input, new FileOutputStream(tempFile));
         return tempFile;
@@ -155,7 +140,7 @@ public class IoUtils {
     }
 
     public static List<String> recursiveListFile(File folder, String prefix, Predicate<File> filter) {
-        List<String> files = new ArrayList<String>();
+        List<String> files = new ArrayList<>();
         for (File child : safeListFiles(folder)) {
             filesInFolder(files, child, prefix, filter);
         }
@@ -226,15 +211,9 @@ public class IoUtils {
             return null;
         }
 
-        ZipFile zipFile = null;
-        byte[] bytes = null;
-        try {
-            zipFile = new ZipFile( file );
+        byte[] bytes;
+        try (ZipFile zipFile = new ZipFile( file )) {
             bytes = IoUtils.readBytesFromInputStream(  zipFile.getInputStream( entry ), true );
-        } finally {
-            if ( zipFile != null ) {
-                zipFile.close();
-            }
         }
         return bytes;
 
@@ -242,26 +221,14 @@ public class IoUtils {
 
     public static byte[] readBytes(File f) throws IOException {
         byte[] buf = new byte[1024];
-
-        BufferedInputStream bais = null;
-        ByteArrayOutputStream baos = null;
-        try {
-            bais = new BufferedInputStream( new FileInputStream( f ) );
-            baos = new ByteArrayOutputStream();
+        try (BufferedInputStream bais = new BufferedInputStream(new FileInputStream(f));
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             int len;
-            while ( (len = bais.read( buf )) > 0 ) {
-                baos.write( buf, 0, len );
+            while ((len = bais.read(buf)) > 0) {
+                baos.write(buf, 0, len);
             }
-        } finally {
-            if (  baos != null ) {
-                baos.close();
-            }
-            if ( bais != null ) {
-                bais.close();
-            }
+            return baos.toByteArray();
         }
-
-        return baos.toByteArray();
     }
 
     public static void write(File f,

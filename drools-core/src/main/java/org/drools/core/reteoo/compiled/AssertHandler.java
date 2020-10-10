@@ -16,33 +16,17 @@
 
 package org.drools.core.reteoo.compiled;
 
-import org.drools.core.base.ClassFieldReader;
-import org.drools.core.common.InternalFactHandle;
-import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.reteoo.AlphaNode;
 import org.drools.core.reteoo.BetaNode;
 import org.drools.core.reteoo.LeftInputAdapterNode;
 import org.drools.core.reteoo.ObjectTypeNode;
-import org.drools.core.spi.PropagationContext;
+import org.drools.core.reteoo.WindowNode;
+import org.drools.core.rule.IndexableConstraint;
 
 /**
  * todo: document
  */
-public class AssertHandler extends AbstractCompilerHandler {
-    private static final String LOCAL_FACT_VAR_NAME = "fact";
-
-    private static final String FACT_HANDLE_PARAM_TYPE = InternalFactHandle.class.getName();
-    private static final String PROP_CONTEXT_PARAM_TYPE = PropagationContext.class.getName();
-    private static final String WORKING_MEMORY_PARAM_TYPE = InternalWorkingMemory.class.getName();
-
-    private static final String FACT_HANDLE_PARAM_NAME = "handle";
-    private static final String PROP_CONTEXT_PARAM_NAME = "context";
-    private static final String WORKING_MEMORY_PARAM_NAME = "wm";
-
-    private static final String ASSERT_METHOD_SIGNATURE = "public final void assertObject("
-            + FACT_HANDLE_PARAM_TYPE + " " + FACT_HANDLE_PARAM_NAME + ","
-            + PROP_CONTEXT_PARAM_TYPE + " " + PROP_CONTEXT_PARAM_NAME + ","
-            + WORKING_MEMORY_PARAM_TYPE + " " + WORKING_MEMORY_PARAM_NAME + "){";
+public class AssertHandler extends SwitchCompilerHandler {
 
     /**
      * This flag is used to instruct the AssertHandler to tell it to generate a local varible
@@ -53,7 +37,6 @@ public class AssertHandler extends AbstractCompilerHandler {
      */
     private final boolean alphaNetContainsHashedField;
 
-    private final StringBuilder builder;
     private final String factClassName;
 
     AssertHandler(StringBuilder builder, String factClassName) {
@@ -61,7 +44,7 @@ public class AssertHandler extends AbstractCompilerHandler {
     }
 
     public AssertHandler(StringBuilder builder, String factClassName, boolean alphaNetContainsHashedField) {
-        this.builder = builder;
+        super(builder);
         this.factClassName = factClassName;
         this.alphaNetContainsHashedField = alphaNetContainsHashedField;
     }
@@ -89,6 +72,15 @@ public class AssertHandler extends AbstractCompilerHandler {
                 append(WORKING_MEMORY_PARAM_NAME).append(");").append(NEWLINE);
     }
 
+
+    @Override
+    public void startWindowNode(WindowNode windowNode) {
+        builder.append(getVariableName(windowNode)).append(".assertObject(").
+                append(FACT_HANDLE_PARAM_NAME).append(",").
+                append(PROP_CONTEXT_PARAM_NAME).append(",").
+                append(WORKING_MEMORY_PARAM_NAME).append(");").append(NEWLINE);
+    }
+
     @Override
     public void startLeftInputAdapterNode(LeftInputAdapterNode leftInputAdapterNode) {
         builder.append(getVariableName(leftInputAdapterNode)).append(".assertObject(").
@@ -101,8 +93,8 @@ public class AssertHandler extends AbstractCompilerHandler {
     public void startNonHashedAlphaNode(AlphaNode alphaNode) {
         builder.append("if ( ").append(getVariableName(alphaNode)).
                 append(".isAllowed(").append(FACT_HANDLE_PARAM_NAME).append(",").
-                append(WORKING_MEMORY_PARAM_NAME).append(", ").
-                append(getContextVariableName(alphaNode)).append(") ) {").append(NEWLINE);
+                append(WORKING_MEMORY_PARAM_NAME).
+                append(") ) {").append(NEWLINE);
 
     }
 
@@ -113,29 +105,13 @@ public class AssertHandler extends AbstractCompilerHandler {
     }
 
     @Override
-    public void startHashedAlphaNodes(ClassFieldReader hashedFieldReader) {
-        String attributeName = hashedFieldReader.getFieldName();
-        String localVariableName = attributeName + "NodeId";
-
-        // todo get accessor smarter because of booleans. Note that right now booleans wouldn't be hashed
-        String attributeGetterName = "get" + Character.toTitleCase(attributeName.charAt(0)) + attributeName.substring(1);
-
-        // get the attribute from the fact that we are switching over
-        builder.append("Integer ").append(localVariableName);
-        // todo we are casting to Integer because generics aren't supported
-        builder.append(" = (Integer)").append(getVariableName(hashedFieldReader)).append(".get(").
-                append(LOCAL_FACT_VAR_NAME).append(".").append(attributeGetterName)
-                .append("());").append(NEWLINE);
-
-        // ensure that the value is present in the node map
-        builder.append("if(").append(localVariableName).append(" != null) {").append(NEWLINE);
-        // todo we had the .intValue() because JANINO has a problem with it
-        builder.append("switch(").append(localVariableName).append(".intValue()) {").append(NEWLINE);
+    public void startHashedAlphaNodes(IndexableConstraint indexableConstraint) {
+        generateSwitch(indexableConstraint);
     }
 
     @Override
     public void startHashedAlphaNode(AlphaNode hashedAlpha, Object hashedValue) {
-        builder.append("case ").append(hashedAlpha.getId()).append(" : ").append(NEWLINE);
+        generateSwitchCase(hashedAlpha, hashedValue);
     }
 
     @Override
@@ -144,7 +120,7 @@ public class AssertHandler extends AbstractCompilerHandler {
     }
 
     @Override
-    public void endHashedAlphaNodes(ClassFieldReader hashedFieldReader) {
+    public void endHashedAlphaNodes(IndexableConstraint indexableConstraint) {
         // close switch statement
         builder.append("}").append(NEWLINE);
         // and if statement for ensuring non-null
@@ -155,5 +131,10 @@ public class AssertHandler extends AbstractCompilerHandler {
     public void endObjectTypeNode(ObjectTypeNode objectTypeNode) {
         // close the assertObject method
         builder.append("}").append(NEWLINE);
+    }
+
+    @Override
+    public void nullCaseAlphaNodeStart(AlphaNode hashedAlpha) {
+        super.nullCaseAlphaNodeStart(hashedAlpha);
     }
 }

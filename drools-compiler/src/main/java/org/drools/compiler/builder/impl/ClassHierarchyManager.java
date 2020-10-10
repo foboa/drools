@@ -32,16 +32,17 @@ import org.drools.compiler.lang.descr.PatternDescr;
 import org.drools.compiler.lang.descr.QualifiedName;
 import org.drools.compiler.lang.descr.TypeDeclarationDescr;
 import org.drools.compiler.lang.descr.TypeFieldDescr;
+import org.drools.core.addon.TypeResolver;
+import org.drools.core.base.ClassFieldInspector;
+import org.drools.core.base.CoreComponentsBuilder;
 import org.drools.core.definitions.InternalKnowledgePackage;
 import org.drools.core.factmodel.ClassDefinition;
 import org.drools.core.factmodel.FieldDefinition;
 import org.drools.core.factmodel.traits.Alias;
 import org.drools.core.rule.TypeDeclaration;
 import org.drools.core.util.HierarchySorter;
-import org.drools.core.util.asm.ClassFieldInspector;
 import org.kie.api.definition.type.Key;
 import org.kie.api.io.Resource;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
 
 public class ClassHierarchyManager {
 
@@ -110,7 +111,7 @@ public class ClassHierarchyManager {
         for (AbstractClassTypeDeclarationDescr tdescr : unsortedDescrs) {
             for (TypeFieldDescr field : tdescr.getFields().values()) {
                 QualifiedName name = tdescr.getType();
-                QualifiedName typeName = new QualifiedName(field.getPattern().getObjectType());
+                QualifiedName typeName = new QualifiedName(field.getPattern().getGenericType().getRawType());
                 if (!hasCircularDependency(name, typeName, taxonomy)) {
                     if (cache.containsKey(typeName)) {
                         taxonomy.get(name).add(typeName);
@@ -177,7 +178,7 @@ public class ClassHierarchyManager {
                                               PackageRegistry pkgRegistry, Map<String, TypeFieldDescr> fieldMap) {
         ClassFieldInspector inspector = null;
         try {
-            inspector = new ClassFieldInspector(klass);
+            inspector = CoreComponentsBuilder.get().createClassFieldInspector(klass);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

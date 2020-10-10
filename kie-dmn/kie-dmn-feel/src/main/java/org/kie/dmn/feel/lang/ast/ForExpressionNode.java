@@ -16,15 +16,20 @@
 
 package org.kie.dmn.feel.lang.ast;
 
-import org.antlr.v4.runtime.ParserRuleContext;
-import org.kie.dmn.feel.lang.EvaluationContext;
-import org.kie.dmn.feel.lang.Type;
-import org.kie.dmn.feel.lang.types.BuiltInType;
-
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.Supplier;
+
+import org.antlr.v4.runtime.ParserRuleContext;
+import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
+import org.kie.dmn.feel.lang.EvaluationContext;
+import org.kie.dmn.feel.lang.Type;
+import org.kie.dmn.feel.lang.types.BuiltInType;
+import org.kie.dmn.feel.util.Msg;
 
 public class ForExpressionNode
         extends BaseNode {
@@ -62,6 +67,7 @@ public class ForExpressionNode
         try {
             ctx.enterFrame();
             List results = new ArrayList(  );
+            ctx.setValue("partial", results);
             ForIteration[] ictx = initializeContexts( ctx, iterationContexts);
 
             while ( nextIteration( ctx, ictx ) ) {
@@ -69,12 +75,15 @@ public class ForExpressionNode
                 results.add( result );
             }
             return results;
+        } catch (EndpointOfRangeNotOfNumberException e) {
+            // ast error already reported
+            return null;
         } finally {
             ctx.exitFrame();
         }
     }
 
-    private boolean nextIteration( EvaluationContext ctx, ForIteration[] ictx ) {
+    public static boolean nextIteration(EvaluationContext ctx, ForIteration[] ictx) {
         int i = ictx.length-1;
         while ( i >= 0 && i < ictx.length ) {
             if ( ictx[i].hasNextValue() ) {
@@ -87,7 +96,7 @@ public class ForExpressionNode
         return i >= 0;
     }
 
-    private void setValueIntoContext(EvaluationContext ctx, ForIteration forIteration) {
+    public static void setValueIntoContext(EvaluationContext ctx, ForIteration forIteration) {
         ctx.setValue( forIteration.getName(), forIteration.getNextValue() );
     }
     
@@ -109,27 +118,56 @@ public class ForExpressionNode
         return ictx;
     }
 
+    private static class EndpointOfRangeNotOfNumberException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
+
     private ForIteration createQuantifiedExpressionIterationContext(EvaluationContext ctx, IterationContextNode icn) {
+        ForIteration fi = null;
         String name = icn.evaluateName( ctx );
         Object result = icn.evaluate( ctx );
-        Iterable values = result instanceof Iterable ? (Iterable) result : Collections.singletonList( result );
-        ForIteration fi = new ForIteration( name, values );
+        Object rangeEnd = icn.evaluateRangeEnd(ctx);
+        if (rangeEnd == null) {
+            Iterable values = result instanceof Iterable ? (Iterable) result : Collections.singletonList(result);
+            fi = new ForIteration(name, values);
+        } else {
+            valueMustBeANumber(ctx, result);
+            BigDecimal start = (BigDecimal) result;
+            valueMustBeANumber(ctx, rangeEnd);
+            BigDecimal end = (BigDecimal) rangeEnd;
+            fi = new ForIteration(name, start, end);
+        }
         return fi;
     }
 
-    private static class ForIteration {
+    private void valueMustBeANumber(EvaluationContext ctx, Object value) {
+        if (!(value instanceof BigDecimal)) {
+            ctx.notifyEvt(astEvent(Severity.ERROR, Msg.createMessage(Msg.VALUE_X_NOT_A_VALID_ENDPOINT_FOR_RANGE_BECAUSE_NOT_A_NUMBER, value), null));
+            throw new EndpointOfRangeNotOfNumberException();
+        }
+    }
+
+    public static class ForIteration {
         private String   name;
         private Iterable values;
+
+        private Supplier<Iterator> iteratorGenerator;
         private Iterator iterator;
 
         public ForIteration(String name, Iterable values) {
             this.name = name;
             this.values = values;
+            this.iteratorGenerator = () -> this.values.iterator();
+        }
+
+        public ForIteration(String name, final BigDecimal start, final BigDecimal end) {
+            this.name = name;
+            this.iteratorGenerator = () -> new BigDecimalRangeIterator(start, end);
         }
 
         public boolean hasNextValue() {
             if( iterator == null ) {
-                iterator = values.iterator();
+                iterator = iteratorGenerator.get();
             }
             boolean hasValue = this.iterator.hasNext();
             if( ! hasValue ) {
@@ -147,6 +185,64 @@ public class ForExpressionNode
         }
     }
 
+    public static class BigDecimalRangeIterator implements Iterator<BigDecimal> {
 
+        private enum Direction {
+            ASCENDANT,
+            DESCENDANT;
+        }
+
+        private final BigDecimal start;
+        private final BigDecimal end;
+
+        private BigDecimal cursor;
+        private final Direction direction;
+        private final BigDecimal increment;
+
+        public BigDecimalRangeIterator(BigDecimal start, BigDecimal end) {
+            this.start = start;
+            this.end = end;
+            this.direction = (start.compareTo(end) <= 0) ? Direction.ASCENDANT : Direction.DESCENDANT;
+            this.increment = (direction == Direction.ASCENDANT) ? new BigDecimal(1, MathContext.DECIMAL128) : new BigDecimal(-1, MathContext.DECIMAL128);
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (cursor == null) {
+                return true;
+            } else {
+                BigDecimal lookAhead = cursor.add(increment);
+                if (direction == Direction.ASCENDANT) {
+                    return lookAhead.compareTo(end) <= 0;
+                } else {
+                    return lookAhead.compareTo(end) >= 0;
+                }
+            }
+        }
+
+        @Override
+        public BigDecimal next() {
+            if (cursor == null) {
+                cursor = start;
+            } else {
+                cursor = cursor.add(increment);
+            }
+            return cursor;
+        }
+
+    }
+
+    @Override
+    public ASTNode[] getChildrenNode() {
+        ASTNode[] children = new ASTNode[ iterationContexts.size() + 1 ];
+        System.arraycopy(iterationContexts.toArray(new ASTNode[]{}), 0, children, 0, iterationContexts.size());
+        children[ children.length-1 ] = expression;
+        return children;
+    }
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
+    }
 
 }

@@ -19,8 +19,8 @@ package org.drools.workbench.models.testscenarios.backend.populators;
 import java.io.Serializable;
 import java.util.Map;
 
-import org.drools.core.util.MVELSafeHelper;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
+import org.drools.mvel.MVELSafeHelper;
+import org.drools.core.addon.TypeResolver;
 import org.mvel2.MVEL;
 import org.mvel2.ParserConfiguration;
 import org.mvel2.ParserContext;

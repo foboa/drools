@@ -5,7 +5,7 @@
   <parent>
     <artifactId>drools</artifactId>
     <groupId>org.drools</groupId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
@@ -16,7 +16,7 @@
   <name>KIE :: CI for OSGi</name>
 
   <properties>
-    <osgi.Bundle-SymbolicName>org.kie.scanner.osgi</osgi.Bundle-SymbolicName>
+    <java.module.name>org.kie.scanner.osgi</java.module.name>
   </properties>
 
   <dependencies>
@@ -59,7 +59,19 @@
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
+      <artifactId>drools-core-reflective</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-core-dynamic</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
       <artifactId>drools-compiler</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-mvel</artifactId>
     </dependency>
 
     <dependency>
@@ -72,6 +84,13 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <configuration>
+          <skip>true</skip>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>2.2</version>
         <executions>
@@ -81,6 +100,11 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                  <resource>META-INF/kie.conf</resource>
+                </transformer>
+              </transformers>
               <artifactSet>
                 <excludes>
                   <exclude>org.kie.soup:kie-soup-maven-support</exclude>
@@ -126,6 +150,7 @@
               org.kie.soup.project.datamodel,
               org.kie.soup.project.datamodel.commons,
               org.drools.compiler.kie.builder.impl,
+              org.drools.compiler.kie.builder.impl.event,
               org.drools.compiler.kproject,
               org.drools.compiler.kproject.models,
               org.drools.core.common,
@@ -134,6 +159,8 @@
               org.drools.core.osgi,
               org.drools.core.rule,
               org.drools.core.util,
+              org.drools.reflective,
+              org.drools.reflective.classloader,
               org.kie.api,
               org.kie.api.builder,
               org.kie.api.builder.model,

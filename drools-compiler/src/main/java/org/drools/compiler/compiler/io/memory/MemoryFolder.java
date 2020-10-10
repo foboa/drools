@@ -15,15 +15,15 @@
 
 package org.drools.compiler.compiler.io.memory;
 
+import java.io.Serializable;
+import java.util.Collection;
+import java.util.Collections;
+
 import org.drools.compiler.compiler.io.File;
 import org.drools.compiler.compiler.io.Folder;
 import org.drools.compiler.compiler.io.Path;
-import org.drools.compiler.compiler.io.Resource;
-import org.drools.compiler.kie.builder.impl.KieFileSystemImpl;
+import org.drools.compiler.compiler.io.FileSystemItem;
 import org.drools.core.util.StringUtils;
-
-import java.io.Serializable;
-import java.util.Collection;
 
 public class MemoryFolder
         implements
@@ -120,8 +120,9 @@ public class MemoryFolder
         return p;
     }
 
-    public Collection<? extends Resource> getMembers() {
-        return mfs.getMembers( this );
+    public Collection<? extends FileSystemItem> getMembers() {
+        Collection<? extends FileSystemItem> members = mfs.getMembers( this );
+        return members != null ? members : Collections.emptyList();
     }
 
     public boolean exists() {

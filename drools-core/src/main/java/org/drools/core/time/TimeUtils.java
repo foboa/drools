@@ -16,15 +16,14 @@
 
 package org.drools.core.time;
 
-import org.drools.core.base.mvel.MVELObjectExpression;
+import java.util.Date;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.rule.Declaration;
 import org.drools.core.spi.Tuple;
 import org.drools.core.util.DateUtils;
-
-import java.util.Date;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * A helper class with utility methods for
@@ -135,19 +134,19 @@ public class TimeUtils {
         return result;
     }
 
-    public static long evalTimeExpression( MVELObjectExpression expr, Tuple leftTuple, Declaration[] declrs, InternalWorkingMemory wm ) {
-        Object d = expr.getValue( leftTuple,  declrs, null, wm );
+    public static long evalTimeExpression( TimerExpression expr, Tuple leftTuple, Declaration[] declrs, InternalWorkingMemory wm ) {
+        Object d = expr.getValue( leftTuple,  declrs, wm );
         if ( d instanceof Number ) {
             return ((Number) d).longValue();
         }
         return TimeUtils.parseTimeString( d.toString() );
     }
 
-    public static Date evalDateExpression( MVELObjectExpression expr, Tuple leftTuple, Declaration[] declrs, InternalWorkingMemory wm ) {
+    public static Date evalDateExpression( TimerExpression expr, Tuple leftTuple, Declaration[] declrs, InternalWorkingMemory wm ) {
         if (expr == null) {
             return null;
         }
-        Object d = expr.getValue( leftTuple,  declrs, null, wm );
+        Object d = expr.getValue( leftTuple, declrs, wm );
         if ( d == null ) {
             return null;
         }

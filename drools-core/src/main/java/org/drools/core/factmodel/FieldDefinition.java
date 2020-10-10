@@ -26,8 +26,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.drools.core.base.ClassFieldAccessor;
+import org.drools.core.base.CoreComponentsBuilder;
 import org.drools.core.factmodel.traits.Alias;
-import org.drools.core.util.MVELSafeHelper;
 import org.drools.core.util.StringUtils;
 import org.kie.api.definition.type.Annotation;
 import org.kie.api.definition.type.FactField;
@@ -41,7 +41,7 @@ public class FieldDefinition
         Comparable<FieldDefinition> {
 
     private String             name       = null;
-    private String             type       = null;
+    private GenericTypeDefinition type;
     private boolean            key        = false;
     private boolean            inherited  = false;
     private String             overriding = null;
@@ -61,28 +61,19 @@ public class FieldDefinition
     public FieldDefinition() {
     }
 
-    /**
-     * Default constructor
-     *
-     * @param name the field's name
-     * @param type the fully qualified fields type
-     */
-    public FieldDefinition(String name,
-                           String type) {
-        this( name,
-                type,
-                false );
+    public FieldDefinition(String name, String type) {
+        this( name, new GenericTypeDefinition( type ) );
     }
 
-    /**
-     * Default constructor
-     *
-     * @param name the field's name
-     * @param type the fully qualified fields type
-     */
-    public FieldDefinition(String name,
-                           String type,
-                           boolean key) {
+    public FieldDefinition(String name, GenericTypeDefinition type) {
+        this( name, type, false );
+    }
+
+    public FieldDefinition(String name, String type, boolean key) {
+        this( name, new GenericTypeDefinition( type ), key );
+    }
+
+    public FieldDefinition(String name, GenericTypeDefinition type, boolean key) {
         this.name = name;
         this.type = type;
         this.key = key;
@@ -95,7 +86,7 @@ public class FieldDefinition
     public void readExternal(ObjectInput in) throws IOException,
             ClassNotFoundException {
         this.name = (String) in.readObject();
-        this.type = (String) in.readObject();
+        this.type = (GenericTypeDefinition) in.readObject();
         this.key = in.readBoolean();
         this.accessor = (ClassFieldAccessor) in.readObject();
         this.annotations = (List<AnnotationDefinition>) in.readObject();
@@ -141,18 +132,22 @@ public class FieldDefinition
         this.name = name;
     }
 
+    public GenericTypeDefinition getGenericType() {
+        return this.type;
+    }
+
     /**
      * @return Returns the fully qualified type.
      */
     public String getTypeName() {
-        return this.type;
+        return this.type.getRawType();
     }
 
     /**
      * @param type The fully qualified type to set.
      */
     public void setTypeName(String type) {
-        this.type = type;
+        this.type = new GenericTypeDefinition(type);
     }
 
     public Class< ? > getType() {
@@ -182,7 +177,7 @@ public class FieldDefinition
     		return getterName;
 	    }
         String prefix;
-        if ( "boolean".equals( this.type ) ) {
+        if ( "boolean".equals( this.type.getRawType() ) ) {
             prefix = "is";
         } else {
             prefix = "get";
@@ -205,7 +200,7 @@ public class FieldDefinition
      * @inheritDoc
      */
     public boolean equals(Object o) {
-        return this.getName().equals( ((FieldDefinition) o).getName() );
+        return (o != null) && this.getName().equals( ((FieldDefinition) o).getName() );
     }
 
     /**
@@ -331,7 +326,7 @@ public class FieldDefinition
     }
 
     public String getDefaultValueAsString() {
-        return MVELSafeHelper.getEvaluator().eval( initExpr, String.class );
+        return CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, String.class );
     }
 
 
@@ -344,7 +339,7 @@ public class FieldDefinition
             } else if ( "false".equalsIgnoreCase( initExpr ) ) {
                 return false;
             } else {
-                return MVELSafeHelper.getEvaluator().eval( initExpr, Boolean.class );
+                return CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Boolean.class );
             }
         }
     }
@@ -352,7 +347,7 @@ public class FieldDefinition
         try {
             return initExpr == null ? 0 : Byte.parseByte(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0 : MVELSafeHelper.getEvaluator().eval( initExpr, Byte.class );
+            return StringUtils.isEmpty( initExpr ) ? 0 : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Byte.class );
         }
     }
     public Character getDefaultValueAsChar() {
@@ -362,7 +357,7 @@ public class FieldDefinition
             if ( initExpr.length() == 1 ) {
                 return initExpr.charAt(0);
             } else {
-                return MVELSafeHelper.getEvaluator().eval( initExpr, Character.class );
+                return CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Character.class );
             }
         }
     }
@@ -370,35 +365,35 @@ public class FieldDefinition
         try {
             return initExpr == null ? 0.0 : Double.parseDouble(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0.0 : MVELSafeHelper.getEvaluator().eval( initExpr, Double.class );
+            return StringUtils.isEmpty( initExpr ) ? 0.0 : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Double.class );
         }
     }
     public Float getDefaultValueAsFloat( ) {
         try {
             return initExpr == null ? 0.0f : Float.parseFloat(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0.0f : MVELSafeHelper.getEvaluator().eval( initExpr, Float.class );
+            return StringUtils.isEmpty( initExpr ) ? 0.0f : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Float.class );
         }
     }
     public Integer getDefaultValueAsInt( ) {
         try {
             return initExpr == null ? 0 : Integer.parseInt(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0 : MVELSafeHelper.getEvaluator().eval( initExpr, Integer.class );
+            return StringUtils.isEmpty( initExpr ) ? 0 : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Integer.class );
         }
     }
     public Long getDefaultValueAsLong( ) {
         try {
             return initExpr == null ? 0L : Long.parseLong(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0L : MVELSafeHelper.getEvaluator().eval( initExpr, Long.class );
+            return StringUtils.isEmpty( initExpr ) ? 0L : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Long.class );
         }
     }
     public Short getDefaultValueAsShort( ) {
         try {
             return initExpr == null ? 0 : Short.parseShort(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0 : MVELSafeHelper.getEvaluator().eval( initExpr, Short.class );
+            return StringUtils.isEmpty( initExpr ) ? 0 : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Short.class );
         }
     }
 
@@ -412,7 +407,7 @@ public class FieldDefinition
             } else if ( "false".equalsIgnoreCase( initExpr ) ) {
                 return false;
             } else {
-                return MVELSafeHelper.getEvaluator().eval( initExpr, Boolean.class );
+                return CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Boolean.class );
             }
         }
     }
@@ -420,7 +415,7 @@ public class FieldDefinition
         try {
             return initExpr == null ? 0 : Byte.parseByte(initExpr);
         } catch (NumberFormatException nfe) {
-             return StringUtils.isEmpty( initExpr ) ? 0 : MVELSafeHelper.getEvaluator().eval( initExpr, Byte.class );
+             return StringUtils.isEmpty( initExpr ) ? 0 : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Byte.class );
         }
     }
     public char getDefaultValueAs_char() {
@@ -430,7 +425,7 @@ public class FieldDefinition
             if ( initExpr.length() == 1 ) {
                 return initExpr.charAt(0);
             } else {
-                return MVELSafeHelper.getEvaluator().eval( initExpr, Character.class );
+                return CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Character.class );
             }
         }
     }
@@ -438,35 +433,35 @@ public class FieldDefinition
         try {
             return initExpr == null ? 0.0 : Double.parseDouble(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0.0 : MVELSafeHelper.getEvaluator().eval( initExpr, Double.class );
+            return StringUtils.isEmpty( initExpr ) ? 0.0 : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Double.class );
         }
     }
     public float getDefaultValueAs_float() {
         try {
             return initExpr == null ? 0.0f : Float.parseFloat(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0.0f : MVELSafeHelper.getEvaluator().eval( initExpr, Float.class );
+            return StringUtils.isEmpty( initExpr ) ? 0.0f : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Float.class );
         }
     }
     public int getDefaultValueAs_int() {
         try {
             return initExpr == null ? 0 : Integer.parseInt(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0 : MVELSafeHelper.getEvaluator().eval( initExpr, Integer.class );
+            return StringUtils.isEmpty( initExpr ) ? 0 : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Integer.class );
         }
     }
     public long getDefaultValueAs_long() {
         try {
             return initExpr == null ? 0L : Long.parseLong(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0L : MVELSafeHelper.getEvaluator().eval( initExpr, Long.class );
+            return StringUtils.isEmpty( initExpr ) ? 0L : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Long.class );
         }
     }
     public short getDefaultValueAs_short() {
         try {
             return initExpr == null ? 0 : Short.parseShort(initExpr);
         } catch (NumberFormatException nfe) {
-            return StringUtils.isEmpty( initExpr ) ? 0 : MVELSafeHelper.getEvaluator().eval( initExpr, Short.class );
+            return StringUtils.isEmpty( initExpr ) ? 0 : CoreComponentsBuilder.get().getMVELExecutor().eval( initExpr, Short.class );
         }
     }
 
@@ -487,6 +482,7 @@ public class FieldDefinition
     public String resolveAlias( ) {
         if ( getAnnotations() != null ) {
             for ( AnnotationDefinition def : getAnnotations() ) {
+
                 if ( def.getName().equals( Alias.class.getName() ) ) {
                     String alias =  (String) def.getValues().get( "value" ).getValue();
                     return alias;

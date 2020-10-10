@@ -15,17 +15,18 @@
 
 package org.drools.compiler.builder.impl;
 
+import java.io.IOException;
+
 import org.drools.compiler.compiler.PackageRegistry;
 import org.drools.compiler.lang.descr.AbstractClassTypeDeclarationDescr;
 import org.drools.compiler.lang.descr.ImportDescr;
 import org.drools.compiler.lang.descr.PackageDescr;
+import org.drools.core.addon.TypeResolver;
+import org.drools.core.base.ClassFieldInspector;
+import org.drools.core.base.CoreComponentsBuilder;
 import org.drools.core.factmodel.BuildUtils;
 import org.drools.core.rule.TypeDeclaration;
 import org.drools.core.util.StringUtils;
-import org.drools.core.util.asm.ClassFieldInspector;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
-
-import java.io.IOException;
 
 public class TypeDeclarationUtils {
 
@@ -177,7 +178,7 @@ public class TypeDeclarationUtils {
             if (!sup.getName().equals(typeDescr.getSupertTypeFullName())) {
                 return false;
             }
-            ClassFieldInspector cfi = new ClassFieldInspector(typeClass, false);
+            ClassFieldInspector cfi = CoreComponentsBuilder.get().createClassFieldInspector(typeClass, false);
             if (cfi.getGetterMethods().size() != typeDescr.getFields().size()) {
                 return false;
             }
@@ -275,7 +276,9 @@ public class TypeDeclarationUtils {
         String prefix = "";
 
         String coreType = arrayDim == 0 ? className : className.substring(0, className.indexOf("["));
-        coreType = typeName2ClassName(coreType, loader);
+        if (loader != null) {
+            coreType = typeName2ClassName( coreType, loader );
+        }
 
         if (arrayDim > 0) {
             coreType = BuildUtils.getTypeDescriptor(coreType);

@@ -16,16 +16,13 @@
 
 package org.kie.dmn.core;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.notNullValue;
-import static org.junit.Assert.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.junit.Test;
 import org.kie.dmn.api.core.DMNContext;
 import org.kie.dmn.api.core.DMNDecisionResult;
@@ -35,128 +32,136 @@ import org.kie.dmn.api.core.DMNRuntime;
 import org.kie.dmn.core.api.DMNFactory;
 import org.kie.dmn.core.util.DMNRuntimeUtil;
 
-public class FlightRebookingTest {
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.junit.Assert.assertThat;
+
+public class FlightRebookingTest extends BaseInterpretedVsCompiledTest {
+
+    public FlightRebookingTest(final boolean useExecModelCompiler ) {
+        super( useExecModelCompiler );
+    }
 
     @Test
     public void testSolution1() {
-        DMNRuntime runtime = DMNRuntimeUtil.createRuntime( "0019-flight-rebooking.dmn", this.getClass() );
-        DMNModel dmnModel = runtime.getModel( "https://www.drools.org/kie-dmn", "0019-flight-rebooking" );
+        final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("0019-flight-rebooking.dmn", this.getClass() );
+        final DMNModel dmnModel = runtime.getModel("https://www.drools.org/kie-dmn", "0019-flight-rebooking" );
         assertThat( dmnModel, notNullValue() );
         assertThat( DMNRuntimeUtil.formatMessages( dmnModel.getMessages() ), dmnModel.hasErrors(), is(false) ); // need proper type support to enable this
 
-        DMNContext context = DMNFactory.newContext();
+        final DMNContext context = DMNFactory.newContext();
 
-        List passengerList = loadPassengerList();
-        List flightList = loadFlightList();
+        final List passengerList = loadPassengerList();
+        final List flightList = loadFlightList();
 
         context.set( "Passenger List", passengerList );
         context.set( "Flight List", flightList );
 
-        DMNResult dmnResult = runtime.evaluateAll( dmnModel, context );
+        final DMNResult dmnResult = runtime.evaluateAll(dmnModel, context );
 
-        DMNContext result = dmnResult.getContext();
+        final DMNContext result = dmnResult.getContext();
 
         assertThat( result.get( "Rebooked Passengers" ), is( loadExpectedResult() ) );
     }
 
     @Test
     public void testSolutionAlternate() {
-        DMNRuntime runtime = DMNRuntimeUtil.createRuntime( "0019-flight-rebooking-alternative.dmn", this.getClass() );
-        DMNModel dmnModel = runtime.getModel( "https://www.drools.org/kie-dmn", "0019-flight-rebooking" );
+        final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("0019-flight-rebooking-alternative.dmn", this.getClass() );
+        final DMNModel dmnModel = runtime.getModel("https://www.drools.org/kie-dmn", "0019-flight-rebooking" );
         assertThat( dmnModel, notNullValue() );
         assertThat( DMNRuntimeUtil.formatMessages( dmnModel.getMessages() ), dmnModel.hasErrors(), is(false) );
 
-        DMNContext context = DMNFactory.newContext();
+        final DMNContext context = DMNFactory.newContext();
 
-        List passengerList = loadPassengerList();
-        List flightList = loadFlightList();
+        final List passengerList = loadPassengerList();
+        final List flightList = loadFlightList();
 
         context.set( "Passenger List", passengerList );
         context.set( "Flight List", flightList );
 
-        DMNResult dmnResult = runtime.evaluateAll( dmnModel, context );
+        final DMNResult dmnResult = runtime.evaluateAll(dmnModel, context );
 
-        DMNContext result = dmnResult.getContext();
+        final DMNContext result = dmnResult.getContext();
 
         assertThat( result.get( "Rebooked Passengers" ), is( loadExpectedResult() ) );
     }
 
     @Test
     public void testSolutionSingletonLists() {
-        DMNRuntime runtime = DMNRuntimeUtil.createRuntime( "0019-flight-rebooking-singleton-lists.dmn", this.getClass() );
-        DMNModel dmnModel = runtime.getModel( "https://www.drools.org/kie-dmn", "0019-flight-rebooking" );
+        final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("0019-flight-rebooking-singleton-lists.dmn", this.getClass() );
+        final DMNModel dmnModel = runtime.getModel("https://www.drools.org/kie-dmn", "0019-flight-rebooking" );
         assertThat( dmnModel, notNullValue() );
         assertThat( DMNRuntimeUtil.formatMessages( dmnModel.getMessages() ), dmnModel.hasErrors(), is(false) );
         
-        DMNContext context = DMNFactory.newContext();
+        final DMNContext context = DMNFactory.newContext();
 
-        List passengerList = loadPassengerList();
-        List flightList = loadFlightList();
+        final List passengerList = loadPassengerList();
+        final List flightList = loadFlightList();
 
         context.set( "Passenger List", passengerList );
         context.set( "Flight List", flightList );
 
-        DMNResult dmnResult = runtime.evaluateAll( dmnModel, context );
+        final DMNResult dmnResult = runtime.evaluateAll(dmnModel, context );
 
-        DMNContext result = dmnResult.getContext();
+        final DMNContext result = dmnResult.getContext();
 
         assertThat( result.get( "Rebooked Passengers" ), is( loadExpectedResult() ) );
     }
 
     @Test
     public void testSolutionBadExample() {
-        DMNRuntime runtime = DMNRuntimeUtil.createRuntime( "0019-flight-rebooking-bad-example.dmn", this.getClass() );
-        DMNModel dmnModel = runtime.getModel( "https://www.drools.org/kie-dmn", "0019-flight-rebooking" );
+        final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("0019-flight-rebooking-bad-example.dmn", this.getClass() );
+        final DMNModel dmnModel = runtime.getModel("https://www.drools.org/kie-dmn", "0019-flight-rebooking" );
         assertThat( dmnModel, notNullValue() );
         assertThat( DMNRuntimeUtil.formatMessages( dmnModel.getMessages() ), dmnModel.hasErrors(), is(false) );
 
-        DMNContext context = DMNFactory.newContext();
+        final DMNContext context = DMNFactory.newContext();
 
-        List passengerList = loadPassengerList();
-        List flightList = loadFlightList();
+        final List passengerList = loadPassengerList();
+        final List flightList = loadFlightList();
 
         context.set( "Passenger List", passengerList );
         context.set( "Flight List", flightList );
 
-        DMNResult dmnResult = runtime.evaluateAll( dmnModel, context );
+        final DMNResult dmnResult = runtime.evaluateAll(dmnModel, context );
 
-        DMNContext result = dmnResult.getContext();
+        final DMNContext result = dmnResult.getContext();
 
         assertThat( result.get( "Rebooked Passengers" ), is( loadExpectedResult() ) );
     }
 
     @Test
     public void testUninterpreted() {
-        DMNRuntime runtime = DMNRuntimeUtil.createRuntime( "0019-flight-rebooking-uninterpreted.dmn", this.getClass() );
-        DMNModel dmnModel = runtime.getModel( "http://www.trisotech.com/dmn/definitions/_188d6caf-a355-49b5-a692-bd6ce713da08", "0019-flight-rebooking" );
+        final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("0019-flight-rebooking-uninterpreted.dmn", this.getClass() );
+        final DMNModel dmnModel = runtime.getModel("http://www.trisotech.com/dmn/definitions/_188d6caf-a355-49b5-a692-bd6ce713da08", "0019-flight-rebooking" );
         runtime.addListener( DMNRuntimeUtil.createListener() );
         assertThat( dmnModel, notNullValue() );
         assertThat( DMNRuntimeUtil.formatMessages( dmnModel.getMessages() ), dmnModel.hasErrors(), is(false) );
 
-        DMNContext context = DMNFactory.newContext();
+        final DMNContext context = DMNFactory.newContext();
 
-        List passengerList = loadPassengerList();
-        List flightList = loadFlightList();
+        final List passengerList = loadPassengerList();
+        final List flightList = loadFlightList();
 
         context.set( "Passenger List", passengerList );
         context.set( "Flight List", flightList );
 
-        DMNResult dmnResult = runtime.evaluateAll( dmnModel, context );
+        final DMNResult dmnResult = runtime.evaluateAll(dmnModel, context );
 
         assertThat( dmnResult.getDecisionResultByName( "Rebooked Passengers" ).getEvaluationStatus(), is( DMNDecisionResult.DecisionEvaluationStatus.SKIPPED ) );
     }
 
     private List loadPassengerList() {
-        Object[][] passengerData = new Object[][] {
+        final Object[][] passengerData = new Object[][] {
                 {"Tom", "bronze", 10, "UA123"},
                 {"Igor", "gold", 50000, "UA123"},
                 {"Jenny", "gold", 500000, "UA123"},
                 {"Harry", "gold", 100000, "UA123"},
                 {"Dick", "silver", 100, "UA123"}};
 
-        List<Map<String,Object>> passengerList = new ArrayList<>(  );
-        for( Object[] pd : passengerData ) {
-            Map<String, Object> p = new HashMap<>(  );
+        final List<Map<String,Object>> passengerList = new ArrayList<>(  );
+        for( final Object[] pd : passengerData ) {
+            final Map<String, Object> p = new HashMap<>(  );
             p.put( "Name", pd[0] );
             p.put( "Status", pd[1] );
             p.put( "Miles", number( (Number) pd[2] ) );
@@ -167,7 +172,7 @@ public class FlightRebookingTest {
     }
 
     private List loadFlightList() {
-        Object[][] flightData = new Object[][] {
+        final Object[][] flightData = new Object[][] {
                 {"UA123", "SFO", "SNA", date("2017-01-01T18:00:00"), date("2017-01-01T19:00:00"), 5, "cancelled"},
                 {"UA456", "SFO", "SNA", date("2017-01-01T19:00:00"), date("2017-01-01T20:00:00"), 2, "scheduled"},
                 {"UA789", "SFO", "SNA", date("2017-01-01T21:00:00"), date("2017-01-01T23:00:00"), 2, "scheduled"},
@@ -175,9 +180,9 @@ public class FlightRebookingTest {
                 {"UA1111", "SFO", "LAX", date("2017-01-01T23:00:00"), date("2017-01-02T05:00:00"), 2, "scheduled"}
         };
 
-        List<Map<String,Object>> flightList = new ArrayList<>(  );
-        for( Object[] pd : flightData ) {
-            Map<String, Object> p = new HashMap<>(  );
+        final List<Map<String,Object>> flightList = new ArrayList<>(  );
+        for( final Object[] pd : flightData ) {
+            final Map<String, Object> p = new HashMap<>(  );
             p.put( "Flight Number", pd[0] );
             p.put( "From", pd[1] );
             p.put( "To", pd[2] );
@@ -191,7 +196,7 @@ public class FlightRebookingTest {
     }
 
     private List loadExpectedResult() {
-        Object[][] passengerData = new Object[][] {
+        final Object[][] passengerData = new Object[][] {
                 {"Jenny", "gold", 500000, "UA456"},
                 {"Harry", "gold", 100000, "UA456"},
                 {"Igor", "gold", 50000, "UA789"},
@@ -199,9 +204,9 @@ public class FlightRebookingTest {
                 {"Tom", "bronze", 10, null}
                 };
 
-        List<Map<String,Object>> passengerList = new ArrayList<>(  );
-        for( Object[] pd : passengerData ) {
-            Map<String, Object> p = new HashMap<>(  );
+        final List<Map<String,Object>> passengerList = new ArrayList<>(  );
+        for( final Object[] pd : passengerData ) {
+            final Map<String, Object> p = new HashMap<>(  );
             p.put( "Name", pd[0] );
             p.put( "Status", pd[1] );
             p.put( "Miles", number( (Number) pd[2] ) );
@@ -211,11 +216,11 @@ public class FlightRebookingTest {
         return passengerList;
     }
 
-    private LocalDateTime date( String date ) {
+    private LocalDateTime date(final String date ) {
         return LocalDateTime.parse( date );
     }
 
-    private BigDecimal number( Number n ) {
+    private BigDecimal number(final Number n ) {
         return BigDecimal.valueOf( n.longValue() );
     }
 }

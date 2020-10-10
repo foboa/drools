@@ -19,6 +19,7 @@ package org.drools.workbench.models.guided.dtable.backend;
 import java.util.List;
 
 import org.drools.workbench.models.guided.dtable.backend.util.DataUtilities;
+import org.drools.workbench.models.datamodel.rule.Attribute;
 import org.drools.workbench.models.guided.dtable.shared.model.AttributeCol52;
 import org.drools.workbench.models.guided.dtable.shared.model.DTCellValue52;
 import org.drools.workbench.models.guided.dtable.shared.model.GuidedDecisionTable52;
@@ -43,9 +44,9 @@ public class GuidedDTDRLPersistenceResolvedHitPolicyTest {
 
         dtable.setData( DataUtilities.makeDataLists(
                 new Object[][]{
-                        new Object[]{1, "desc-row1"},
-                        new Object[]{2, "desc-row2"},
-                        new Object[]{3, "desc-row3"}
+                        new Object[]{1, "", "desc-row1"},
+                        new Object[]{2, "", "desc-row2"},
+                        new Object[]{3, "", "desc-row3"}
                 } ) );
 
     }
@@ -54,7 +55,7 @@ public class GuidedDTDRLPersistenceResolvedHitPolicyTest {
     public void blockUseOfSalience() {
 
         final AttributeCol52 attributeCol52 = new AttributeCol52();
-        attributeCol52.setAttribute( "salience" );
+        attributeCol52.setAttribute(Attribute.SALIENCE.getAttributeName());
         attributeCol52.setDefaultValue( new DTCellValue52( "123" ) );
 
         dtable.getAttributeCols()
@@ -68,7 +69,7 @@ public class GuidedDTDRLPersistenceResolvedHitPolicyTest {
     public void blockUseOfActivationGroup() {
 
         final AttributeCol52 attributeCol52 = new AttributeCol52();
-        attributeCol52.setAttribute( "activation-group" );
+        attributeCol52.setAttribute(Attribute.ACTIVATION_GROUP.getAttributeName());
         attributeCol52.setDefaultValue( new DTCellValue52( "test" ) );
 
         dtable.getAttributeCols()

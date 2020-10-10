@@ -24,8 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.drools.core.conflict.PhreakConflictResolver;
 import org.drools.core.impl.InternalKnowledgeBase;
 import org.drools.core.marshalling.impl.MarshallerReaderContext;
-import org.drools.core.marshalling.impl.MarshallerWriteContext;
-import org.drools.core.marshalling.impl.ProtobufMessages;
 import org.drools.core.phreak.PropagationEntry;
 import org.drools.core.spi.Activation;
 import org.drools.core.spi.PropagationContext;
@@ -55,7 +53,7 @@ public class AgendaGroupQueueImpl
 
     private InternalWorkingMemory workingMemory;
     private boolean               autoDeactivate = true;
-    private Map<Long, String>     nodeInstances  = new ConcurrentHashMap<Long, String>();
+    private Map<Object, String>     nodeInstances  = new ConcurrentHashMap<>();
 
     private volatile              boolean hasRuleFlowLister;
 
@@ -153,6 +151,7 @@ public class AgendaGroupQueueImpl
 
     public void reset() {
         this.priorityQueue.clear();
+        this.lastRemoved = null;
     }
 
     public Activation[] getAndClear() {
@@ -200,13 +199,13 @@ public class AgendaGroupQueueImpl
         this.autoDeactivate = autoDeactivate;
     }
 
-    public void addNodeInstance(Long processInstanceId,
+    public void addNodeInstance(Object processInstanceId,
                                 String nodeInstanceId) {
         nodeInstances.put( processInstanceId,
                            nodeInstanceId );
     }
 
-    public void removeNodeInstance(Long processInstanceId,
+    public void removeNodeInstance(Object processInstanceId,
                                    String nodeInstanceId) {
         nodeInstances.put( processInstanceId,
                            nodeInstanceId );
@@ -233,7 +232,7 @@ public class AgendaGroupQueueImpl
     }
 
     @Override
-    public Map<Long, String> getNodeInstances() {
+    public Map<Object, String> getNodeInstances() {
         return nodeInstances;
     }
 
@@ -276,28 +275,14 @@ public class AgendaGroupQueueImpl
 
         private static final long     serialVersionUID = 510l;
 
-        private InternalRuleFlowGroup ruleFlowGroup;
+        protected final InternalRuleFlowGroup ruleFlowGroup;
 
         public DeactivateCallback(InternalRuleFlowGroup ruleFlowGroup) {
             this.ruleFlowGroup = ruleFlowGroup;
         }
 
         public DeactivateCallback(MarshallerReaderContext context) throws IOException {
-            this.ruleFlowGroup = (InternalRuleFlowGroup) context.wm.getAgenda().getRuleFlowGroup( context.readUTF() );
-        }
-
-        public DeactivateCallback(MarshallerReaderContext context,
-                                  ProtobufMessages.ActionQueue.Action _action) {
-            this.ruleFlowGroup = (InternalRuleFlowGroup) context.wm.getAgenda().getRuleFlowGroup( _action.getDeactivateCallback().getRuleflowGroup() );
-        }
-
-        public ProtobufMessages.ActionQueue.Action serialize(MarshallerWriteContext context) {
-            return ProtobufMessages.ActionQueue.Action.newBuilder()
-                                               .setType( ProtobufMessages.ActionQueue.ActionType.DEACTIVATE_CALLBACK )
-                                               .setDeactivateCallback( ProtobufMessages.ActionQueue.DeactivateCallback.newBuilder()
-                                                                                                   .setRuleflowGroup( ruleFlowGroup.getName() )
-                                                                                                   .build() )
-                                               .build();
+            this.ruleFlowGroup = (InternalRuleFlowGroup) context.getWorkingMemory().getAgenda().getRuleFlowGroup( context.readUTF() );
         }
 
         public void execute(InternalWorkingMemory workingMemory) {

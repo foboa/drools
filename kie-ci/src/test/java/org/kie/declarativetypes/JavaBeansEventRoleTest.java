@@ -15,14 +15,16 @@
 
 package org.kie.declarativetypes;
 
-import org.drools.compiler.CommonTestMethodBase;
 import org.drools.core.rule.TypeMetaInfo;
+import org.drools.mvel.CommonTestMethodBase;
 import org.junit.Test;
 import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
 import org.kie.api.builder.KieFileSystem;
 import org.kie.api.builder.KieModule;
 import org.kie.scanner.KieModuleMetaData;
+
+import static org.junit.Assert.assertTrue;
 
 public class JavaBeansEventRoleTest extends CommonTestMethodBase {
 

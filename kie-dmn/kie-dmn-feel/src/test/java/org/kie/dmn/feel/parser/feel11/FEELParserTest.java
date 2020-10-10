@@ -16,21 +16,16 @@
 
 package org.kie.dmn.feel.parser.feel11;
 
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.notNullValue;
-import static org.hamcrest.Matchers.empty;
-import static org.junit.Assert.assertThat;
-import static org.kie.dmn.feel.util.DynamicTypeUtils.entry;
-import static org.kie.dmn.feel.util.DynamicTypeUtils.mapOf;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import org.antlr.v4.runtime.tree.ParseTree;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.kie.dmn.feel.lang.Type;
+import org.kie.dmn.feel.lang.ast.ASTNode;
+import org.kie.dmn.feel.lang.ast.AtLiteralNode;
 import org.kie.dmn.feel.lang.ast.BaseNode;
 import org.kie.dmn.feel.lang.ast.BetweenNode;
 import org.kie.dmn.feel.lang.ast.BooleanNode;
@@ -58,10 +53,17 @@ import org.kie.dmn.feel.lang.ast.RangeNode;
 import org.kie.dmn.feel.lang.ast.SignedUnaryNode;
 import org.kie.dmn.feel.lang.ast.StringNode;
 import org.kie.dmn.feel.lang.ast.TypeNode;
-import org.kie.dmn.feel.lang.ast.UnaryTestNode;
 import org.kie.dmn.feel.lang.impl.MapBackedType;
 import org.kie.dmn.feel.lang.types.BuiltInType;
 import org.kie.dmn.feel.util.Msg;
+
+import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.hamcrest.Matchers.empty;
+import static org.junit.Assert.assertThat;
+import static org.kie.dmn.feel.util.DynamicTypeUtils.entry;
+import static org.kie.dmn.feel.util.DynamicTypeUtils.mapOf;
 
 public class FEELParserTest {
 
@@ -166,6 +168,46 @@ public class FEELParserTest {
     }
 
     @Test
+    public void testAtLiteralDate() {
+        String inputExpression = "@\"2016-07-29\"";
+        BaseNode bool = parse(inputExpression);
+
+        assertThat(bool, is(instanceOf(AtLiteralNode.class)));
+        assertThat(bool.getResultType(), is(BuiltInType.DATE));
+        assertLocation(inputExpression, bool);
+    }
+
+    @Test
+    public void testAtLiteralTime() {
+        String inputExpression = "@\"23:59:00\"";
+        BaseNode bool = parse(inputExpression);
+
+        assertThat(bool, is(instanceOf(AtLiteralNode.class)));
+        assertThat(bool.getResultType(), is(BuiltInType.TIME));
+        assertLocation(inputExpression, bool);
+    }
+
+    @Test
+    public void testAtLiteralDateAndTime() {
+        String inputExpression = "@\"2016-07-29T05:48:23\"";
+        BaseNode bool = parse(inputExpression);
+
+        assertThat(bool, is(instanceOf(AtLiteralNode.class)));
+        assertThat(bool.getResultType(), is(BuiltInType.DATE_TIME));
+        assertLocation(inputExpression, bool);
+    }
+
+    @Test
+    public void testAtLiteralDuration() {
+        String inputExpression = "@\"P2Y2M\"";
+        BaseNode bool = parse(inputExpression);
+
+        assertThat(bool, is(instanceOf(AtLiteralNode.class)));
+        assertThat(bool.getResultType(), is(BuiltInType.DURATION));
+        assertLocation(inputExpression, bool);
+    }
+
+    @Test
     public void testNullLiteral() {
         String inputExpression = "null";
         BaseNode nullLit = parse( inputExpression );
@@ -183,6 +225,7 @@ public class FEELParserTest {
         assertThat( stringLit, is( instanceOf( StringNode.class ) ) );
         assertThat( stringLit.getResultType(), is( BuiltInType.STRING ) );
         assertLocation( inputExpression, stringLit );
+        assertThat(stringLit.getText(), is(inputExpression));
     }
 
     @Test
@@ -194,7 +237,7 @@ public class FEELParserTest {
         assertThat( nameRef.getResultType(), is( BuiltInType.STRING ) );
         assertLocation( inputExpression, nameRef );
     }
-    
+
     @Test
     public void testQualifiedName() {
         String inputExpression = "My Person.Full Name";
@@ -203,7 +246,7 @@ public class FEELParserTest {
 
         assertThat( qualRef, is( instanceOf( QualifiedNameNode.class ) ) );
         assertThat( qualRef.getResultType(), is( BuiltInType.STRING ) );
-        
+
         List<NameRefNode> parts = ((QualifiedNameNode) qualRef).getParts();
         // `My Person` ...
         assertThat( parts.get(0), is( instanceOf( NameRefNode.class ) ) );
@@ -211,7 +254,7 @@ public class FEELParserTest {
         // ... `.Full Name`
         assertThat( parts.get(1), is( instanceOf( NameRefNode.class ) ) );
         assertThat( parts.get(1).getResultType(), is( BuiltInType.STRING ) );
-        
+
         assertLocation( inputExpression, qualRef );
     }
 
@@ -231,7 +274,7 @@ public class FEELParserTest {
         BaseNode neg = parse( inputExpression );
 
         assertThat( neg, is( instanceOf( FunctionInvocationNode.class ) ) );
-        assertThat( neg.getResultType(), is( BuiltInType.BOOLEAN ) );
+        assertThat( neg.getResultType(), is( BuiltInType.UNKNOWN ) );
         assertThat( neg.getText(), is( "not ( true )" ) );
 
         FunctionInvocationNode not = (FunctionInvocationNode) neg;
@@ -516,10 +559,10 @@ public class FEELParserTest {
         assertThat( in.getExprs().getText(), is( "<=1000, >t, null, (2000..z[, ]z..2000], [(10+5)..(a*b))" ) );
 
         ListNode list = (ListNode) in.getExprs();
-        assertThat( list.getElements().get( 0 ), is( instanceOf( UnaryTestNode.class ) ) );
+        assertThat( list.getElements().get( 0 ), is( instanceOf( RangeNode.class ) ) );
         assertThat( list.getElements().get( 0 ).getText(), is( "<=1000" ) );
 
-        assertThat( list.getElements().get( 1 ), is( instanceOf( UnaryTestNode.class ) ) );
+        assertThat( list.getElements().get( 1 ), is( instanceOf( RangeNode.class ) ) );
         assertThat( list.getElements().get( 1 ).getText(), is( ">t" ) );
 
         assertThat( list.getElements().get( 2 ), is( instanceOf( NullNode.class ) ) );
@@ -566,6 +609,22 @@ public class FEELParserTest {
 
         assertThat( in.getExprs(), is( instanceOf( RangeNode.class ) ) );
         assertThat( in.getExprs().getText(), is( "[(10+5)..(a*b))" ) );
+    }
+
+    @Test
+    public void testInUnaryTestStrings() {
+        final String inputExpression = "name in [\"A\"..\"Z...\")";
+        final BaseNode inNode = parse( inputExpression );
+
+        assertThat( inNode, is( instanceOf( InNode.class ) ) );
+        assertThat( inNode.getResultType(), is( BuiltInType.BOOLEAN ) );
+        assertThat( inNode.getText(), is( inputExpression ) );
+
+        final InNode in = (InNode) inNode;
+        assertThat( in.getExprs(), is( instanceOf( RangeNode.class ) ) );
+        final RangeNode range = (RangeNode) in.getExprs();
+        assertThat( range.getStart().getText(), is( "\"A\"" ) );
+        assertThat( range.getEnd().getText(), is( "\"Z...\"" ) );
     }
 
     @Test
@@ -669,17 +728,17 @@ public class FEELParserTest {
         assertThat( ctx.getEntries().size(), is( 3 ) );
 
         ContextEntryNode entry = ctx.getEntries().get( 0 );
-        assertThat( entry.getName(), is( instanceOf( NameDefNode.class ) ) );
-        NameDefNode name = (NameDefNode) entry.getName();
-        assertThat( name.getName(), is( notNullValue() ) );
-        assertThat( name.getName(), is("\"a string key\"") );
+        assertThat(entry.getName(), is(instanceOf(StringNode.class)));
+        StringNode nameNode = (StringNode) entry.getName();
+        assertThat(nameNode.getText(), is(notNullValue()));
+        assertThat(nameNode.getText(), is("\"a string key\"")); // Reference String literal test, BaseNode#getText() return the FEEL equivalent expression, in this case quoted.
         assertThat( entry.getValue(), is( instanceOf( NumberNode.class ) ) );
         assertThat( entry.getResultType(), is( BuiltInType.NUMBER ) );
         assertThat( entry.getValue().getText(), is("10") );
 
         entry = ctx.getEntries().get( 1 );
         assertThat( entry.getName(), is( instanceOf( NameDefNode.class ) ) );
-        name = (NameDefNode) entry.getName();
+        NameDefNode name = (NameDefNode) entry.getName();
         assertThat( name.getParts(), is( notNullValue() ) );
         assertThat( name.getParts().size(), is( 5 ) );
         assertThat( entry.getName().getText(), is("a non-string key") );
@@ -696,6 +755,50 @@ public class FEELParserTest {
         assertThat( entry.getValue(), is( instanceOf( RangeNode.class ) ) );
         assertThat( entry.getResultType(), is( BuiltInType.RANGE ) );
         assertThat( entry.getValue().getText(), is( "[10..50]" ) );
+    }
+
+    @Test
+    public void testVariableWithInKeyword() {
+        String inputExpression = "{ a variable with in keyword : 10, "
+                + " another variable : a variable with in keyword + 20, "
+                + " another in variable : an external in variable / 2 }";
+        BaseNode ctxbase = parse( inputExpression, mapOf(entry("an external in variable", BuiltInType.NUMBER)) );
+
+        assertThat( ctxbase, is( instanceOf( ContextNode.class ) ) );
+        assertThat( ctxbase.getText(), is( inputExpression ) );
+
+        ContextNode ctx = (ContextNode) ctxbase;
+        assertThat( ctx.getEntries().size(), is( 3 ) );
+
+        ContextEntryNode entry = ctx.getEntries().get( 0 );
+        assertThat( entry.getName(), is( instanceOf( NameDefNode.class ) ) );
+        NameDefNode name = (NameDefNode) entry.getName();
+        assertThat( name.getParts(), is( notNullValue() ) );
+        assertThat( name.getParts().size(), is( 5 ) );
+        assertThat( entry.getName().getText(), is("a variable with in keyword") );
+        assertThat( entry.getValue(), is( instanceOf( NumberNode.class ) ) );
+        assertThat( entry.getResultType(), is( BuiltInType.NUMBER ) );
+        assertThat( entry.getValue().getText(), is("10") );
+
+        entry = ctx.getEntries().get( 1 );
+        assertThat( entry.getName(), is( instanceOf( NameDefNode.class ) ) );
+        name = (NameDefNode) entry.getName();
+        assertThat( name.getParts(), is( notNullValue() ) );
+        assertThat( name.getParts().size(), is( 2 ) );
+        assertThat( entry.getName().getText(), is("another variable") );
+        assertThat( entry.getValue(), is( instanceOf( InfixOpNode.class ) ) );
+        assertThat( entry.getResultType(), is( BuiltInType.NUMBER ) );
+        assertThat( entry.getValue().getText(), is( "a variable with in keyword + 20" ) );
+
+        entry = ctx.getEntries().get( 2 );
+        assertThat( entry.getName(), is( instanceOf( NameDefNode.class ) ) );
+        name = (NameDefNode) entry.getName();
+        assertThat( name.getParts(), is( notNullValue() ) );
+        assertThat( name.getParts().size(), is( 3 ) );
+        assertThat( entry.getName().getText(), is("another in variable") );
+        assertThat( entry.getValue(), is( instanceOf( InfixOpNode.class ) ) );
+        assertThat( entry.getResultType(), is( BuiltInType.NUMBER ) );
+        assertThat( entry.getValue().getText(), is( "an external in variable / 2" ) );
     }
 
     @Test
@@ -1112,6 +1215,7 @@ public class FEELParserTest {
         assertThat( function.getParams().getElements(), is( empty() ) );
     }
 
+    @Ignore("dropped since DMNv1.2")
     @Test
     public void testFunctionDecisionTableInvocation() {
         String inputExpression = "decision table( "
@@ -1120,7 +1224,7 @@ public class FEELParserTest {
                                  + "    rule list: ["
                                  + "        [ >60      , \"good\" , \"Medium\" ],"
                                  + "        [ >60      , \"bad\"  , \"High\"   ],"
-                                 + "        [ [25..60] , -        , \"Medium\" ],"
+                                 + "        [ [25..60] , -        , \"Medium\" ]," // also another problem is the - operator cannot be inside of expression.
                                  + "        [ <25      , \"good\" , \"Low\"    ],"
                                  + "        [ <25      , \"bad\"  , \"Medium\" ] ],"
                                  + "    hit policy: \"Unique\" )";
@@ -1162,12 +1266,12 @@ public class FEELParserTest {
         assertThat( named.getExpression(), is( instanceOf( ListNode.class ) ) );
 
         list = (ListNode) named.getExpression();
-        assertThat( list.getElements().size(), is( 5 ) );
+        assertThat(list.getElements().size(), is(5)); // this assert on the 5 rows but third row contains the - operation which is not allowed in expression.
         assertThat( list.getElements().get( 0 ), is( instanceOf( ListNode.class ) ) );
 
         ListNode rule = (ListNode) list.getElements().get( 0 );
         assertThat( rule.getElements().size(), is( 3 ) );
-        assertThat( rule.getElements().get( 0 ), is( instanceOf( UnaryTestNode.class ) ) );
+        assertThat( rule.getElements().get( 0 ), is( instanceOf( RangeNode.class ) ) );
         assertThat( rule.getElements().get( 0 ).getText(), is( ">60" ) );
         assertThat( rule.getElements().get( 1 ), is( instanceOf( StringNode.class ) ) );
         assertThat( rule.getElements().get( 1 ).getText(), is( "\"good\"" ) );
@@ -1241,10 +1345,30 @@ public class FEELParserTest {
     }
 
     @Test
+    public void testVariableNameWithValidCharactersHorseEmoji() {
+        String var = "🐎";
+        assertThat(FEELParser.isVariableNameValid(var), is(true));
+    }
+
+    @Test
+    public void testVariableNameWithInvalidCharacterPercentSimplified() {
+        String var = "banana%mango";
+        assertThat(FEELParser.isVariableNameValid(var), is(false));
+        assertThat(FEELParser.checkVariableName(var).get(0).getMessage(), is(Msg.createMessage(Msg.INVALID_VARIABLE_NAME, "character", "%")));
+    }
+
+    @Test
     public void testVariableNameWithInvalidCharacterPercent() {
         String var = "?_873./-'%+*valid";
         assertThat( FEELParser.isVariableNameValid( var ), is( false ) );
         assertThat( FEELParser.checkVariableName( var ).get( 0 ).getMessage(), is( Msg.createMessage(Msg.INVALID_VARIABLE_NAME, "character", "%") ) );
+    }
+
+    @Test
+    public void testVariableNameWithInvalidCharacterAt() {
+        String var = "?_873./-'@+*valid";
+        assertThat(FEELParser.isVariableNameValid(var), is(false));
+        assertThat(FEELParser.checkVariableName(var).get(0).getMessage(), is(Msg.createMessage(Msg.INVALID_VARIABLE_NAME, "character", "@")));
     }
 
     @Test
@@ -1255,20 +1379,13 @@ public class FEELParserTest {
     }
 
     @Test
-    public void testVariableNameCantContainKeywordIn() {
-        String var = "variable can't contain 'in' keyword";
-        assertThat( FEELParser.isVariableNameValid( var ), is( false ) );
-        assertThat( FEELParser.checkVariableName( var ).get( 0 ).getMessage(), is( Msg.createMessage(Msg.INVALID_VARIABLE_NAME, "keyword", "in") ) );
-    }
-
-    @Test
     public void testVariableNameCantStartWithKeyword() {
         String var = "for keyword is an invalid start for a variable name";
         assertThat( FEELParser.isVariableNameValid( var ), is( false ) );
         assertThat( FEELParser.checkVariableName( var ).get( 0 ).getMessage(), is( Msg.createMessage(Msg.INVALID_VARIABLE_NAME_START, "keyword", "for") ) );
     }
 
-    private void assertLocation(String inputExpression, BaseNode number) {
+    public static void assertLocation(String inputExpression, ASTNode number) {
         assertThat( number.getText(), is( inputExpression ) );
         assertThat( number.getStartChar(), is( 0 ) );
         assertThat( number.getStartLine(), is( 1 ) );
@@ -1283,11 +1400,11 @@ public class FEELParserTest {
     }
 
     private BaseNode parse(String input, Map<String, Type> inputTypes) {
-        FEEL_1_1Parser parser = FEELParser.parse(null, input, inputTypes, Collections.emptyMap(), Collections.emptyList());
+        FEEL_1_1Parser parser = FEELParser.parse(null, input, inputTypes, Collections.emptyMap(), Collections.emptyList(), Collections.emptyList(), null);
 
         ParseTree tree = parser.expression();
 
-        ASTBuilderVisitor v = new ASTBuilderVisitor(inputTypes);
+        ASTBuilderVisitor v = new ASTBuilderVisitor(inputTypes, null);
         BaseNode expr = v.visit( tree );
         return expr;
     }

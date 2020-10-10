@@ -32,13 +32,20 @@ public class PartitionedDefaultAgenda extends DefaultAgenda {
         this.partition = partition;
     }
 
+    /**
+     * Do not use this constructor! It should be used just by deserialization.
+     */
+    public PartitionedDefaultAgenda() {
+        partition = 0;
+    }
+
     @Override
     protected void doRetract( PropagationContext ectx ) {
         InternalFactHandle factHandle = ectx.getFactHandle();
         ObjectTypeNode.retractLeftTuples( factHandle, ectx, workingMemory, partition );
         ObjectTypeNode.retractRightTuples( factHandle, ectx, workingMemory, partition );
         if ( isMasterPartition() && factHandle.isPendingRemoveFromStore() ) {
-            String epId = factHandle.getEntryPoint().getEntryPointId();
+            String epId = factHandle.getEntryPointName();
             ( (InternalWorkingMemoryEntryPoint) workingMemory.getEntryPoint( epId ) ).removeFromObjectStore( factHandle );
         }
     }

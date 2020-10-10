@@ -23,7 +23,6 @@ import java.io.ObjectOutput;
 import java.io.Serializable;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -46,7 +45,6 @@ import org.drools.core.rule.LogicTransformer;
 import org.drools.core.rule.QueryImpl;
 import org.drools.core.rule.RuleConditionElement;
 import org.drools.core.spi.AgendaGroup;
-import org.drools.core.spi.CompiledInvoker;
 import org.drools.core.spi.Consequence;
 import org.drools.core.spi.Enabled;
 import org.drools.core.spi.KnowledgeHelper;
@@ -57,11 +55,10 @@ import org.drools.core.time.impl.Timer;
 import org.drools.core.util.StringUtils;
 import org.kie.api.definition.rule.Query;
 import org.kie.api.io.Resource;
-import org.kie.api.runtime.rule.RuleUnit;
 import org.kie.internal.definition.rule.InternalRule;
 import org.kie.internal.security.KiePolicyHelper;
 
-import static org.drools.core.util.IoUtils.readBytesFromInputStream;
+import static org.kie.internal.ruleunit.RuleUnitUtil.isLegacyRuleUnit;
 
 public class RuleImpl implements Externalizable,
                                  Wireable,
@@ -97,7 +94,7 @@ public class RuleImpl implements Externalizable,
     /** The Rule is dirty after patterns have been added */
     private boolean                  dirty;
     private Map<String, Declaration> declarations;
-    private Map<String, String[]>    requiredDeclarations = new HashMap<String, String[]>();
+    private Map<String, String[]>    requiredDeclarations = new HashMap<>();
 
     private GroupElement lhsRoot;
 
@@ -105,7 +102,7 @@ public class RuleImpl implements Externalizable,
 
     private String                   agendaGroup = AgendaGroup.MAIN;
 
-    private Map<String, Object>      metaAttributes = new HashMap<String, Object>();
+    private Map<String, Object>      metaAttributes = new HashMap<>();
 
     /** Consequence. */
     private Consequence consequence;
@@ -173,7 +170,7 @@ public class RuleImpl implements Externalizable,
         out.writeObject( metaAttributes );
         out.writeObject( requiredDeclarations );
 
-        if ( this.consequence instanceof CompiledInvoker) {
+        if ( Consequence.isCompiledInvoker( this.consequence ) ) {
             out.writeObject( null );
             out.writeObject( null );
         } else {
@@ -234,7 +231,7 @@ public class RuleImpl implements Externalizable,
 
     public void addUsedQuery(QueryImpl query) {
         if (usedQueries == null) {
-            usedQueries = new ArrayList<QueryImpl>();
+            usedQueries = new ArrayList<>();
         }
         usedQueries.add(query);
     }
@@ -246,7 +243,7 @@ public class RuleImpl implements Externalizable,
      */
     public List<QueryImpl> getDependingQueries() {
         if (dependingQueries == null) {
-            dependingQueries = usedQueries == null ? Collections.<QueryImpl>emptyList() : collectDependingQueries(new LinkedList<QueryImpl>());
+            dependingQueries = usedQueries == null ? Collections.emptyList() : collectDependingQueries(new LinkedList<>());
         }
         return dependingQueries;
     }
@@ -340,6 +337,7 @@ public class RuleImpl implements Externalizable,
         return this.name;
     }
 
+    @Override
     public String getFullyQualifiedName() {
         return getPackageName() + "." + getName();
     }
@@ -352,25 +350,25 @@ public class RuleImpl implements Externalizable,
     public Salience getSalience() {
         return this.salience;
     }
-    
+
     /**
      * Retrieve the <code>Rule</code> salience value.
-     * 
+     *
      * @return The salience value.
      */
     public int getSalienceValue() {
     	return getSalience().getValue();
     }
-    
+
     /**
 	 * Returns <code>true</code> if the rule uses dynamic salience, <code>false</code> otherwise.
-	 * 
+	 *
 	 * @return <code>true</code> if the rule uses dynamic salience, else <code>false</code>.
 	 */
     public boolean isSalienceDynamic() {
     	return getSalience().isDynamic();
     }
-    
+
     /**
      * Set the <code>Rule<code> salience.
      *
@@ -392,6 +390,7 @@ public class RuleImpl implements Externalizable,
         return this;
     }
 
+    @Override
     public boolean isMainAgendaGroup() {
         return AgendaGroup.MAIN.equals( agendaGroup );
     }
@@ -604,7 +603,7 @@ public class RuleImpl implements Externalizable,
 
     public void wire(Object object) {
         if ( object instanceof Consequence ) {
-            Consequence c = KiePolicyHelper.isPolicyEnabled() ? new SafeConsequence((Consequence) object) : (Consequence) object;
+            Consequence c = KiePolicyHelper.isPolicyEnabled() ? new Consequence.SafeConsequence((Consequence) object) : (Consequence) object;
             if ( DEFAULT_CONSEQUENCE_NAME.equals( c.getName() ) ) {
                 setConsequence( c );
             } else {
@@ -654,7 +653,7 @@ public class RuleImpl implements Externalizable,
 
     public void addNamedConsequence(String name, Consequence consequence) {
         if ( this.namedConsequences == null ) {
-            this.namedConsequences = new HashMap<String, Consequence>();
+            this.namedConsequences = new HashMap<>();
         }
         this.namedConsequences.put(name, consequence);
     }
@@ -716,9 +715,8 @@ public class RuleImpl implements Externalizable,
             if ( other.name != null ) return false;
         } else if ( !name.equals( other.name ) ) return false;
         if ( pkg == null ) {
-            if ( other.pkg != null ) return false;
-        } else if ( !pkg.equals( other.pkg ) ) return false;
-        return true;
+            return other.pkg == null;
+        } else return pkg.equals(other.pkg);
     }
 
     public void setSemanticallyValid(final boolean valid) {
@@ -821,7 +819,7 @@ public class RuleImpl implements Externalizable,
 
     public void addChild(RuleImpl child) {
         if (children == null) {
-            children = new ArrayList<RuleImpl>();
+            children = new ArrayList<>();
         }
         children.add(child);
     }
@@ -862,40 +860,27 @@ public class RuleImpl implements Externalizable,
         return ruleUnitClassName;
     }
 
-    public void setRuleUnitClass( Class<? extends RuleUnit> ruleUnit ) {
+    public void setRuleUnitClass( Class<?> ruleUnit ) {
         setRuleUnitClassName( ruleUnit.getName() );
     }
 
     public void setRuleUnitClassName( String ruleUnitClassName ) {
         this.ruleUnitClassName = ruleUnitClassName;
+        if (isLegacyRuleUnit()) {
+            setAgendaGroup( ruleUnitClassName );
+        }
     }
 
     public boolean hasRuleUnit() {
         return ruleUnitClassName != null;
     }
 
-    public static class SafeConsequence implements Consequence, Serializable {
-        private static final long serialVersionUID = -8109957972163261899L;
-        private final Consequence delegate;
-        public SafeConsequence( Consequence delegate ) {
-            this.delegate = delegate;
-        }
+    public Declaration[] findEnabledDeclarations(Map<String, Declaration> decls) {
+        return this.enabled.findDeclarations(decls);
+    }
 
-        @Override
-        public String getName() {
-            return this.delegate.getName();
-        }
-
-        @Override
-        public void evaluate(final KnowledgeHelper knowledgeHelper, final WorkingMemory workingMemory) throws Exception {
-            AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
-                @Override
-                public Object run() throws Exception {
-                    delegate.evaluate(knowledgeHelper, workingMemory);
-                    return null;
-                }
-            }, KiePolicyHelper.getAccessContext());
-        }
+    public Declaration[] findSalienceDeclarations(Map<String, Declaration> decls) {
+        return this.salience.findDeclarations(decls);
     }
 
     public static class SafeSalience implements Salience, Serializable {
@@ -909,12 +894,7 @@ public class RuleImpl implements Externalizable,
         public int getValue(final KnowledgeHelper khelper,
                             final org.kie.api.definition.rule.Rule rule,
                             final WorkingMemory workingMemory) {
-            return AccessController.doPrivileged(new PrivilegedAction<Integer>() {
-                @Override
-                public Integer run() {
-                    return delegate.getValue(khelper, rule, workingMemory);
-                }
-            }, KiePolicyHelper.getAccessContext());
+            return AccessController.doPrivileged((PrivilegedAction<Integer>) () -> delegate.getValue(khelper, rule, workingMemory), KiePolicyHelper.getAccessContext());
         }
 
         @Override
@@ -939,35 +919,11 @@ public class RuleImpl implements Externalizable,
 
         @Override
         public boolean getValue(final Tuple tuple,
-                                final Declaration[] declrs,
+                                final Declaration[] declarations,
                                 final RuleImpl rule,
                                 final WorkingMemory workingMemory) {
-            return AccessController.doPrivileged(new PrivilegedAction<Boolean>() {
-                @Override
-                public Boolean run() {
-                    return delegate.getValue(tuple, declrs, rule, workingMemory);
-                }
-            }, KiePolicyHelper.getAccessContext());
+            return AccessController.doPrivileged((PrivilegedAction<Boolean>) () -> delegate.getValue(tuple, declarations, rule, workingMemory), KiePolicyHelper.getAccessContext());
         }
-    }
 
-    public static java.util.List getMethodBytecode( Class cls, String ruleClassName, String packageName, String methodName, String resource ) {
-        java.io.InputStream is = cls.getClassLoader().getResourceAsStream( resource );
-        try {
-            byte[] data = readBytesFromInputStream( is );
-            org.drools.core.util.asm.MethodComparator.Tracer visit = new org.drools.core.util.asm.MethodComparator.Tracer(methodName);
-            new org.mvel2.asm.ClassReader( data ).accept( visit, org.mvel2.asm.ClassReader.SKIP_DEBUG  );
-            return visit.getText();
-        } catch ( java.io.IOException e ) {
-            throw new RuntimeException("Unable getResourceAsStream for Class '" + ruleClassName+ "' ");
-        } finally {
-            if (is != null) {
-                try {
-                    is.close();
-                } catch (IOException e) {
-                    throw new RuntimeException( e );
-                }
-            }
-        }
     }
 }

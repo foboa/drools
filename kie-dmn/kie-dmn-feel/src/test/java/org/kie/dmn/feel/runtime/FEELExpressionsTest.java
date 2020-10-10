@@ -16,14 +16,16 @@
 
 package org.kie.dmn.feel.runtime;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collection;
+
 import org.junit.runners.Parameterized;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 
 public class FEELExpressionsTest extends BaseFEELTest {
 
-    @Parameterized.Parameters(name = "{index}: {0} ({1}) = {2}")
+    @Parameterized.Parameters(name = "{3}: {0} ({1}) = {2}")
     public static Collection<Object[]> data() {
         final Object[][] cases = new Object[][] {
                 // quantified expressions
@@ -58,26 +60,21 @@ public class FEELExpressionsTest extends BaseFEELTest {
                 {"{ is minor : < 18, bob is minor : is minor(16) }.bob is minor", Boolean.TRUE , null},
 
                 // negated unary tests
-                {"10 in ( not( <5, >=20, =15, !=10 ) )", Boolean.TRUE, null},
-                {"10 in ( not( <5, >=20, =10 ) )", Boolean.FALSE, null},
-                {"10 in ( not( <5 ) )", Boolean.TRUE, null},
-                {"10 in ( not( (10..20] ) )", Boolean.TRUE, null},
-                {"10 in ( not( 10 ) )", Boolean.FALSE, null},
-                {"10 in ( not( 5 ) )", Boolean.TRUE, null},
-                {"10 in ( not( 5, (5+5), (20+10) ) )", Boolean.FALSE, null},
-                {"10 in ( not( 5, (20+10) ) )", Boolean.TRUE, null},
-                {"10 in ( not( >5*20 ) )", Boolean.TRUE , null},
-                {"10 in ( not( 10 ), not( 20 ) )", Boolean.TRUE , null},
-                {"10 in ( not( null, 10 ) )", Boolean.FALSE , null},
-                {"10 in ( not( 5, 10 ) )", Boolean.FALSE , null},
-                {"null in ( not( 10, null ) )", Boolean.FALSE , null},
-                {"\"Boston\" in ( not( \"Toronto\", \"Montreal\" ) )", Boolean.TRUE , null},
-                {"\"Boston\" in ( not( \"Toronto\", \"Boston\" ) )", Boolean.FALSE , null},
+                {"10 in ( not( <5, >=20, =15, !=10 ) )", Boolean.FALSE, FEELEvent.Severity.ERROR},
+                {"\"Boston\" in ( not( \"Toronto\", \"Montreal\" ) )", Boolean.FALSE , FEELEvent.Severity.ERROR},
+
+                // Unary tests with ? character
+                {"{ ? foo : 5, result : ? foo < 10 }.result", Boolean.TRUE , null},
+                {"{ ? foo : 5, ? bar : 10, result : ? foo < ? bar}.result", Boolean.TRUE , null},
+                {"{ ?foo : 5, result : ?foo < 10 }.result", Boolean.TRUE , null},
+                {"{ foo ? : 5, result : foo ? < 10 }.result", Boolean.TRUE , null},
+                {"{ foo?bar : 5, result : foo?bar < 10 }.result", Boolean.TRUE , null},
 
                 // unary tests with context evaluation, i.e., the test is defined before the variable "x"
-                {"{ test : > x, y : 20, x : 10, result : y in ( test ) }.result", Boolean.TRUE , null},
-                {"{ test : > x, y : 20, x : 10, result : test( y ) }.result", Boolean.TRUE , null},
-
+                {"{ test : > x, y : 20, x : 10, result : y in ( test ) }.result", Boolean.FALSE, FEELEvent.Severity.ERROR},
+                {"{ test : > x, y : 20, x : 10, result : test( y ) }.result", null, FEELEvent.Severity.ERROR},
+                {"{ x : 10, test : > x, y : 20, result : y in ( test ) }.result", Boolean.TRUE , null},
+                {"{ x : 10, test : > x, y : 20, result : test( y ) }.result", Boolean.TRUE , null},
                 {"{ test : in x, y : 20, x : [10, 20, 30], result : test( y ) }.result", null, FEELEvent.Severity.ERROR},
                 
                 {"2 in 2", Boolean.TRUE , null},
@@ -89,9 +86,13 @@ public class FEELExpressionsTest extends BaseFEELTest {
                 {"{ x : 47, result : x in 2 }.result", Boolean.FALSE , null},
                 {"{ someList : [1, 2, 3], result : 47 in someList }.result", Boolean.FALSE , null},
                 {"{ someList : [1, 2, 3], x : 47, result : x in someList }.result", Boolean.FALSE , null},
-                {"{ someNestedList : { theList : [1, 2, 3] } , x : 47, result : x in someNestedList.theList }.result", Boolean.FALSE , null}
+                {"{ someNestedList : { theList : [1, 2, 3] } , x : 47, result : x in someNestedList.theList }.result", Boolean.FALSE , null},
+                {"{ exp: 2, v: 3, r: exp**v}.r", BigDecimal.valueOf(8), null},
+                {"{Principal: 12, Rate: 1, Fees: 1, Term: -1, R: (Principal*Rate/12)/(1-(1+Rate/12)**-Term)+Fees}.R", new BigDecimal("-11.00000000000000000000000000000005"), null},
+                {"3[item > 2]", Arrays.asList(new BigDecimal(3)), null},
+                {"contains([\"foobar\"], \"of\")", Boolean.FALSE, null},
 
         };
-        return Arrays.asList( cases );
+        return addAdditionalParameters(cases, false);
     }
 }

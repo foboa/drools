@@ -16,12 +16,19 @@
 
 package org.kie.dmn.feel.lang.ast;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
 import org.kie.dmn.feel.lang.EvaluationContext;
 import org.kie.dmn.feel.lang.Type;
 import org.kie.dmn.feel.runtime.FEELFunction;
+import org.kie.dmn.feel.runtime.Range;
 import org.kie.dmn.feel.runtime.UnaryTest;
+import org.kie.dmn.feel.runtime.functions.AbstractCustomFEELFunction;
 import org.kie.dmn.feel.util.Msg;
 
 public class FunctionInvocationNode
@@ -60,20 +67,31 @@ public class FunctionInvocationNode
         if ( name instanceof NameRefNode ) {
             // simple name
             value = ctx.getValue( name.getText() );
-        } else {
+        } else if (name instanceof QualifiedNameNode) {
             QualifiedNameNode qn = (QualifiedNameNode) name;
             String[] qns = qn.getPartsAsStringArray();
             value = ctx.getValue( qns );
+        } else if (name instanceof PathExpressionNode) {
+            PathExpressionNode pathExpressionNode = (PathExpressionNode) name;
+            value = pathExpressionNode.evaluate(ctx);
+        } else {
+            value = name.evaluate(ctx);
         }
         if ( value instanceof FEELFunction ) {
             function = (FEELFunction) value;
-            if ( function != null ) {
-                Object[] p = params.getElements().stream().map( e -> e.evaluate( ctx ) ).toArray( Object[]::new );
-                Object result = function.invokeReflectively( ctx, p );
-                return result;
+            Object[] p = params.getElements().stream().map( e -> e.evaluate( ctx ) ).toArray( Object[]::new );
+            List<String> functionNameParts;
+            if (name instanceof NameRefNode) {
+                functionNameParts = Collections.singletonList(name.getText());
+            } else if (name instanceof QualifiedNameNode) {
+                functionNameParts = Arrays.asList(((QualifiedNameNode) name).getPartsAsStringArray());
+            } else if (name instanceof PathExpressionNode) {
+                functionNameParts = Collections.singletonList(function.getName());
             } else {
-                ctx.notifyEvt( astEvent(Severity.ERROR, Msg.createMessage(Msg.FUNCTION_NOT_FOUND, name.getText())) );
+                functionNameParts = Collections.emptyList();
             }
+            Object result = invokeTheFunction(functionNameParts, function, ctx, p);
+            return result;
         } else if( value instanceof UnaryTest ) {
             if( params.getElements().size() == 1 ) {
                 Object p = params.getElements().get( 0 ).evaluate( ctx );
@@ -81,12 +99,55 @@ public class FunctionInvocationNode
             } else {
                 ctx.notifyEvt( astEvent(Severity.ERROR, Msg.createMessage(Msg.CAN_T_INVOKE_AN_UNARY_TEST_WITH_S_PARAMETERS_UNARY_TESTS_REQUIRE_1_SINGLE_PARAMETER, params.getElements().size()) ) );
             }
+        } else if (value instanceof Range) {
+            if (params.getElements().size() == 1) {
+                Object p = params.getElements().get(0).evaluate(ctx);
+                return ((Range) value).includes(p);
+            } else {
+                ctx.notifyEvt(astEvent(Severity.ERROR, Msg.createMessage(Msg.CAN_T_INVOKE_AN_UNARY_TEST_WITH_S_PARAMETERS_UNARY_TESTS_REQUIRE_1_SINGLE_PARAMETER, params.getElements().size())));
+            }
         }
         return null;
+    }
+
+    private Object invokeTheFunction(List<String> names, FEELFunction fn, EvaluationContext ctx, Object[] params) {
+        if (names.size() == 1 || names.isEmpty()) {
+            if (fn instanceof AbstractCustomFEELFunction<?>) {
+                AbstractCustomFEELFunction<?> ff = (AbstractCustomFEELFunction<?>) fn;
+                if (ff.isProperClosure()) {
+                    return ff.invokeReflectively(ff.getEvaluationContext(), params);
+                }
+            }
+            return fn.invokeReflectively(ctx, params);
+        } else {
+            try {
+                Object newRoot = ctx.getValue(names.get(0));
+                ctx.enterFrame();
+                try {
+                    Map<String, Object> asMap = ((Map<String, Object>) newRoot);
+                    asMap.forEach(ctx::setValue);
+                } catch (ClassCastException e) {
+                    ctx.setRootObject(newRoot); // gracefully handle the less common scenario.
+                }
+                return invokeTheFunction(names.subList(1, names.size()), fn, ctx, params);
+            } finally {
+                ctx.exitFrame();
+            }
+        }
     }
 
     @Override
     public Type getResultType() {
         return name.getResultType();
+    }
+
+    @Override
+    public ASTNode[] getChildrenNode() {
+        return new ASTNode[] { name, params };
+    }
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
     }
 }

@@ -16,10 +16,19 @@
 
 package org.drools.workbench.models.testscenarios.backend;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+
+import org.drools.core.addon.ClassTypeResolver;
+import org.drools.core.addon.TypeResolver;
 import org.drools.core.common.InternalAgendaGroup;
-import org.drools.core.common.ProjectClassLoader;
 import org.drools.core.impl.KnowledgeBaseImpl;
 import org.drools.core.time.impl.PseudoClockScheduler;
+import org.drools.reflective.classloader.ProjectClassLoader;
 import org.drools.workbench.models.testscenarios.shared.ActivateRuleFlowGroup;
 import org.drools.workbench.models.testscenarios.shared.ExecutionTrace;
 import org.drools.workbench.models.testscenarios.shared.Expectation;
@@ -35,21 +44,18 @@ import org.drools.workbench.models.testscenarios.shared.VerifyRuleFired;
 import org.junit.Before;
 import org.junit.Test;
 import org.kie.api.runtime.KieSession;
-import org.kie.soup.project.datamodel.commons.types.ClassTypeResolver;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
 import org.kie.soup.project.datamodel.imports.Import;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-
 import static java.util.Arrays.asList;
-import static org.junit.Assert.*;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class ScenarioRunnerTest extends RuleUnit {
 
@@ -79,7 +85,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         Scenario scenario = new Scenario();
         scenario.setPackageName("org.drools.workbench.models.testscenarios.backend");
 
-        ScenarioRunner runner = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl runner = new ScenarioRunnerImpl(ksession,
+                                                           100);
 
         scenario.getFixtures().add(
                 new FactData(
@@ -110,7 +117,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         sc.getFixtures().addAll(facts);
         sc.getGlobals().addAll(globals);
 
-        ScenarioRunner runner = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl runner = new ScenarioRunnerImpl(ksession,
+                                                           100);
         runner.run(sc);
     }
 
@@ -121,7 +129,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         scenario.getImports().addImport(new Import("org.drools.workbench.models.testscenarios.backend.Cheese"));
         scenario.getImports().addImport(new Import("org.drools.workbench.models.testscenarios.backend.Person"));
 
-        ScenarioRunner runner = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl runner = new ScenarioRunnerImpl(ksession,
+                                                           100);
 
         scenario.getFixtures().add(
                 new FactData(
@@ -270,7 +279,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         scenario.getFixtures().add(cheeseFactData);
         scenario.getFixtures().add(f1);
 
-        ScenarioRunner runner = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl runner = new ScenarioRunnerImpl(ksession,
+                                                           100);
 
         VerifyFact vf = new VerifyFact();
         vf.setName("f1");
@@ -308,7 +318,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         scenario.setPackageName("org.drools.workbench.models.testscenarios.backend");
         scenario.getFixtures().add(f1);
 
-        ScenarioRunner runner = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl runner = new ScenarioRunnerImpl(ksession,
+                                                           100);
 
         runner.run(scenario);
     }
@@ -327,7 +338,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         clock.setStartupTime(time);
         when(ksession.getSessionClock()).thenReturn(clock);
 
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
         run.run(sc);
 
         verify(ksession).addEventListener(any(TestingEventListener.class));
@@ -363,7 +375,8 @@ public class ScenarioRunnerTest extends RuleUnit {
 
         sc.getFixtures().addAll(Arrays.asList(assertions));
 
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
         run.run(sc);
 
         verify(ksession).setGlobal("testList", testList);
@@ -378,7 +391,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         clock.setStartupTime(time);
         when(ksession.getSessionClock()).thenReturn(clock);
 
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
         run.run(sc);
 
         assertEquals(time,
@@ -387,7 +401,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         ExecutionTrace ext = new ExecutionTrace();
         ext.setScenarioSimulatedDate(new Date("10-Jul-1974"));
         sc.getFixtures().add(ext);
-        run = new ScenarioRunner(ksession);
+        run = new ScenarioRunnerImpl(ksession,
+                                     100);
         run.run(sc);
 
         long expected = ext.getScenarioSimulatedDate().getTime();
@@ -459,7 +474,8 @@ public class ScenarioRunnerTest extends RuleUnit {
 
         KieSession ksession = getKieSession("test_rules2.drl");
 
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
         run.run(sc);
 
         assertEquals(2,
@@ -536,7 +552,8 @@ public class ScenarioRunnerTest extends RuleUnit {
 
         KieSession ksession = getKieSession("test_rules_infinite_loop.drl");
 
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        0);
         run.run(sc);
 
         assertEquals(sc.getMaxRuleFirings(),
@@ -591,7 +608,8 @@ public class ScenarioRunnerTest extends RuleUnit {
 
         //resolver will need to have generated beans in it - possibly using a composite classloader from the package,
         //including whatever CL has the generated beans...
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
         run.run(scenario);
 
         assertEquals(1,
@@ -652,7 +670,8 @@ public class ScenarioRunnerTest extends RuleUnit {
 
         //resolver will need to have generated beans in it - possibly using a composite classloader from the package,
         //including whatever CL has the generated beans...
-        ScenarioRunner scenarioRunner = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl scenarioRunner = new ScenarioRunnerImpl(ksession,
+                                                                   100);
 
         scenarioRunner.run(scenario);
 
@@ -673,7 +692,8 @@ public class ScenarioRunnerTest extends RuleUnit {
         scenario.getFixtures().addAll(Arrays.asList(given));
         scenario.getFixtures().add(executionTrace);
         ((InternalAgendaGroup) ksession.getAgenda().getRuleFlowGroup("asdf")).setAutoDeactivate(false);
-        scenarioRunner = new ScenarioRunner(ksession);
+        scenarioRunner = new ScenarioRunnerImpl(ksession,
+                                                100);
 
         scenarioRunner.run(scenario);
 
@@ -710,7 +730,8 @@ public class ScenarioRunnerTest extends RuleUnit {
                                                                "=="))));
 
         KieSession ksession = getKieSession("test_stateful.drl");
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
         run.run(sc);
 
         assertTrue(sc.wasSuccessful());
@@ -747,7 +768,8 @@ public class ScenarioRunnerTest extends RuleUnit {
                                                                "=="))));
 
         KieSession ksession = getKieSession("test_stateful.drl");
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
 
         run.run(sc);
 
@@ -787,7 +809,8 @@ public class ScenarioRunnerTest extends RuleUnit {
                                                                "=="))));
 
         KieSession ksession = getKieSession("test_stateful.drl");
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
         run.run(sc);
 
         assertTrue(sc.wasSuccessful());
@@ -803,7 +826,8 @@ public class ScenarioRunnerTest extends RuleUnit {
 
         KieSession ksession = getKieSession("test_rules2.drl");
 
-        ScenarioRunner run = new ScenarioRunner(ksession);
+        ScenarioRunnerImpl run = new ScenarioRunnerImpl(ksession,
+                                                        100);
 
         run.run(sc);
 
@@ -824,20 +848,6 @@ public class ScenarioRunnerTest extends RuleUnit {
                      vr.getExpectedCount().intValue());
         assertEquals(0,
                      vr.getActualResult().intValue());
-    }
-
-    @Test
-    public void testCollection() throws Exception {
-
-        KieSession ksession = getKieSession("test_rules2.drl");
-
-        ScenarioRunner run = new ScenarioRunner(ksession);
-
-        Scenario scenario = new Scenario();
-        scenario.getImports().addImport(new Import("org.drools.workbench.models.testscenarios.backend.Cheese"));
-        scenario.getImports().addImport(new Import("org.drools.workbench.models.testscenarios.backend.Cheesery"));
-
-        run.run(scenario);
     }
 
     private Expectation[] populateScenarioForFailure(Scenario sc) {

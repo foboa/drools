@@ -22,17 +22,14 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
-import java.net.URL;
-import java.net.URLConnection;
 import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.ListIterator;
-import java.util.NoSuchElementException;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
-
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.FactoryConfigurationError;
 import javax.xml.parsers.ParserConfigurationException;
@@ -679,7 +676,7 @@ public class ExtensibleXmlParser extends DefaultHandler {
     }
 
     protected String buildPrintMessage(final SAXParseException x) {
-        return this.message.format( new Object[]{x.getSystemId(), new Integer( x.getLineNumber() ), new Integer( x.getColumnNumber() ), x.getMessage()} );
+        return this.message.format( new Object[]{x.getSystemId(), x.getLineNumber(), x.getColumnNumber(), x.getMessage()} );
     }
 
     public void warning(final SAXParseException x) {
@@ -701,17 +698,6 @@ public class ExtensibleXmlParser extends DefaultHandler {
         // Schema files must end with xsd
         if ( !systemId.toLowerCase().endsWith( "xsd" ) ) {
             return null;
-        }
-
-        // try the actual location given by systemId
-        try {
-            if ( getTimeout() >= 0 ) {
-                final URL url = new URL( systemId );
-                URLConnection conn = url.openConnection();
-                    conn.setConnectTimeout( getTimeout() );
-                return new InputSource( conn.getInputStream() );
-            }
-        } catch ( final Exception e ) {
         }
 
         // Try and get the index for the filename, else return null
@@ -799,4 +785,7 @@ public class ExtensibleXmlParser extends DefaultHandler {
         this.parser = parser;
     }
 
+    public Object getNamespaceURI(String namespace) {
+        return this.namespaces.get(namespace);
+    }
 }

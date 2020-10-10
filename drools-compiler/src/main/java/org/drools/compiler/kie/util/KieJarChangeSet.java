@@ -3,7 +3,7 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -15,27 +15,47 @@
 
 package org.drools.compiler.kie.util;
 
-import org.kie.internal.builder.ResourceChangeSet;
-
 import java.util.HashMap;
 import java.util.Map;
 
+import org.kie.internal.builder.ChangeType;
+import org.kie.internal.builder.ResourceChangeSet;
+
 public class KieJarChangeSet {
-    private final Map<String, ResourceChangeSet> changes = new HashMap<String, ResourceChangeSet>();
+    private final Map<String, ResourceChangeSet> changes = new HashMap<>();
 
     public Map<String, ResourceChangeSet> getChanges() {
         return changes;
+    }
+
+    public void removeFile(String file) {
+        changes.put( file, new ResourceChangeSet( file, ChangeType.REMOVED ) );
+    }
+
+    public void addFile(String file) {
+        changes.put( file, new ResourceChangeSet( file, ChangeType.ADDED ) );
+    }
+
+    public void registerChanges(String file, ResourceChangeSet changeSet) {
+        changes.put( file, changeSet );
     }
 
     public boolean contains(String resourceName) {
         return changes.keySet().contains(resourceName);
     }
 
+    public KieJarChangeSet merge(KieJarChangeSet other) {
+        KieJarChangeSet merged = new KieJarChangeSet();
+        merged.changes.putAll(this.changes);
+        merged.changes.putAll(other.changes);
+        return merged;
+    }
+
     @Override
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + ((changes == null) ? 0 : changes.hashCode());
+        result = prime * result + changes.hashCode();
         return result;
     }
 
@@ -45,10 +65,7 @@ public class KieJarChangeSet {
         if ( obj == null ) return false;
         if ( getClass() != obj.getClass() ) return false;
         KieJarChangeSet other = (KieJarChangeSet) obj;
-        if ( changes == null ) {
-            if ( other.changes != null ) return false;
-        } else if ( !changes.equals( other.changes ) ) return false;
-        return true;
+        return changes.equals(other.changes);
     }
 
     @Override

@@ -86,9 +86,9 @@ public class ReteooBuilder
      */
     public ReteooBuilder( final InternalKnowledgeBase  kBase ) {
         this.kBase = kBase;
-        this.rules = new HashMap<String, BaseNode[]>();
-        this.queries = new HashMap<String, BaseNode[]>();
-        this.namedWindows = new HashMap<String, WindowNode>();
+        this.rules = new HashMap<>();
+        this.queries = new HashMap<>();
+        this.namedWindows = new HashMap<>();
 
         //Set to 1 as Rete node is set to 0
         this.idGenerator = new IdGenerator();
@@ -106,7 +106,7 @@ public class ReteooBuilder
      *            The rule to add.
      * @throws InvalidPatternException
      */
-    public synchronized void addRule(final RuleImpl rule) throws InvalidPatternException {
+    public synchronized void addRule(final RuleImpl rule) {
         final List<TerminalNode> terminals = this.ruleBuilder.addRule( rule,
                                                                        this.kBase );
 
@@ -157,7 +157,7 @@ public class ReteooBuilder
 
     public synchronized void removeRules(Collection<RuleImpl> rulesToBeRemoved) {
         // reset working memories for potential propagation
-        InternalWorkingMemory[] workingMemories = this.kBase.getWorkingMemories();
+        Collection<InternalWorkingMemory> workingMemories = this.kBase.getWorkingMemories();
 
         for (RuleImpl rule : rulesToBeRemoved) {
             if (rule.hasChildren() && !rulesToBeRemoved.containsAll( rule.getChildren() )) {
@@ -167,7 +167,13 @@ public class ReteooBuilder
             final RuleRemovalContext context = new RuleRemovalContext( rule );
             context.setKnowledgeBase( kBase );
 
-            for ( BaseNode node : rules.remove( rule.getFullyQualifiedName() ) ) {
+            BaseNode[] rulesTerminalNodes = rules.remove( rule.getFullyQualifiedName() );
+            if (rulesTerminalNodes == null) {
+                // there couldn't be any rule to be removed if it comes from a broken drl
+                continue;
+            }
+
+            for ( BaseNode node : rulesTerminalNodes ) {
                 removeTerminalNode( context, (TerminalNode) node, workingMemories );
             }
 
@@ -181,22 +187,22 @@ public class ReteooBuilder
         }
     }
 
-    public void removeTerminalNode(RuleRemovalContext context, TerminalNode tn, InternalWorkingMemory[] workingMemories)  {
+    public void removeTerminalNode(RuleRemovalContext context, TerminalNode tn, Collection<InternalWorkingMemory> workingMemories)  {
         AddRemoveRule.removeRule( tn, workingMemories, kBase );
 
         BaseNode node = (BaseNode) tn;
-        removeNodeAssociation(node, context.getRule());
+        removeNodeAssociation(node, context.getRule(), new HashSet<>());
 
         resetMasks(removeNodes((AbstractTerminalNode)tn, workingMemories, context));
     }
 
-    private Collection<BaseNode> removeNodes(AbstractTerminalNode terminalNode, InternalWorkingMemory[] wms, RuleRemovalContext context) {
-        Map<Integer, BaseNode> stillInUse = new HashMap<Integer, BaseNode>();
-        Collection<ObjectSource> alphas = new HashSet<ObjectSource>();
+    private Collection<BaseNode> removeNodes(AbstractTerminalNode terminalNode, Collection<InternalWorkingMemory> wms, RuleRemovalContext context) {
+        Map<Integer, BaseNode> stillInUse = new HashMap<>();
+        Collection<ObjectSource> alphas = new HashSet<>();
 
         removePath(wms, context, stillInUse, alphas, terminalNode);
 
-        Set<Integer> removedNodes = new HashSet<Integer>();
+        Set<Integer> removedNodes = new HashSet<>();
         for (ObjectSource alpha : alphas) {
             removeObjectSource( wms, stillInUse, removedNodes, alpha, context );
         }
@@ -209,7 +215,7 @@ public class ReteooBuilder
      * Each time it reaches a subnetwork beta node, the current path evaluation ends, and instead the subnetwork
      * path continues.
      */
-    private void removePath( InternalWorkingMemory[] wms, RuleRemovalContext context, Map<Integer, BaseNode> stillInUse, Collection<ObjectSource> alphas, PathEndNode endNode ) {
+    private void removePath( Collection<InternalWorkingMemory> wms, RuleRemovalContext context, Map<Integer, BaseNode> stillInUse, Collection<ObjectSource> alphas, PathEndNode endNode ) {
         LeftTupleNode[] nodes = endNode.getPathNodes();
         for (int i = endNode.getPositionInPath(); i >= 0; i--) {
             BaseNode node = (BaseNode) nodes[i];
@@ -236,9 +242,9 @@ public class ReteooBuilder
         }
     }
 
-    private boolean removeLeftTupleNode(InternalWorkingMemory[] wms, RuleRemovalContext context, Map<Integer, BaseNode> stillInUse, BaseNode node) {
+    private boolean removeLeftTupleNode(Collection<InternalWorkingMemory> wms, RuleRemovalContext context, Map<Integer, BaseNode> stillInUse, BaseNode node) {
         boolean removed;
-        removed = node.remove(context, this, wms);
+        removed = node.remove(context, this);
 
         if (removed) {
             stillInUse.remove( node.getId() );
@@ -253,13 +259,13 @@ public class ReteooBuilder
         return removed;
     }
 
-    private void removeObjectSource(InternalWorkingMemory[] wms, Map<Integer, BaseNode> stillInUse, Set<Integer> removedNodes, ObjectSource node, RuleRemovalContext context ) {
+    private void removeObjectSource(Collection<InternalWorkingMemory> wms, Map<Integer, BaseNode> stillInUse, Set<Integer> removedNodes, ObjectSource node, RuleRemovalContext context ) {
         if (removedNodes.contains( node.getId() )) {
             return;
         }
         ObjectSource parent = node.getParentObjectSource();
 
-        boolean removed = node.remove( context, this, wms );
+        boolean removed = node.remove( context, this );
 
         if ( !removed ) {
             stillInUse.put( node.getId(), node );
@@ -281,19 +287,19 @@ public class ReteooBuilder
         }
     }
 
-    private void removeNodeAssociation(BaseNode node, Rule rule) {
-        if (node == null || !node.removeAssociation( rule )) {
+    private void removeNodeAssociation(BaseNode node, Rule rule, Set<Integer> removedNodes) {
+        if (node == null || !removedNodes.add( node.getId() ) || !node.removeAssociation( rule )) {
             return;
         }
         if (node instanceof LeftTupleNode) {
-            removeNodeAssociation( ((LeftTupleNode)node).getLeftTupleSource(), rule );
+            removeNodeAssociation( ((LeftTupleNode)node).getLeftTupleSource(), rule, removedNodes );
         }
         if ( NodeTypeEnums.isBetaNode( node ) ) {
-            removeNodeAssociation( ((BetaNode) node).getRightInput(), rule );
+            removeNodeAssociation( ((BetaNode) node).getRightInput(), rule, removedNodes );
         } else if ( node.getType() == NodeTypeEnums.LeftInputAdapterNode ) {
-            removeNodeAssociation( ((LeftInputAdapterNode) node).getObjectSource(), rule );
+            removeNodeAssociation( ((LeftInputAdapterNode) node).getObjectSource(), rule, removedNodes );
         } else if ( node.getType() == NodeTypeEnums.AlphaNode ) {
-            removeNodeAssociation( ((AlphaNode) node).getParentObjectSource(), rule );
+            removeNodeAssociation( ((AlphaNode) node).getParentObjectSource(), rule, removedNodes );
         }
     }
 
@@ -355,44 +361,42 @@ public class ReteooBuilder
                     updateLeafSet( ( BaseNode ) sink, leafSet );
                 }
             }
-        } else if ( NodeTypeEnums.isBetaNode( baseNode ) ) {
-            if ( baseNode.isInUse() ) {
-                leafSet.add( baseNode );
-            }
+        } else if ( NodeTypeEnums.isBetaNode( baseNode ) && ( baseNode.isInUse() )) {
+            leafSet.add( baseNode );
         }
     }
 
     public static class IdGenerator implements Externalizable {
-        private static final String DEFAULT_TOPIC = "DEFAULT_TOPIC";
-
+        private InternalIdGenerator defaultGenerator = new InternalIdGenerator( 1 );
         private Map<String, InternalIdGenerator> generators = new ConcurrentHashMap<>();
 
         public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+            defaultGenerator = (InternalIdGenerator) in.readObject();
             generators = (Map<String, InternalIdGenerator>) in.readObject();
         }
 
         public void writeExternal(ObjectOutput out) throws IOException {
+            out.writeObject( defaultGenerator );
             out.writeObject( generators );
         }
 
         public int getNextId() {
-            return getNextId( DEFAULT_TOPIC );
+            return defaultGenerator.getNextId();
         }
 
         public int getNextId(String topic) {
             return generators.computeIfAbsent( topic, key -> new InternalIdGenerator( 1 ) ).getNextId();
         }
 
-        public synchronized void releaseId( RuleImpl rule, NetworkNode node ) {
-            generators.get( DEFAULT_TOPIC ).releaseId( node.getId() );
+        public synchronized void releaseId(NetworkNode node) {
+            defaultGenerator.releaseId( node.getId() );
             if (node instanceof MemoryFactory) {
-                String unit = rule != null && rule.getRuleUnitClassName() != null ? rule.getRuleUnitClassName() : DEFAULT_RULE_UNIT;
-                generators.get( unit ).releaseId( ( (MemoryFactory) node ).getMemoryId() );
+                generators.get( DEFAULT_RULE_UNIT ).releaseId( ( (MemoryFactory) node ).getMemoryId() );
             }
         }
 
         public int getLastId() {
-            return getLastId( DEFAULT_TOPIC );
+            return defaultGenerator.getLastId();
         }
 
         public int getLastId(String topic) {
@@ -412,7 +416,7 @@ public class ReteooBuilder
 
         public InternalIdGenerator(final int firstId) {
             this.nextId = firstId;
-            this.recycledIds = new LinkedList<Integer>();
+            this.recycledIds = new LinkedList<>();
         }
 
         @SuppressWarnings("unchecked")
@@ -441,53 +445,55 @@ public class ReteooBuilder
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
-        boolean isDrools = out instanceof DroolsObjectOutputStream;
         DroolsObjectOutputStream droolsStream;
         ByteArrayOutputStream bytes;
 
-        if ( isDrools ) {
+        if ( out instanceof DroolsObjectOutputStream ) {
             bytes = null;
             droolsStream = (DroolsObjectOutputStream) out;
         } else {
             bytes = new ByteArrayOutputStream();
             droolsStream = new DroolsObjectOutputStream( bytes );
         }
-        droolsStream.writeObject( rules );
-        droolsStream.writeObject( queries );
-        droolsStream.writeObject( namedWindows );
-        droolsStream.writeObject( idGenerator );
-        if ( !isDrools ) {
-            droolsStream.flush();
-            droolsStream.close();
-            bytes.close();
-            out.writeInt( bytes.size() );
-            out.writeObject( bytes.toByteArray() );
+        try {
+            droolsStream.writeObject( rules );
+            droolsStream.writeObject( queries );
+            droolsStream.writeObject( namedWindows );
+            droolsStream.writeObject( idGenerator );
+        } finally {
+            if ( bytes != null ) {
+                droolsStream.flush();
+                droolsStream.close();
+                bytes.close();
+                out.writeInt( bytes.size() );
+                out.writeObject( bytes.toByteArray() );
+            }
         }
     }
 
     public void readExternal(ObjectInput in) throws IOException,
                                                     ClassNotFoundException {
-        boolean isDrools = in instanceof DroolsObjectInputStream;
         DroolsObjectInputStream droolsStream;
         ByteArrayInputStream bytes;
 
-        if ( isDrools ) {
+        if ( in instanceof DroolsObjectInputStream ) {
             bytes = null;
             droolsStream = (DroolsObjectInputStream) in;
         } else {
             bytes = new ByteArrayInputStream( (byte[]) in.readObject() );
             droolsStream = new DroolsObjectInputStream( bytes );
         }
-
-        this.rules = (Map<String, BaseNode[]>) droolsStream.readObject();
-        this.queries = (Map<String, BaseNode[]>) droolsStream.readObject();
-        this.namedWindows = (Map<String, WindowNode>) droolsStream.readObject();
-        this.idGenerator = (IdGenerator) droolsStream.readObject();
-        if ( !isDrools ) {
-            droolsStream.close();
-            bytes.close();
+        try {
+            this.rules = (Map<String, BaseNode[]>) droolsStream.readObject();
+            this.queries = (Map<String, BaseNode[]>) droolsStream.readObject();
+            this.namedWindows = (Map<String, WindowNode>) droolsStream.readObject();
+            this.idGenerator = (IdGenerator) droolsStream.readObject();
+        } finally {
+            if ( bytes != null ) {
+                droolsStream.close();
+                bytes.close();
+            }
         }
-
     }
 
     public void setRuleBase( InternalKnowledgeBase kBase ) {

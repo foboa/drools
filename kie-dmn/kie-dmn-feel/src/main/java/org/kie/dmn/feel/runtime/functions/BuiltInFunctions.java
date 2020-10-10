@@ -19,10 +19,24 @@ package org.kie.dmn.feel.runtime.functions;
 import java.util.stream.Stream;
 
 import org.kie.dmn.feel.runtime.FEELFunction;
+import org.kie.dmn.feel.runtime.functions.interval.AfterFunction;
+import org.kie.dmn.feel.runtime.functions.interval.BeforeFunction;
+import org.kie.dmn.feel.runtime.functions.interval.CoincidesFunction;
+import org.kie.dmn.feel.runtime.functions.interval.DuringFunction;
+import org.kie.dmn.feel.runtime.functions.interval.FinishedByFunction;
+import org.kie.dmn.feel.runtime.functions.interval.FinishesFunction;
+import org.kie.dmn.feel.runtime.functions.interval.IncludesFunction;
+import org.kie.dmn.feel.runtime.functions.interval.MeetsFunction;
+import org.kie.dmn.feel.runtime.functions.interval.MetByFunction;
+import org.kie.dmn.feel.runtime.functions.interval.OverlapsAfterFunction;
+import org.kie.dmn.feel.runtime.functions.interval.OverlapsBeforeFunction;
+import org.kie.dmn.feel.runtime.functions.interval.OverlapsFunction;
+import org.kie.dmn.feel.runtime.functions.interval.StartedByFunction;
+import org.kie.dmn.feel.runtime.functions.interval.StartsFunction;
 
 public class BuiltInFunctions {
 
-    protected final static FEELFunction[] FUNCTIONS = new FEELFunction[]{
+    protected static final FEELFunction[] FUNCTIONS = new FEELFunction[]{
             new DateFunction(),
             new TimeFunction(),
             new DateAndTimeFunction(),
@@ -47,8 +61,6 @@ public class BuiltInFunctions {
             new MaxFunction(),
             new SumFunction(),
             new MeanFunction(),
-            new AllFunction(),
-            new AnyFunction(),
             new SublistFunction(),
             new AppendFunction(),
             new ConcatenateFunction(),
@@ -65,17 +77,46 @@ public class BuiltInFunctions {
             new DecisionTableFunction(),
             new NotFunction(),
             new SortFunction(),
-
-            // additional functions not part of the spec version 1.1
-            new NowFunction(),
-            new TodayFunction(),
-            new AbsFunction(),
-            new ModuloFunction(),
-            new ProductFunction(),
-            new CodeFunction(),
-            new InvokeFunction(),
-            new SplitFunction()
-
+            new GetEntriesFunction(),
+            new GetValueFunction(),
+            
+            new AllFunction(),
+            new AnyFunction(),
+            AbsFunction.INSTANCE,
+            ModuloFunction.INSTANCE,
+            ProductFunction.INSTANCE,
+            SplitFunction.INSTANCE,
+            StddevFunction.INSTANCE,
+            ModeFunction.INSTANCE,
+            SqrtFunction.INSTANCE,
+            LogFunction.INSTANCE,
+            ExpFunction.INSTANCE,
+            EvenFunction.INSTANCE,
+            OddFunction.INSTANCE,
+            MedianFunction.INSTANCE,
+            
+            DayOfWeekFunction.INSTANCE,
+            DayOfYearFunction.INSTANCE,
+            MonthOfYearFunction.INSTANCE,
+            WeekOfYearFunction.INSTANCE,
+            
+            IsFunction.INSTANCE,
+            
+            // Interval based logic
+            AfterFunction.INSTANCE,
+            BeforeFunction.INSTANCE,
+            CoincidesFunction.INSTANCE,
+            StartsFunction.INSTANCE,
+            StartedByFunction.INSTANCE,
+            FinishesFunction.INSTANCE,
+            FinishedByFunction.INSTANCE,
+            DuringFunction.INSTANCE,
+            IncludesFunction.INSTANCE,
+            OverlapsFunction.INSTANCE,
+            OverlapsBeforeFunction.INSTANCE,
+            OverlapsAfterFunction.INSTANCE,
+            MeetsFunction.INSTANCE,
+            MetByFunction.INSTANCE
             };
 
     public static FEELFunction[] getFunctions() {
@@ -83,6 +124,9 @@ public class BuiltInFunctions {
     }
 
     public static <T extends FEELFunction> T getFunction( Class<T> functionClazz ) {
-        return (T) Stream.of( FUNCTIONS ).filter( f -> functionClazz.isAssignableFrom( f.getClass() ) ).findFirst().get();
+        return (T) Stream.of( FUNCTIONS )
+                .filter( f -> functionClazz.isAssignableFrom( f.getClass() ) )
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Cannot find function by class " + functionClazz.getCanonicalName() + "!"));
     }
 }

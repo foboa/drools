@@ -19,16 +19,14 @@ import org.drools.compiler.compiler.PackageRegistry;
 import org.drools.compiler.compiler.TypeDeclarationError;
 import org.drools.compiler.lang.descr.AbstractClassTypeDeclarationDescr;
 import org.drools.compiler.lang.descr.TypeDeclarationDescr;
-import org.drools.core.common.ProjectClassLoader;
 import org.drools.core.factmodel.ClassBuilder;
 import org.drools.core.factmodel.ClassDefinition;
 import org.drools.core.rule.JavaDialectRuntimeData;
 import org.drools.core.rule.TypeDeclaration;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
+import org.drools.reflective.classloader.ProjectClassLoader;
+import org.drools.core.addon.TypeResolver;
 
 import static org.drools.core.util.ClassUtils.convertClassToResourcePath;
-
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
 
 public class DeclaredClassBuilder {
 
@@ -41,46 +39,37 @@ public class DeclaredClassBuilder {
     public void generateBeanFromDefinition(AbstractClassTypeDeclarationDescr typeDescr,
                                            TypeDeclaration type,
                                            PackageRegistry pkgRegistry,
-                                           ClassDefinition def) {
+                                           ClassDefinition def,
+                                           ClassBuilder classBuilder) {
 
         if (type.isNovel()) {
             String fullName = typeDescr.getType().getFullName();
             JavaDialectRuntimeData dialect = (JavaDialectRuntimeData) pkgRegistry.getDialectRuntimeRegistry().getDialectData("java");
             if (ensureJavaTypeConsistency(typeDescr, def, pkgRegistry.getTypeResolver())) {
-                switch (type.getKind()) {
-                    case TRAIT:
-                        try {
-                            buildClass(def, fullName, dialect, this.kbuilder.getBuilderConfiguration().getClassBuilderFactory().getTraitBuilder(), pkgRegistry);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            this.kbuilder.addBuilderResult(new TypeDeclarationError(typeDescr,
-                                                                                    "Unable to compile declared trait " + fullName +
-                                                                                            ": " + e.getMessage() + ";"));
-                        }
-                        break;
-                    case ENUM:
-                        try {
-                            buildClass(def, fullName, dialect, this.kbuilder.getBuilderConfiguration().getClassBuilderFactory().getEnumClassBuilder(), pkgRegistry);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            this.kbuilder.addBuilderResult(new TypeDeclarationError(typeDescr,
-                                                                                    "Unable to compile declared enum " + fullName +
-                                                                                            ": " + e.getMessage() + ";"));
-                        }
-                        break;
-                    case CLASS:
-                    default:
-                        try {
-                            buildClass(def, fullName, dialect, this.kbuilder.getBuilderConfiguration().getClassBuilderFactory().getBeanClassBuilder(), pkgRegistry);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            this.kbuilder.addBuilderResult(new TypeDeclarationError(typeDescr,
-                                                                                    "Unable to create a class for declared type " + fullName +
-                                                                                            ": " + e.getMessage() + ";"));
-                        }
-                        break;
+                String errorMessage = "Unable to compile declared " + type.getKind();
+                buildClass(typeDescr, pkgRegistry, def, classBuilder, fullName, dialect, errorMessage);
+            }
+        }
+    }
+
+    private void buildClass(AbstractClassTypeDeclarationDescr typeDescr, PackageRegistry pkgRegistry, ClassDefinition def, ClassBuilder classBuilder, String fullName, JavaDialectRuntimeData dialect, String errorMessage) {
+        try {
+            byte[] bytecode = classBuilder.buildClass(def, kbuilder.getRootClassLoader());
+            String resourceName = convertClassToResourcePath(fullName);
+            dialect.putClassDefinition(resourceName, bytecode);
+            if (kbuilder.getKnowledgeBase() != null) {
+                Class<?> clazz = kbuilder.getKnowledgeBase().registerAndLoadTypeDefinition(fullName, bytecode);
+                pkgRegistry.getTypeResolver().registerClass(fullName, clazz);
+            } else {
+                if (kbuilder.getRootClassLoader() instanceof ProjectClassLoader ) {
+                    Class<?> clazz = ((ProjectClassLoader) kbuilder.getRootClassLoader()).defineClass(fullName, resourceName, bytecode);
+                    pkgRegistry.getTypeResolver().registerClass(fullName, clazz);
+                } else {
+                    dialect.write(resourceName, bytecode);
                 }
             }
+        } catch (Exception e) {
+            this.kbuilder.addBuilderResult(new TypeDeclarationError(typeDescr, String.format("%s%s: %s;", errorMessage, fullName, e.getMessage())));
         }
     }
 
@@ -88,9 +77,10 @@ public class DeclaredClassBuilder {
         try {
             if (typeDescr instanceof TypeDeclarationDescr && !((TypeDeclarationDescr) typeDescr).isTrait()
                     && typeResolver.resolveType(def.getSuperClass()).isInterface()) {
-                kbuilder.addBuilderResult(new TypeDeclarationError(typeDescr, "Interfaces cannot be used as super types of normal classes: " + def.getSuperClass()));
-                return false;
+                def.addInterface( def.getSuperClass() );
+                def.setSuperClass( null );
             }
+
             for (String sup : def.getInterfaces()) {
                 if (!typeResolver.resolveType(sup).isInterface()) {
                     kbuilder.addBuilderResult(new TypeDeclarationError(typeDescr, "Non-interface type used as super interface : " + sup));
@@ -102,22 +92,5 @@ public class DeclaredClassBuilder {
             return false;
         }
         return true;
-    }
-
-    protected void buildClass(ClassDefinition def, String fullName, JavaDialectRuntimeData dialect, ClassBuilder cb, PackageRegistry pkgRegistry) throws Exception {
-        byte[] bytecode = cb.buildClass(def, kbuilder.getRootClassLoader());
-        String resourceName = convertClassToResourcePath(fullName);
-        dialect.putClassDefinition(resourceName, bytecode);
-        if (kbuilder.getKnowledgeBase() != null) {
-            Class<?> clazz = kbuilder.getKnowledgeBase().registerAndLoadTypeDefinition(fullName, bytecode);
-            pkgRegistry.getTypeResolver().registerClass(fullName, clazz);
-        } else {
-            if (kbuilder.getRootClassLoader() instanceof ProjectClassLoader) {
-                Class<?> clazz = ((ProjectClassLoader) kbuilder.getRootClassLoader()).defineClass(fullName, resourceName, bytecode);
-                pkgRegistry.getTypeResolver().registerClass(fullName, clazz);
-            } else {
-                dialect.write(resourceName, bytecode);
-            }
-        }
     }
 }

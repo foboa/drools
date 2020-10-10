@@ -16,17 +16,18 @@
 
 package org.drools.core.util;
 
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.util.Objects;
+
 import org.drools.core.rule.Declaration;
 import org.drools.core.rule.IndexEvaluator;
 import org.drools.core.spi.InternalReadAccessor;
 import org.drools.core.spi.ReadAccessor;
 import org.drools.core.spi.Tuple;
 import org.drools.core.util.index.TupleList;
-
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
 
 public abstract class AbstractHashTable
     implements
@@ -71,6 +72,7 @@ public abstract class AbstractHashTable
         this.comparator = EqualityEquals.getInstance();
     }
 
+    @Override
     public void readExternal(ObjectInput in) throws IOException,
                                             ClassNotFoundException {
         size = in.readInt();
@@ -81,6 +83,7 @@ public abstract class AbstractHashTable
         iterator = (HashTableIterator) in.readObject();
     }
 
+    @Override
     public void writeExternal(ObjectOutput out) throws IOException {
         out.writeInt( size );
         out.writeInt( threshold );
@@ -192,9 +195,10 @@ public abstract class AbstractHashTable
 
     public interface ObjectComparator extends Externalizable {
         int hashCodeOf(Object object);
-        boolean equal(Object object1, Object object2);
+        boolean areEqual(Object object1, Object object2);
     }
     
+    @Override
     public String toString() {
         StringBuilder sbuilder = new StringBuilder();
         Iterator it = newIterator();
@@ -220,10 +224,12 @@ public abstract class AbstractHashTable
         private static final long            serialVersionUID = 510l;
         public static final ObjectComparator INSTANCE         = new InstanceEquals();
 
+        @Override
         public void readExternal(ObjectInput in) throws IOException,
                                                 ClassNotFoundException {
         }
 
+        @Override
         public void writeExternal(ObjectOutput out) throws IOException {
         }
 
@@ -235,12 +241,14 @@ public abstract class AbstractHashTable
 
         }
         
+        @Override
         public int hashCodeOf(final Object obj) {
             return rehash( System.identityHashCode( obj ) );
         }        
 
-        public boolean equal(final Object object1,
-                             final Object object2) {
+        @Override
+        public boolean areEqual(final Object object1,
+                                final Object object2) {
             return object1 == object2;
         }
     }
@@ -252,10 +260,12 @@ public abstract class AbstractHashTable
         private static final long            serialVersionUID = 510l;
         public static final ObjectComparator INSTANCE         = new EqualityEquals();
 
+        @Override
         public void readExternal(ObjectInput in) throws IOException,
                                                 ClassNotFoundException {
         }
 
+        @Override
         public void writeExternal(ObjectOutput out) throws IOException {
         }
 
@@ -267,12 +277,14 @@ public abstract class AbstractHashTable
 
         }
         
+        @Override
         public int hashCodeOf(final Object key) {
             return rehash( key.hashCode() );
         }        
 
-        public boolean equal(final Object object1,
-                             final Object object2) {
+        @Override
+        public boolean areEqual(final Object object1,
+                                final Object object2) {
             if ( object1 == null ) {
                 return object2 == null;
             }
@@ -289,6 +301,7 @@ public abstract class AbstractHashTable
         private InternalReadAccessor    extractor;
         private Declaration             declaration;
         private IndexEvaluator          evaluator;
+        private boolean                 requiresCoercion;
 
         public FieldIndex() {
 
@@ -301,15 +314,23 @@ public abstract class AbstractHashTable
             this.extractor = extractor;
             this.declaration = declaration;
             this.evaluator = evaluator;
+            this.requiresCoercion = isCoercionRequired( extractor, declaration );
         }
 
+        private boolean isCoercionRequired( InternalReadAccessor extractor, Declaration declaration ) {
+            return extractor.getValueType() != declaration.getExtractor().getValueType();
+        }
+
+        @Override
         public void readExternal(ObjectInput in) throws IOException,
                                                 ClassNotFoundException {
             extractor = (InternalReadAccessor) in.readObject();
             declaration = (Declaration) in.readObject();
             evaluator = (IndexEvaluator) in.readObject();
+            requiresCoercion = isCoercionRequired( extractor, declaration );
         }
 
+        @Override
         public void writeExternal(ObjectOutput out) throws IOException {
             out.writeObject( extractor );
             out.writeObject( declaration );
@@ -330,13 +351,17 @@ public abstract class AbstractHashTable
 
         public int hashCodeOf(Tuple tuple, boolean left) {
             return left ?
-                   declaration.getHashCode( null, tuple.getObject( declaration ) ) :
+                    ( requiresCoercion ?
+                           Objects.hashCode( extractor.getValueType().coerce( declaration.getExtractor().getValue( tuple.getObject( declaration ) ) ) ) :
+                           declaration.getHashCode( null, tuple.getObject( declaration ) ) ) :
                    extractor.getHashCode( null, tuple.getFactHandle().getObject() );
         }
 
         public Object indexedValueOf(Tuple tuple, boolean left) {
             return left ?
-                   declaration.getValue( null, tuple.getObject( declaration ) ) :
+                    ( requiresCoercion ?
+                            extractor.getValueType().coerce( declaration.getExtractor().getValue( tuple.getObject( declaration ) ) ) :
+                            declaration.getValue( null, tuple.getObject( declaration ) ) ) :
                    extractor.getValue( null, tuple.getFactHandle().getObject() );
         }
     }
@@ -346,11 +371,11 @@ public abstract class AbstractHashTable
 
         int hashCodeOf(Tuple tuple, boolean left);
 
-        boolean equal(Object object, Tuple tuple);
+        boolean areEqual(Object object, Tuple tuple);
 
-        boolean equal(TupleList list, Tuple tuple2);
+        boolean areEqual(TupleList list, Tuple tuple2);
 
-        boolean equal(TupleList list, Object object2);
+        boolean areEqual(TupleList list, Object object2);
 
         TupleList createEntry(Tuple tuple, int hashCode, boolean left);
     }
@@ -375,17 +400,20 @@ public abstract class AbstractHashTable
             this.index = indexes[0];
         }
 
+        @Override
         public void readExternal(ObjectInput in) throws IOException,
                                                 ClassNotFoundException {
             index = (FieldIndex) in.readObject();
             startResult = in.readInt();
         }
 
+        @Override
         public void writeExternal(ObjectOutput out) throws IOException {
             out.writeObject( index );
             out.writeInt( startResult );
         }
 
+        @Override
         public FieldIndex getFieldIndex(int index) {
             if ( index > 0 ) {
                 throw new IllegalArgumentException( "IndexUtil position " + index + " does not exist" );
@@ -393,12 +421,14 @@ public abstract class AbstractHashTable
             return this.index;
         }
 
+        @Override
         public int hashCodeOf(final Tuple tuple, boolean left) {
             return rehash( PRIME * startResult + index.hashCodeOf( tuple, left ) );
         }
 
-        public boolean equal(final Object right,
-                             final Tuple tuple) {
+        @Override
+        public boolean areEqual(final Object right,
+                                final Tuple tuple) {
             return this.index.evaluator.evaluate( null,
                                                   this.index.declaration.getExtractor(),
                                                   tuple.getObject( this.index.declaration ),
@@ -406,16 +436,17 @@ public abstract class AbstractHashTable
                                                   right );
         }
 
-        public boolean equal(final TupleList list,
-                             final Object object2) {
+        @Override
+        public boolean areEqual(final TupleList list,
+                                final Object object2) {
             return this.index.evaluator.evaluate( null,
                                                   ( (SingleIndexTupleList) list ).indexKey,
                                                   this.index.extractor,
                                                   object2 );
         }
 
-        public boolean equal(final Tuple tuple1,
-                             final Tuple tuple2) {
+        public boolean areEqual(final Tuple tuple1,
+                                final Tuple tuple2) {
             return this.index.evaluator.evaluate( null,
                                                   this.index.declaration.getExtractor(),
                                                   tuple1.getObject( this.index.declaration ),
@@ -423,14 +454,16 @@ public abstract class AbstractHashTable
                                                   tuple2.getObject( this.index.declaration ) );
         }
 
-        public boolean equal(final TupleList list,
-                             final Tuple tuple2) {
+        @Override
+        public boolean areEqual(final TupleList list,
+                                final Tuple tuple2) {
             return this.index.evaluator.evaluate( null,
                                                   ( (SingleIndexTupleList) list ).indexKey,
                                                   this.index.declaration.getExtractor(),
                                                   tuple2.getObject( this.index.declaration ) );
         }
 
+        @Override
         public TupleList createEntry(Tuple tuple, int hashCode, boolean left) {
             return new SingleIndexTupleList( this, tuple, hashCode, left );
         }
@@ -445,15 +478,21 @@ public abstract class AbstractHashTable
             this.hashCode = hashCode;
         }
 
+        @Override
         public boolean equals(final Object object) {
+            if (!(object instanceof AbstractIndexTupleList)) {
+                return false;
+            }
             final AbstractIndexTupleList other = (AbstractIndexTupleList) object;
             return this.hashCode == other.hashCode && this.index == other.index;
         }
 
+        @Override
         public int hashCode() {
             return this.hashCode;
         }
 
+        @Override
         protected void copyStateInto(TupleList other) {
             super.copyStateInto( other );
             ( (AbstractIndexTupleList) other ).hashCode = hashCode;
@@ -469,6 +508,7 @@ public abstract class AbstractHashTable
             indexKey = index.index.indexedValueOf(tuple, left);
         }
 
+        @Override
         protected void copyStateInto(TupleList other) {
             super.copyStateInto( other );
             ( (SingleIndexTupleList) other ).indexKey = indexKey;
@@ -498,6 +538,7 @@ public abstract class AbstractHashTable
             this.index1 = indexes[1];
         }
 
+        @Override
         public void readExternal(ObjectInput in) throws IOException,
                                                 ClassNotFoundException {
             index0 = (FieldIndex) in.readObject();
@@ -505,12 +546,14 @@ public abstract class AbstractHashTable
             startResult = in.readInt();
         }
 
+        @Override
         public void writeExternal(ObjectOutput out) throws IOException {
             out.writeObject( index0 );
             out.writeObject( index1 );
             out.writeInt( startResult );
         }
 
+        @Override
         public FieldIndex getFieldIndex(int index) {
             switch ( index ) {
                 case 0 :
@@ -522,6 +565,7 @@ public abstract class AbstractHashTable
             }
         }
 
+        @Override
         public int hashCodeOf(Tuple tuple, boolean left) {
             int hashCode = this.startResult;
             hashCode = PRIME * hashCode + this.index0.hashCodeOf( tuple, left );
@@ -529,8 +573,9 @@ public abstract class AbstractHashTable
             return rehash( hashCode );
         }
 
-        public boolean equal(final Object right,
-                             final Tuple tuple) {
+        @Override
+        public boolean areEqual(final Object right,
+                                final Tuple tuple) {
             return this.index0.evaluator.evaluate( null,
                                                    this.index0.declaration.getExtractor(),
                                                    tuple.getObject( this.index0.declaration ),
@@ -544,8 +589,9 @@ public abstract class AbstractHashTable
                                                    right );
         }
 
-        public boolean equal(final TupleList list,
-                             final Tuple tuple2) {
+        @Override
+        public boolean areEqual(final TupleList list,
+                                final Tuple tuple2) {
             return this.index0.evaluator.evaluate( null,
                                                   ( (DoubleIndexTupleList) list ).indexKey0,
                                                   this.index0.declaration.getExtractor(),
@@ -557,8 +603,9 @@ public abstract class AbstractHashTable
                                                    tuple2.getObject( this.index1.declaration ) );
         }
 
-        public boolean equal(final TupleList list,
-                             final Object object2) {
+        @Override
+        public boolean areEqual(final TupleList list,
+                                final Object object2) {
             return this.index0.evaluator.evaluate( null,
                                                   ( (DoubleIndexTupleList) list ).indexKey0,
                                                   this.index0.extractor,
@@ -570,6 +617,7 @@ public abstract class AbstractHashTable
                                                    object2 );
         }
 
+        @Override
         public TupleList createEntry(Tuple tuple, int hashCode, boolean left) {
             return new DoubleIndexTupleList( this, tuple, hashCode, left );
         }
@@ -585,6 +633,7 @@ public abstract class AbstractHashTable
             indexKey1 = index.index1.indexedValueOf(tuple, left);
         }
 
+        @Override
         protected void copyStateInto(TupleList other) {
             super.copyStateInto( other );
             ( (DoubleIndexTupleList) other ).indexKey0 = indexKey0;
@@ -617,6 +666,7 @@ public abstract class AbstractHashTable
             this.index2 = indexes[2];
         }
 
+        @Override
         public void readExternal(ObjectInput in) throws IOException,
                                                 ClassNotFoundException {
             index0 = (FieldIndex) in.readObject();
@@ -625,6 +675,7 @@ public abstract class AbstractHashTable
             startResult = in.readInt();
         }
 
+        @Override
         public void writeExternal(ObjectOutput out) throws IOException {
             out.writeObject( index0 );
             out.writeObject( index1 );
@@ -632,6 +683,7 @@ public abstract class AbstractHashTable
             out.writeInt( startResult );
         }
 
+        @Override
         public FieldIndex getFieldIndex(int index) {
             switch ( index ) {
                 case 0 :
@@ -645,6 +697,7 @@ public abstract class AbstractHashTable
             }
         }
 
+        @Override
         public int hashCodeOf(Tuple tuple, boolean left) {
             int hashCode = this.startResult;
             hashCode = PRIME * hashCode + this.index0.hashCodeOf( tuple, left );
@@ -653,8 +706,9 @@ public abstract class AbstractHashTable
             return rehash( hashCode );
         }
 
-        public boolean equal(final Object right,
-                             final Tuple tuple) {
+        @Override
+        public boolean areEqual(final Object right,
+                                final Tuple tuple) {
             return this.index0.evaluator.evaluate( null,
                                                    this.index0.declaration.getExtractor(),
                                                    tuple.getObject( this.index0.declaration ),
@@ -673,8 +727,9 @@ public abstract class AbstractHashTable
                                                       right );
         }
 
-        public boolean equal(final TupleList list,
-                             final Tuple tuple2) {
+        @Override
+        public boolean areEqual(final TupleList list,
+                                final Tuple tuple2) {
             return this.index0.evaluator.evaluate( null,
                                                    ( (TripleIndexTupleList) list ).indexKey0,
                                                    this.index0.declaration.getExtractor(),
@@ -691,8 +746,9 @@ public abstract class AbstractHashTable
                                                    tuple2.getObject( this.index2.declaration ) );
         }
 
-        public boolean equal(final TupleList list,
-                             final Object object2) {
+        @Override
+        public boolean areEqual(final TupleList list,
+                                final Object object2) {
             return this.index0.evaluator.evaluate( null,
                                                    ( (TripleIndexTupleList) list ).indexKey0,
                                                    this.index0.extractor,
@@ -709,6 +765,7 @@ public abstract class AbstractHashTable
                                                    object2 );
         }
 
+        @Override
         public TupleList createEntry(Tuple tuple, int hashCode, boolean left) {
             return new TripleIndexTupleList( this, tuple, hashCode, left );
         }
@@ -726,6 +783,7 @@ public abstract class AbstractHashTable
             indexKey2 = index.index2.indexedValueOf(tuple, left);
         }
 
+        @Override
         protected void copyStateInto(TupleList other) {
             super.copyStateInto( other );
             ( (TripleIndexTupleList) other ).indexKey0 = indexKey0;

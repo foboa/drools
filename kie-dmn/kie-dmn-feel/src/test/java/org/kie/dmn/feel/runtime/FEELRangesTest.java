@@ -20,17 +20,17 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.Period;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+
 import org.junit.runners.Parameterized;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
-import org.kie.dmn.feel.lang.ast.RangeNode;
+import org.kie.dmn.feel.lang.types.impl.ComparablePeriod;
 import org.kie.dmn.feel.runtime.impl.RangeImpl;
 
 public class FEELRangesTest extends BaseFEELTest {
 
-    @Parameterized.Parameters(name = "{index}: {0} ({1}) = {2}")
+    @Parameterized.Parameters(name = "{3}: {0} ({1}) = {2}")
     public static Collection<Object[]> data() {
         final Object[][] cases = new Object[][]{
                 {"[1..2]", new RangeImpl(Range.RangeBoundary.CLOSED, BigDecimal.ONE, BigDecimal.valueOf(2), Range.RangeBoundary.CLOSED), null},
@@ -66,8 +66,8 @@ public class FEELRangesTest extends BaseFEELTest {
 
                 {"(duration(\"P1Y6M\")..duration(\"P2Y6M\"))",
                         new RangeImpl(Range.RangeBoundary.OPEN,
-                                      new RangeNode.ComparablePeriod(Period.parse("P1Y6M")),
-                                      new RangeNode.ComparablePeriod(Period.parse("P2Y6M")),
+                                      new ComparablePeriod(Period.parse("P1Y6M")),
+                                      new ComparablePeriod(Period.parse("P2Y6M")),
                                       Range.RangeBoundary.OPEN), null},
 
                 {"[1+2..8]", new RangeImpl(Range.RangeBoundary.CLOSED, BigDecimal.valueOf(3), BigDecimal.valueOf(8), Range.RangeBoundary.CLOSED), null},
@@ -151,8 +151,26 @@ public class FEELRangesTest extends BaseFEELTest {
                             put("startdate", LocalDate.of(1978, 9, 12));
                             put("enddate", LocalDate.of(1978, 10, 13));
                             put("rangedates", new RangeImpl(Range.RangeBoundary.CLOSED, LocalDate.of(1978, 9, 12), LocalDate.of(1978, 10, 13), Range.RangeBoundary.CLOSED));
-                        }}, null}
+                        }}, null},
+                
+                // Table 42:
+                {"[1..10].start included", Boolean.TRUE, null},
+                {"[1..10].start", new BigDecimal(1), null},
+                {"[1..10].end", new BigDecimal(10), null},
+                {"[1..10].end included", Boolean.TRUE, null},
+                {"(1..10].start included", Boolean.FALSE, null},
+                {"(1..10].start", new BigDecimal(1), null},
+                {"(1..10].end", new BigDecimal(10), null},
+                {"(1..10].end included", Boolean.TRUE, null},
+                {"(<=10).start included", Boolean.FALSE, null},
+                {"(<=10).start", null, null},
+                {"(<=10).end", new BigDecimal(10), null},
+                {"(<=10).end included", Boolean.TRUE, null},
+                {"(>1).start included", Boolean.FALSE, null},
+                {"(>1).start", new BigDecimal(1), null},
+                {"(>1).end", null, null},
+                {"(>1).end included", Boolean.FALSE, null},
         };
-        return Arrays.asList(cases);
+        return addAdditionalParameters(cases, false);
     }
 }

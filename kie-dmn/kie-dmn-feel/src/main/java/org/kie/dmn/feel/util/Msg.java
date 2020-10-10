@@ -20,7 +20,7 @@ package org.kie.dmn.feel.util;
  * Utility class for I18N messages.
  *
  */
-public class Msg {
+public final class Msg {
 
     public static final Message0 NULL_OR_UNKNOWN_OPERATOR = new Message0("Null or unknown operator");
     public static final Message1 UNKNOWN_VARIABLE_REFERENCE = new Message1("Unknown variable name '%s'");
@@ -32,9 +32,10 @@ public class Msg {
     public static final Message0 CONDITION_WAS_NOT_A_BOOLEAN = new Message0("Condition was not a Boolean");
     public static final Message1 FUNCTION_NOT_FOUND = new Message1("Function not found: '%s'");
     public static final Message1 ERROR_EXECUTING_LIST_FILTER = new Message1("Error executing list filter: %s");
-    public static final Message0 INDEX_OUT_OF_BOUND = new Message0("Index out of bound");
+    public static final Message2 INDEX_OUT_OF_BOUND = new Message2("Index out of bound: list of %s elements, index %s; will evaluate as FEEL null");
     public static final Message2 X_TYPE_INCOMPATIBLE_WITH_Y_TYPE = new Message2("%s type incompatible with %s type");
     public static final Message1 INCOMPATIBLE_TYPE_FOR_RANGE = new Message1("Type %s can not be used in a range unary test");
+    public static final Message1 VALUE_X_NOT_A_VALID_ENDPOINT_FOR_RANGE_BECAUSE_NOT_A_NUMBER = new Message1("Value %s is not a valid endpoint for range, because not a feel:number");
     public static final Message1 EVALUATED_TO_NULL = new Message1("%s evaluated to null");
     public static final Message1 IS_NULL = new Message1("%s is null");
     public static final Message0 BASE_NODE_EVALUATE_CALLED = new Message0("BaseNode evaluate called");
@@ -42,11 +43,17 @@ public class Msg {
     public static final Message1 UNABLE_TO_FIND_EXTERNAL_FUNCTION_AS_DEFINED_BY = new Message1("Unable to find external function as defined by: %s");
     public static final Message1 PARAMETER_COUNT_MISMATCH_ON_FUNCTION_DEFINITION = new Message1("Parameter count mismatch on function definition: %s");
     public static final Message1 CAN_T_INVOKE_AN_UNARY_TEST_WITH_S_PARAMETERS_UNARY_TESTS_REQUIRE_1_SINGLE_PARAMETER = new Message1("Can't invoke an unary test with %s parameters. Unary tests require 1 single parameter.");
-    public static final Message2 INVALID_VARIABLE_NAME = new Message2( "A variable name cannot contain the %s '%s'");
-    public static final Message2 INVALID_VARIABLE_NAME_START = new Message2( "A variable name cannot start with the %s '%s'");
-    public static final Message0 INVALID_VARIABLE_NAME_EMPTY = new Message0( "A variable name cannot be null or empty");
+    public static final Message2 INVALID_VARIABLE_NAME = new Message2( "Name cannot contain the %s '%s'");
+    public static final Message2 INVALID_VARIABLE_NAME_START = new Message2( "Name cannot start with the %s '%s'");
+    public static final Message0 INVALID_VARIABLE_NAME_EMPTY = new Message0( "Name cannot be null or empty");
     public static final Message1 MISSING_EXPRESSION = new Message1( "The context entry for key '%s' is missing the value expression");
     public static final Message2 ERROR_COMPILE_EXPR_DT_FUNCTION_RULE_IDX = new Message2( "Error compiling output expression in decision table FEEL function, rule index %s: '%s'");
+    public static final Message2 EXTENDED_UNARY_TEST_MUST_BE_BOOLEAN = new Message2("Unary test '%s' does not return a boolean result: '%s'");
+    public static final Message2 IF_MISSING_ELSE = new Message2("Detected 'if' expression without 'else' part (near: %s) [%s]");
+    public static final Message2 IF_MISSING_THEN = new Message2("Detected 'if' expression without 'then' part (near: %s) [%s]");
+    public static final Message1 COMPARING_TO_UT = new Message1("Comparing to a unary test is not semantically defined: %s");
+    public static final Message1 UT_OF_UT = new Message1("An unary test of a unary test is not semantically defined: %s");
+    public static final Message1 MALFORMED_AT_LITERAL = new Message1("Malformed at-literal: %s");
 
     public static String createMessage( Message0 message) {
         return Msg.buildMessage(message);
@@ -106,5 +113,7 @@ public class Msg {
         }
     }
 
-    
+    private Msg() {
+        // Constructing instances is not allowed for this class
+    }
 }

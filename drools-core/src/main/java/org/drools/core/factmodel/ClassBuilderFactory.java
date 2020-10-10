@@ -16,125 +16,35 @@
 
 package org.drools.core.factmodel;
 
-import org.drools.core.factmodel.traits.*;
+import org.drools.core.rule.TypeDeclaration;
+import org.kie.api.internal.utils.ServiceRegistry;
 
-import java.io.Serializable;
+import static org.drools.core.base.CoreComponentsBuilder.throwExceptionForMissingMvel;
 
-public class ClassBuilderFactory implements Serializable {
+public interface ClassBuilderFactory {
 
+    boolean DUMP_GENERATED_CLASSES = false;
 
-    // Generic beans
+    class Holder {
+        private static final ClassBuilderFactory factory = getFactory();
 
-    private  BeanClassBuilder beanClassBuilder = new DefaultBeanClassBuilder();
-
-    public ClassBuilder getBeanClassBuilder() {
-        return beanClassBuilder;
+        private static ClassBuilderFactory getFactory() {
+            ClassBuilderFactory instance = ServiceRegistry.getService( ClassBuilderFactory.class );
+            return instance != null ? instance : throwExceptionForMissingMvel();
+        }
     }
 
-    public void setBeanClassBuilder( BeanClassBuilder bcb ) {
-        beanClassBuilder = bcb;
+    static ClassBuilderFactory get() {
+        return Holder.factory;
     }
 
-    public void setDefaultBeanClassBuilder() {
-        beanClassBuilder = new DefaultBeanClassBuilder() ;
-    }
-    
-    public static ClassBuilder getDefaultBeanClassBuilder() {
-        return new DefaultBeanClassBuilder();
-    }
+    ClassBuilder getBeanClassBuilder();
 
+    EnumClassBuilder getEnumClassBuilder();
 
+    ClassBuilder getPropertyWrapperBuilder();
 
+    void setPropertyWrapperBuilder(ClassBuilder pcb);
 
-    private  EnumClassBuilder enumClassBuilder = new DefaultEnumClassBuilder();
-
-    public EnumClassBuilder getEnumClassBuilder() {
-        return enumClassBuilder;
-    }
-
-    public void setEnumClassBuilder( EnumClassBuilder ecb ) {
-        enumClassBuilder = ecb;
-    }
-
-    public void setDefaultEnumClassBuilder() {
-        enumClassBuilder = new DefaultEnumClassBuilder();
-    }
-
-    public static EnumClassBuilder getDefaultEnumClassBuilder() {
-        return new DefaultEnumClassBuilder();
-    }
-
-
-
-
-
-    // Trait interfaces
-
-    private TraitClassBuilder traitBuilder = new TraitClassBuilderImpl();
-
-    public ClassBuilder getTraitBuilder() {
-        return traitBuilder;
-    }
-
-    public void setTraitBuilder( TraitClassBuilder tcb ) {
-        traitBuilder = tcb;
-    }
-
-    public void setDefaultTraitBuilder() {
-        traitBuilder = new TraitClassBuilderImpl();
-    }    
-    
-    public static ClassBuilder getDefaultTraitBuilder() {
-        return new TraitClassBuilderImpl();
-    }
-
-
-
-    // Trait property wrappers
-
-
-    private ClassBuilder propertyWrapperBuilder = new TraitMapPropertyWrapperClassBuilderImpl();
-
-    public ClassBuilder getPropertyWrapperBuilder() {
-        return propertyWrapperBuilder;
-    }
-
-    public void setPropertyWrapperBuilder( TraitPropertyWrapperClassBuilder pcb ) {
-        propertyWrapperBuilder = pcb;
-    }
-
-    public void setDefaultPropertyWrapperBuilder() {
-        propertyWrapperBuilder = new TraitTriplePropertyWrapperClassBuilderImpl();
-    }
-
-    public static ClassBuilder getDefaultPropertyWrapperBuilder() {
-        return new TraitTriplePropertyWrapperClassBuilderImpl();
-    }
-
-
-
-
-    // Trait proxy wrappers
-
-    private  TraitProxyClassBuilder traitProxyBuilder = new TraitMapProxyClassBuilderImpl();
-
-    public ClassBuilder getTraitProxyBuilder() {
-        return traitProxyBuilder;
-    }
-
-    public void setTraitProxyBuilder( TraitProxyClassBuilder tpcb ) {
-        traitProxyBuilder = tpcb;
-    }
-
-    public void setDefaultTraitProxyBuilder() {
-        traitProxyBuilder = new TraitTripleProxyClassBuilderImpl();
-    }
-
-    public static ClassBuilder getDefaultTraitProxyBuilder() {
-        return new TraitTripleProxyClassBuilderImpl();
-    }
-
-
-
-
+    ClassBuilder getClassBuilder(TypeDeclaration type);
 }

@@ -16,9 +16,9 @@
 
 package org.kie.dmn.api.core;
 
-import org.kie.dmn.api.core.event.DMNRuntimeEventManager;
-
 import java.util.List;
+
+import org.kie.dmn.api.core.event.DMNRuntimeEventManager;
 
 public interface DMNRuntime extends DMNRuntimeEventManager {
 
@@ -41,6 +41,18 @@ public interface DMNRuntime extends DMNRuntimeEventManager {
      *         registered with the given name and namespace.
      */
     DMNModel getModel( String namespace, String modelName );
+    
+    /**
+     * Returns the model registered with the given namespace and
+     * model id.
+     *
+     * @param namespace the name space for the model
+     * @param modelId the identifier of the model
+     *
+     * @return the corresponding DMN model, or null if none is
+     *         registered with the given id and namespace.
+     */
+    DMNModel getModelById( String namespace, String modelId );
 
     /**
      * Evaluate all decisions for the model, given the context
@@ -116,5 +128,21 @@ public interface DMNRuntime extends DMNRuntimeEventManager {
      * @return a new empty DMNContext
      */
     DMNContext newContext();
+
+    /**
+     * Returns the ClassLoader used by this DMNRuntime
+     */
+    ClassLoader getRootClassLoader();
+
+    /**
+     * Evaluate the Decision Service identified by the given name, given the context
+     *
+     * @param model the model to evaluate
+     * @param decisionServiceName the Decision Service name
+     * @param context the context with all the required inputs (inputData and inputDecision) required by the Decision Service
+     *
+     * @return the result of the evaluation
+     */
+    DMNResult evaluateDecisionService(DMNModel model, DMNContext context, String decisionServiceName);
 
 }

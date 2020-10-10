@@ -3,6 +3,7 @@ package org.kie.dmn.feel.marshaller;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.kie.dmn.feel.lang.types.impl.ComparablePeriod;
 import org.kie.dmn.feel.runtime.Range;
 import org.kie.dmn.feel.runtime.impl.RangeImpl;
 
@@ -42,8 +43,8 @@ public class FEELCodeMarshallerTest {
                 { OffsetTime.of( 14, 32, 55, 125000000, ZoneOffset.UTC ), "time( \"14:32:55.125Z\" )" },
                 // date and time
                 { LocalDateTime.of( 2017, 06, 30, 10, 49, 11 ), "date and time( \"2017-06-30T10:49:11\" )" },
-                { LocalDateTime.of( 2017, 06, 30, 10, 49, 11, 650000000 ), "date and time( \"2017-06-30T10:49:11.650\" )" },
-                { OffsetDateTime.of( 2017, 06, 30, 10, 49, 11, 650000000, ZoneOffset.ofHours( 3 ) ), "date and time( \"2017-06-30T10:49:11.650+03:00\" )" },
+                { LocalDateTime.of( 2017, 06, 30, 10, 49, 11, 650000000 ), "date and time( \"2017-06-30T10:49:11.65\" )" },
+                { OffsetDateTime.of( 2017, 06, 30, 10, 49, 11, 650000000, ZoneOffset.ofHours( 3 ) ), "date and time( \"2017-06-30T10:49:11.65+03:00\" )" },
                 // days and time duration
                 { Duration.ofDays( 5 ).plusHours( 4 ).plusMinutes( 23 ).plusSeconds( 55 ), "duration( \"P5DT4H23M55S\" )" },
                 { Duration.ofDays( -5 ).minusHours( 4 ).minusMinutes( 23 ).minusSeconds( 55 ), "duration( \"-P5DT4H23M55S\" )" },
@@ -64,6 +65,11 @@ public class FEELCodeMarshallerTest {
                 { Period.of( -4, -25, 0 ), "duration( \"-P6Y1M\" )" },
                 { Period.of( 0, 0, -4 ), "duration( \"P0M\" )" },
                 { Period.of( 0, 0, 0 ), "duration( \"P0M\" )" },
+                { ComparablePeriod.of( 4, 5, 12 ), "duration( \"P4Y5M\" )" },
+                { ComparablePeriod.of( 4, 25, 0 ), "duration( \"P6Y1M\" )" },
+                { ComparablePeriod.of( -4, -25, 0 ), "duration( \"-P6Y1M\" )" },
+                { ComparablePeriod.of( 0, 0, -4 ), "duration( \"P0M\" )" },
+                { ComparablePeriod.of( 0, 0, 0 ), "duration( \"P0M\" )" },
                 // lists
                 { Arrays.asList( 1, 2, 3, 4 ), "[ 1, 2, 3, 4 ]" },
                 { Arrays.asList( "foo", "bar", "baz" ), "[ \"foo\", \"bar\", \"baz\" ]" },

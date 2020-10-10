@@ -15,23 +15,6 @@
 
 package org.drools.compiler.commons.jci.compilers;
 
-import org.drools.compiler.commons.jci.problems.CompilationProblem;
-import org.drools.compiler.commons.jci.readers.ResourceReader;
-import org.drools.compiler.commons.jci.stores.ResourceStore;
-import org.drools.core.common.ProjectClassLoader;
-import org.drools.core.util.IoUtils;
-
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.NestingKind;
-import javax.tools.Diagnostic;
-import javax.tools.DiagnosticCollector;
-import javax.tools.FileObject;
-import javax.tools.ForwardingJavaFileManager;
-import javax.tools.JavaFileManager;
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
-import javax.tools.StandardLocation;
-import javax.tools.ToolProvider;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -53,14 +36,30 @@ import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarEntry;
 
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.NestingKind;
+import javax.tools.Diagnostic;
+import javax.tools.DiagnosticCollector;
+import javax.tools.FileObject;
+import javax.tools.ForwardingJavaFileManager;
+import javax.tools.JavaFileManager;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.StandardLocation;
+import javax.tools.ToolProvider;
+import org.drools.compiler.commons.jci.readers.ResourceReader;
+import org.drools.compiler.commons.jci.stores.ResourceStore;
+import org.drools.core.util.IoUtils;
+import org.drools.reflective.classloader.ProjectClassLoader;
+import org.kie.internal.jci.CompilationProblem;
+
 import static org.drools.core.util.ClassUtils.convertResourceToClassName;
 
 public class NativeJavaCompiler extends AbstractJavaCompiler {
 
-    private final JavaCompilerSettings settings = new JavaCompilerSettings();
-
     public JavaCompilerSettings createDefaultSettings() {
-        return this.settings;
+        return new JavaCompilerSettings();
     }
 
     private static class InternalClassLoader extends ClassLoader {
@@ -82,7 +81,15 @@ public class NativeJavaCompiler extends AbstractJavaCompiler {
                                      JavaCompilerSettings pSettings) {
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<JavaFileObject>();
         javax.tools.JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-        MemoryFileManager fileManager = new MemoryFileManager(compiler.getStandardFileManager(diagnostics, null, null), pClassLoader);
+
+        StandardJavaFileManager jFileManager = compiler.getStandardFileManager(diagnostics, null, null);
+        try {
+            jFileManager.setLocation(StandardLocation.CLASS_PATH, pSettings.getClasspathLocations());
+        } catch (IOException e) {
+            // ignore if cannot set the classpath
+        }
+
+        MemoryFileManager fileManager = new MemoryFileManager(jFileManager, pClassLoader);
 
         final List<JavaFileObject> units = new ArrayList<JavaFileObject>();
         for (final String sourcePath : pResourcePaths) {
@@ -273,11 +280,6 @@ public class NativeJavaCompiler extends AbstractJavaCompiler {
         }
 
         @Override
-        public ClassLoader getClassLoader(Location location) {
-            return classLoader;
-        }
-
-        @Override
         public String inferBinaryName(Location location, JavaFileObject file) {
             return file instanceof DroolsJavaFileObject ? ((DroolsJavaFileObject) file).getBinaryName() : super.inferBinaryName(location, file);
         }
@@ -308,7 +310,7 @@ public class NativeJavaCompiler extends AbstractJavaCompiler {
 
         private List<JavaFileObject> findCompiledClassInPackage(String packageName) {
             List<JavaFileObject> compiledList = new ArrayList<JavaFileObject>();
-            if (classLoader instanceof ProjectClassLoader) {
+            if (classLoader instanceof ProjectClassLoader ) {
                 Map<String, byte[]> store = ((ProjectClassLoader) classLoader).getStore();
                 if (store != null) {
                     for (Map.Entry<String, byte[]> entry : store.entrySet()) {

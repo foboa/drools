@@ -19,6 +19,7 @@ import org.drools.beliefs.graph.Edge;
 import org.drools.beliefs.graph.Graph;
 import org.drools.beliefs.graph.GraphNode;
 import org.drools.core.util.bitmask.OpenBitSet;
+import org.kie.api.io.Resource;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -48,14 +49,23 @@ public class JunctionTreeBuilder {
             }
         }
     }
+
     public JunctionTree build() {
-        return build( true );
+        return build(true);
     }
 
     public JunctionTree build(boolean init) {
+        return build( null, null, null, init );
+    }
+
+    public JunctionTree build(Resource resource, String namespace, String name) {
+        return build( resource, namespace, name, true );
+    }
+
+    public JunctionTree build(Resource resource, String namespace, String name, boolean init) {
         moralize();
         List<OpenBitSet>  cliques = triangulate();
-        return junctionTree(cliques, init);
+        return junctionTree(resource, namespace, name, cliques, init);
     }
 
 
@@ -98,8 +108,8 @@ public class JunctionTreeBuilder {
         // Build up a Priority Queue of Vertices to be eliminated
         // As their edge counts increase, th PriorityQueue ensures they efficiently maintained in a sorted order.
         boolean[][] clonedAdjMatrix = cloneAdjacencyMarix( adjacencyMatrix );
-        PriorityQueue<EliminationCandidate> p = new PriorityQueue<EliminationCandidate>(graph.size());
-        Map<Integer, EliminationCandidate> elmVertMap = new HashMap<Integer, EliminationCandidate>();
+        PriorityQueue<EliminationCandidate> p = new PriorityQueue<>(graph.size());
+        Map<Integer, EliminationCandidate> elmVertMap = new HashMap<>();
 
         for (GraphNode<BayesVariable> v : graph ) {
             EliminationCandidate elmCandVert = new EliminationCandidate(graph, clonedAdjMatrix, v);
@@ -108,13 +118,13 @@ public class JunctionTreeBuilder {
         }
 
         // Iterate and eliminate each Vertex in turn
-        List<OpenBitSet> cliques = new ArrayList<OpenBitSet>();
+        List<OpenBitSet> cliques = new ArrayList<>();
         while ( !p.isEmpty() ) {
             EliminationCandidate v = p.remove();
             updateCliques(cliques, v.getCliqueBitSit()); // keep track of the maximal cliques formed during elimination
 
             // Not all vertexes get updated, as they may already be connected. Only track those that have changed edges
-            Set<Integer> verticesToUpdate = new HashSet<Integer>();
+            Set<Integer> verticesToUpdate = new HashSet<>();
             boolean[] adjList = clonedAdjMatrix[ v.getV().getId() ];
             createClique(v.getV().getId(), clonedAdjMatrix, verticesToUpdate, adjList);
             eliminateVertex(p, elmVertMap, clonedAdjMatrix, adjList, verticesToUpdate, v);
@@ -214,7 +224,11 @@ public class JunctionTreeBuilder {
     }
 
     public JunctionTree junctionTree(List<OpenBitSet> cliques, boolean init) {
-        List<SeparatorSet> list = new ArrayList<SeparatorSet>();
+        return junctionTree(null, null, null, cliques, init);
+    }
+
+    public JunctionTree junctionTree(Resource resource, String namespace, String name, List<OpenBitSet> cliques, boolean init) {
+        List<SeparatorSet> list = new ArrayList<>();
         for ( int i = 0; i < cliques.size(); i++ ) {
             for ( int j = i+1; j < cliques.size(); j++ ) {
                 SeparatorSet separatorSet = new SeparatorSet( cliques.get(i), i, cliques.get(j), j, graph );
@@ -259,7 +273,7 @@ public class JunctionTreeBuilder {
 
         mapNodeToCliqueFamily(varNodeToCliques, jtNodes);
 
-        return new JunctionTree(graph, jtNodes[0], jtNodes, jtSeps, init);
+        return new JunctionTree(resource, namespace, name, graph, jtNodes[0], jtNodes, jtSeps, init);
     }
 
 
@@ -287,19 +301,18 @@ public class JunctionTreeBuilder {
 
     public int createJunctionTreeGraph(SeparatorSet[][] sepGraph, JunctionTreeClique parent, JunctionTreeClique[] jtNodes, JunctionTreeSeparator[] jtSeps, int i) {
         SeparatorSet[] row = sepGraph[parent.getId()];
-        for ( int j = 0; j < row.length; j++ ) {
-            if ( row[j] != null ) {
-                SeparatorSet separatorSet = row[j];
-                JunctionTreeClique node1 =  jtNodes[separatorSet.getId1()];
-                JunctionTreeClique node2 =  jtNodes[separatorSet.getId2()];
-                JunctionTreeClique child = ( node1 != parent ) ? node1 : node2; // this ensures we build it in the current parent/child order, based on recursive iteration
-                JunctionTreeSeparator sepNode = new JunctionTreeSeparator(i++, parent, child, separatorSet.getIntersection(), graph );
+        for (SeparatorSet set : row) {
+            if (set != null) {
+                JunctionTreeClique node1 = jtNodes[set.getId1()];
+                JunctionTreeClique node2 = jtNodes[set.getId2()];
+                JunctionTreeClique child = (node1 != parent) ? node1 : node2; // this ensures we build it in the current parent/child order, based on recursive iteration
+                JunctionTreeSeparator sepNode = new JunctionTreeSeparator(i++, parent, child, set.getIntersection(), graph);
                 jtSeps[sepNode.getId()] = sepNode;
 
                 // connection made, remove from the graph, before recursion
-                sepGraph[separatorSet.getId1()][separatorSet.getId2()] = null;
-                sepGraph[separatorSet.getId2()][separatorSet.getId1()] = null;
-                createJunctionTreeGraph( sepGraph, child, jtNodes, jtSeps, i );
+                sepGraph[set.getId1()][set.getId2()] = null;
+                sepGraph[set.getId2()][set.getId1()] = null;
+                createJunctionTreeGraph(sepGraph, child, jtNodes, jtSeps, i);
             }
         }
         return i;
@@ -324,10 +337,6 @@ public class JunctionTreeBuilder {
             for ( Edge edge : varNode.getInEdges() ) {
                 parents.set( edge.getOutGraphNode().getId() );
                 count++;
-            }
-
-            if ( count == 0 ) {
-                // node has no parents, so simply find the smallest clique it's in.
             }
 
             OpenBitSet cliques = varNodeToCliques[i];
@@ -376,7 +385,7 @@ public class JunctionTreeBuilder {
     }
 
     public static List<Integer> getAdjacentVertices(boolean[][] adjacencyMatrix, int i) {
-        List<Integer> list = new ArrayList<Integer>(adjacencyMatrix.length);
+        List<Integer> list = new ArrayList<>(adjacencyMatrix.length);
         for ( int j = 0; j < adjacencyMatrix[i].length; j++ ) {
             if ( adjacencyMatrix[i][j] ) {
                 list.add( j );
@@ -384,6 +393,4 @@ public class JunctionTreeBuilder {
         }
         return list;
     }
-
-
 }

@@ -15,9 +15,6 @@
 
 package org.drools.compiler.kie.builder.impl;
 
-import static org.drools.compiler.kie.builder.impl.KieBuilderImpl.setDefaultsforEmptyKieModule;
-import static org.drools.compiler.kproject.ReleaseIdImpl.fromPropertiesStream;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -49,13 +46,16 @@ import org.kie.api.runtime.KieContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.drools.compiler.kie.builder.impl.KieBuilderImpl.setDefaultsforEmptyKieModule;
+import static org.drools.compiler.kproject.ReleaseIdImpl.fromPropertiesStream;
+
 public class KieRepositoryImpl
         implements
         KieRepository {
 
     private static final Logger log = LoggerFactory.getLogger(KieRepositoryImpl.class);
 
-    private static final String DEFAULT_VERSION = "1.0.0-SNAPSHOT";
+    private static final String DEFAULT_VERSION = "1.0.0";
     private static final String DEFAULT_ARTIFACT = "artifact";
     private static final String DEFAULT_GROUP = "org.default";
 
@@ -83,7 +83,7 @@ public class KieRepositoryImpl
                     return kieScanner;
                 }
                 try {
-                    KieScannerFactoryService scannerFactoryService = ServiceRegistry.getInstance().get(KieScannerFactoryService.class);
+                    KieScannerFactoryService scannerFactoryService = ServiceRegistry.getService(KieScannerFactoryService.class);
                     return (InternalKieScanner) scannerFactoryService.newKieScanner();
                 } catch (Exception e) {
                     log.debug( "Cannot load a KieRepositoryScanner, using the DummyKieScanner" );
@@ -108,7 +108,7 @@ public class KieRepositoryImpl
 
     public void addKieModule(KieModule kieModule) {
         kieModuleRepo.store(kieModule);
-        log.info("KieModule was added: " + kieModule);
+        log.debug("KieModule was added: " + kieModule);
     }
 
     public KieModule getKieModule(ReleaseId releaseId) {
@@ -207,23 +207,27 @@ public class KieRepositoryImpl
         public void setKieContainer(KieContainer kieContainer) { }
 
         public KieModule loadArtifact(ReleaseId releaseId) {
-            log.error( "Cannot load artifact " + releaseId + ". You need kie-ci on the classpath to perform this operation" );
+            logArtifactNotFetched(releaseId);
             return null;
         }
 
         public KieModule loadArtifact(ReleaseId releaseId, InputStream pomXML) {
-            log.error( "Cannot load artifact " + releaseId + ". You need kie-ci on the classpath to perform this operation" );
+            logArtifactNotFetched(releaseId);
             return null;
         }
 
         public KieModule loadArtifact(ReleaseId releaseId, PomModel pomModel) {
-            log.error( "Cannot load artifact " + releaseId + ". You need kie-ci on the classpath to perform this operation" );
+            logArtifactNotFetched(releaseId);
             return null;
         }
 
         public String getArtifactVersion(ReleaseId releaseId) {
-            log.error( "Cannot load artifact " + releaseId + ". You need kie-ci on the classpath to perform this operation" );
+            logArtifactNotFetched(releaseId);
             return null;
+        }
+
+        private void logArtifactNotFetched(ReleaseId releaseId) {
+            log.info("Artifact not fetched from maven: " + releaseId + ". To enable the KieScanner you need kie-ci on the classpath");
         }
 
         public ReleaseId getScannerReleaseId() {
@@ -256,7 +260,7 @@ public class KieRepositoryImpl
             for (Resource depRes : dependencies) {
                 InternalKieModule depKModule = (InternalKieModule) getKieModule(depRes);
                 ((InternalKieModule) kModule).addKieDependency(depKModule);
-                log.info("Adding KieModule dependency from resource: " + resource);
+                log.debug("Adding KieModule dependency from resource: " + resource);
             }
         }
 
@@ -291,7 +295,7 @@ public class KieRepositoryImpl
 
                 String pomProperties = mfs.findPomProperties();
                 ReleaseId releaseId = ReleaseIdImpl.fromPropertiesString(pomProperties);
-                kModule = new MemoryKieModule(releaseId, kieProject, mfs);
+                kModule = InternalKieModuleProvider.get( releaseId, kieProject, mfs );
             }
             return kModule;
         } catch (Exception e) {
@@ -309,22 +313,22 @@ public class KieRepositoryImpl
      *    so we're using synchronized methods instead
      */
     // package scope so that we can test it
-    static class KieModuleRepo {
+    public static class KieModuleRepo {
 
         // PROPERTIES -------------------------------------------------------------------------------------------------------------
 
         public static final String CACHE_GA_MAX_PROPERTY = "kie.repository.project.cache.size";
-        static final int MAX_SIZE_GA_CACHE // made changeable for test purposes
+        public static int MAX_SIZE_GA_CACHE // made changeable for test purposes
             = Integer.parseInt(System.getProperty(CACHE_GA_MAX_PROPERTY, "100"));
 
         public static final String CACHE_VERSIONS_MAX_PROPERTY = "kie.repository.project.versions.cache.size";
-        static final int MAX_SIZE_GA_VERSIONS_CACHE // made changeable for test purposes
+        public static int MAX_SIZE_GA_VERSIONS_CACHE // made changeable for test purposes
             = Integer.parseInt(System.getProperty(CACHE_VERSIONS_MAX_PROPERTY, "10"));
 
         // FIELDS -----------------------------------------------------------------------------------------------------------------
 
         // kieModules evicts based on access-time, not on insertion-time
-        final Map<String, NavigableMap<ComparableVersion, KieModule>> kieModules
+        public final Map<String, NavigableMap<ComparableVersion, KieModule>> kieModules
             = new LinkedHashMap<String, NavigableMap<ComparableVersion, KieModule>>(16, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry( Map.Entry<String, NavigableMap<ComparableVersion, KieModule>> eldest) {
@@ -332,7 +336,7 @@ public class KieRepositoryImpl
             }
         };
 
-        final LinkedHashMap<ReleaseId, KieModule> oldKieModules = new LinkedHashMap<ReleaseId, KieModule>() {
+        public final LinkedHashMap<ReleaseId, KieModule> oldKieModules = new LinkedHashMap<ReleaseId, KieModule>() {
             @Override
             protected boolean removeEldestEntry( Map.Entry<ReleaseId, KieModule> eldest ) {
                 return size() > (MAX_SIZE_GA_CACHE*MAX_SIZE_GA_VERSIONS_CACHE);
@@ -342,7 +346,7 @@ public class KieRepositoryImpl
 
         // METHODS ----------------------------------------------------------------------------------------------------------------
 
-        synchronized KieModule remove(ReleaseId releaseId) {
+        public synchronized KieModule remove(ReleaseId releaseId) {
             KieModule removedKieModule = null;
             String ga = releaseId.getGroupId() + ":" + releaseId.getArtifactId();
             ComparableVersion comparableVersion = new ComparableVersion(releaseId.getVersion());
@@ -359,7 +363,7 @@ public class KieRepositoryImpl
             return removedKieModule;
         }
 
-        synchronized void store(KieModule kieModule) {
+        public synchronized void store(KieModule kieModule) {
             ReleaseId releaseId = kieModule.getReleaseId();
             String ga = releaseId.getGroupId() + ":" + releaseId.getArtifactId();
             ComparableVersion comparableVersion = new ComparableVersion(releaseId.getVersion());

@@ -15,6 +15,7 @@
 
 package org.drools.core.beliefsystem.jtms;
 
+import org.drools.core.WorkingMemoryEntryPoint;
 import org.drools.core.beliefsystem.BeliefSet;
 import org.drools.core.beliefsystem.BeliefSystem;
 import org.drools.core.beliefsystem.jtms.JTMSBeliefSetImpl.MODE;
@@ -37,8 +38,8 @@ import static org.drools.core.reteoo.PropertySpecificUtil.allSetButTraitBitMask;
 public class JTMSBeliefSystem<M extends JTMSMode<M>>
         implements
         BeliefSystem<M> {
-    protected static final transient Logger  log    = LoggerFactory.getLogger(JTMSBeliefSystem.class);
-    public static                    boolean STRICT = false;
+    protected static final Logger  log    = LoggerFactory.getLogger(JTMSBeliefSystem.class);
+    public static boolean STRICT = false;
 
     private   TruthMaintenanceSystem tms;
     protected InternalWorkingMemoryEntryPoint        ep;
@@ -168,8 +169,9 @@ public class JTMSBeliefSystem<M extends JTMSMode<M>>
 
                 // Equality might have changed on the object, so remove (which uses the handle id) and add back in
                 if ( fh.getObject() != object ) {
-                    fh.getEntryPoint().getObjectStore().updateHandle( fh, object );
-                    fh.getEntryPoint().update( fh, fh.getObject(), allSetButTraitBitMask(), object.getClass(), null );
+                    WorkingMemoryEntryPoint wmep = fh.getEntryPoint(ep.getInternalWorkingMemory());
+                    wmep.getObjectStore().updateHandle( fh, object );
+                    wmep.update( fh, fh.getObject(), allSetButTraitBitMask(), object.getClass(), null );
                 }
             }
         }

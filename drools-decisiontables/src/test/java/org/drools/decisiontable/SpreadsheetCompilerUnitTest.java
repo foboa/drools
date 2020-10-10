@@ -21,7 +21,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
+import org.assertj.core.api.Assertions;
 import org.drools.core.impl.InternalKnowledgeBase;
 import org.drools.core.impl.KnowledgeBaseFactory;
 import org.drools.decisiontable.parser.DefaultRuleSheetListener;
@@ -42,9 +44,11 @@ import org.kie.internal.builder.KnowledgeBuilderError;
 import org.kie.internal.builder.KnowledgeBuilderErrors;
 import org.kie.internal.builder.KnowledgeBuilderFactory;
 import org.kie.internal.io.ResourceFactory;
-import org.kie.internal.runtime.StatefulKnowledgeSession;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Some basic unit tests for converter utility. Note that some of this may still
@@ -78,6 +82,65 @@ public class SpreadsheetCompilerUnitTest {
         assertTrue( drl.indexOf( "import example.model.Car;" ) > -1 );
         assertTrue( drl.indexOf( "package " ) == -1 );
 
+    }
+
+    @Test
+    public void testMultilineActions() {
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        final InputStream stream = this.getClass().getResourceAsStream("MultiLinesInAction.xls");
+        final String drl = converter.compile(stream,
+                                             InputType.XLS);
+
+        Assertions.assertThat(drl).doesNotContain("\\n");
+    }
+
+    @Test
+    public void testMultilineActionsAndMultiLineInConstant() {
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        final InputStream stream = this.getClass().getResourceAsStream("MultiLinesInActionAndMultiLineInConstant.xls");
+        final String drl = converter.compile(stream,
+                                             InputType.XLS);
+
+        Assertions.assertThat(drl).contains(" **\n** ");
+    }
+
+    @Test
+    public void testMultilineActionsAndMultiLineAsConstant() {
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        final InputStream stream = this.getClass().getResourceAsStream("MultiLinesInActionAndMultiLineAsConstant.xls");
+        final String drl = converter.compile(stream,
+                                             InputType.XLS);
+
+        Assertions.assertThat(drl).contains(" **\\n** ");
+    }
+
+    @Test
+    public void testMultilineCommentsInDescription() {
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        final InputStream stream = this.getClass().getResourceAsStream("/data/Multiline comment example.xls");
+        final String drl = converter.compile(stream,
+                                             InputType.XLS);
+
+        Assertions.assertThat(drl).containsSubsequence("/* Say", "Hello */", "/* Say", "Goobye */");
+        Assertions.assertThat(drl).doesNotContain("// Say");
+    }
+
+    @Test
+    public void testMultilineComplexCommentsInDescription() {
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        final InputStream stream = this.getClass().getResourceAsStream("/data/Multiline comment example complex.xls");
+        final String drl = converter.compile(stream,
+                                             InputType.XLS);
+
+        Assertions.assertThat(drl).containsSubsequence("/* Do these actions:",
+                                                    "- Print Greeting",
+                                                    "- Set params: {message:'bye cruel world', status:'bye'} */",
+                                                    "/* Print message: \"Bye!\"",
+                                                    "Author: james@company.org */");
+
+        Assertions.assertThat(drl).doesNotContain("* - Print Greeting");
+        Assertions.assertThat(drl).doesNotContain("* - Set params: {message:'bye cruel world', status:'bye'}");
+        Assertions.assertThat(drl).doesNotContain("* Author: james@company.org");
     }
 
     @Test
@@ -392,13 +455,17 @@ public class SpreadsheetCompilerUnitTest {
 
     @Test
     public void testNegativeNumbers() throws Exception {
-        KieBase kbase = readKnowledgeBase( "/data/DT_WithNegativeNumbers.xls" );
+        KieBase kbase = readKnowledgeBase("/data/DT_WithNegativeNumbers.xls");
         KieSession ksession = kbase.newKieSession();
-        IntHolder i1 = new IntHolder( 1 );
-        IntHolder i2 = new IntHolder( -1 );
-        ksession.insert( i1 );
-        ksession.insert( i2 );
-        ksession.fireAllRules();
+        try {
+            IntHolder i1 = new IntHolder(1);
+            IntHolder i2 = new IntHolder(-1);
+            ksession.insert(i1);
+            ksession.insert(i2);
+            ksession.fireAllRules();
+        } finally {
+            ksession.dispose();
+        }
     }
 
     @Test
@@ -432,7 +499,7 @@ public class SpreadsheetCompilerUnitTest {
 
         assertNotNull( drl );
 
-        final String expected = "package Some_business_rules;\n" +
+        final String expected = "package data;\n" +
                 "//generated from Decision Table\n" +
                 "import org.drools.decisiontable.Person;\n" +
                 "// rule values at C10, header at C5\n" +
@@ -455,8 +522,7 @@ public class SpreadsheetCompilerUnitTest {
                 "end";
         //No Pattern generated when all constraints have empty values
 
-        assertEqualsIgnoreWhitespace( expected,
-                                      drl );
+        Assertions.assertThat(expected).isEqualToIgnoringWhitespace(drl);
     }
 
     @Test
@@ -481,7 +547,7 @@ public class SpreadsheetCompilerUnitTest {
 
         assertNotNull( drl );
 
-        final String expected = "package Some_business_rules;\n" +
+        final String expected = "package data;\n" +
                 "//generated from Decision Table\n" +
                 "import org.drools.decisiontable.Person;\n" +
                 "// rule values at C10, header at C5\n" +
@@ -504,8 +570,7 @@ public class SpreadsheetCompilerUnitTest {
                 "end";
         //No Pattern generated when all constraints have empty values
 
-        assertEqualsIgnoreWhitespace( expected,
-                                      drl );
+        Assertions.assertThat(expected).isEqualToIgnoringWhitespace(drl);
     }
 
     @Test
@@ -532,7 +597,7 @@ public class SpreadsheetCompilerUnitTest {
 
         assertNotNull( drl );
 
-        final String expected = "package Some_business_rules;\n" +
+        final String expected = "package data;\n" +
                 "//generated from Decision Table\n" +
                 "import org.drools.decisiontable.Person;\n" +
                 "// rule values at C10, header at C5\n" +
@@ -572,8 +637,7 @@ public class SpreadsheetCompilerUnitTest {
                 "  then\n" +
                 "end";
 
-        assertEqualsIgnoreWhitespace( expected,
-                                      drl );
+        Assertions.assertThat(expected).isEqualToIgnoringWhitespace(drl);
     }
 
     @Test
@@ -585,7 +649,7 @@ public class SpreadsheetCompilerUnitTest {
 
         assertNotNull( drl );
 
-        final String expected = "package Connexis_Cash_Enrichment;\n" +
+        final String expected = "package data;\n" +
                 "//generated from Decision Table\n" +
                 "import com.brms.dto.fact.*;\n" +
                 "dialect \"mvel\";\n" +
@@ -631,8 +695,7 @@ public class SpreadsheetCompilerUnitTest {
                 "    System.out.println(false);\n" +
                 "end\n";
 
-        assertEqualsIgnoreWhitespace( expected,
-                                      drl );
+        Assertions.assertThat(expected).isEqualToIgnoringWhitespace(drl);
     }
 
     public static class IntHolder {
@@ -673,17 +736,6 @@ public class SpreadsheetCompilerUnitTest {
         InternalKnowledgeBase kbase = KnowledgeBaseFactory.newKnowledgeBase();
         kbase.addPackages(kbuilder.getKnowledgePackages());
         return kbase;
-    }
-
-    private void assertEqualsIgnoreWhitespace( final String expected,
-                                               final String actual ) {
-        final String cleanExpected = expected.replaceAll( "\\s+",
-                                                          "" );
-        final String cleanActual = actual.replaceAll( "\\s+",
-                                                      "" );
-
-        assertEquals( cleanExpected,
-                      cleanActual );
     }
 
     @Test
@@ -733,7 +785,7 @@ public class SpreadsheetCompilerUnitTest {
 
         assertNotNull( drl );
 
-        final String expected = "package com.sample;\n" +
+        final String expected = "package data;\n" +
                 "//generated from Decision Table\n" +
                 "import com.sample.DecisionTableTest.Message;\n" +
                 "dialect \"mvel\"\n" +
@@ -754,8 +806,52 @@ public class SpreadsheetCompilerUnitTest {
                 "    System.out.println(m.getMessage());\n" +
                 "end\n";
 
-        assertEqualsIgnoreWhitespace( expected,
-                                      drl );
+        Assertions.assertThat(expected).isEqualToIgnoringWhitespace(drl);
     }
 
+    @Test
+    public void testLhsOrder() {
+        // DROOLS-3080
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        String drl = converter.compile("/data/LhsOrder.xls", InputType.XLS);
+
+        Assertions.assertThat(Stream.of(drl.split("\n")).map(String::trim).toArray())
+                .as("Lhs order is wrong")
+                .containsSequence("accumulate(Person(name == \"John\", $a : age); $max:max($a))",
+                        "$p:Person(name == \"John\", age == $max)");
+    }
+
+    @Test
+    public void testNewLineInConstraint() {
+        // DROOLS-4788
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        String drl = converter.compile("/data/NewLineInConstraint.xls", InputType.XLS);
+        assertTrue(drl.contains( "map[\"Key2\"] == var2" ));
+    }
+
+    @Test
+    public void testNoUnit() {
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        final InputStream stream = this.getClass().getResourceAsStream( "/data/CanDrink.xls" );
+        final String drl = converter.compile(stream, InputType.XLS);
+        assertTrue( drl.contains( "$p: Person(age < 18)" ) );
+    }
+
+    @Test
+    public void testRuleUnit() {
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        final InputStream stream = this.getClass().getResourceAsStream( "/data/CanDrinkUnit.xls" );
+        final String drl = converter.compile(stream, InputType.XLS);
+        assertTrue( drl.contains( "unit CanDrinkUnit;" ) );
+        assertTrue( drl.contains( "query Results $r: /results end" ) );
+        assertTrue( drl.contains( "$p: /persons[age < 18]" ) );
+    }
+
+    @Test
+    public void testUseWatchAnnotation() {
+        final SpreadsheetCompiler converter = new SpreadsheetCompiler();
+        final InputStream stream = this.getClass().getResourceAsStream( "/data/CanDrinkUsingWatch.xls" );
+        final String drl = converter.compile(stream, InputType.XLS);
+        assertTrue( drl.contains( "$p: Person(age < 18) @watch(name)" ) );
+    }
 }

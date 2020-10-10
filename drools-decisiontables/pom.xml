@@ -6,7 +6,7 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>drools-decisiontables</artifactId>
@@ -15,7 +15,7 @@
   <name>Drools :: Decision Tables</name>
 
   <properties>
-    <osgi.Bundle-SymbolicName>org.drools.decisiontables;singleton:=true</osgi.Bundle-SymbolicName>
+    <java.module.name>org.drools.decisiontables</java.module.name>
   </properties>
 
   <dependencies>
@@ -61,11 +61,7 @@
         </exclusion>
       </exclusions>
     </dependency>
-    <!-- Replacement for stax:stax-api excluded from org.apache.poi:poi-ooxml -->
-    <dependency>
-      <groupId>javax.xml.stream</groupId>
-      <artifactId>stax-api</artifactId>
-    </dependency>
+    <!-- Do not place a Replacement for stax:stax-api excluded from org.apache.poi:poi-ooxml -->
     <dependency>
       <groupId>org.apache.poi</groupId>
       <artifactId>poi</artifactId>
@@ -85,6 +81,11 @@
     <dependency><!-- For unit test logging: configure in src/test/resources/logback-test.xml -->
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

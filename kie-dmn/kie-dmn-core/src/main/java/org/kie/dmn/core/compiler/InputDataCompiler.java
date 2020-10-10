@@ -20,8 +20,8 @@ import org.kie.dmn.api.core.DMNType;
 import org.kie.dmn.core.ast.InputDataNodeImpl;
 import org.kie.dmn.core.impl.DMNModelImpl;
 import org.kie.dmn.core.util.Msg;
-import org.kie.dmn.model.v1_1.DRGElement;
-import org.kie.dmn.model.v1_1.InputData;
+import org.kie.dmn.model.api.DRGElement;
+import org.kie.dmn.model.api.InputData;
 
 public class InputDataCompiler implements DRGElementCompiler {
     @Override
@@ -34,10 +34,10 @@ public class InputDataCompiler implements DRGElementCompiler {
         InputDataNodeImpl idn = new InputDataNodeImpl( input );
         if ( input.getVariable() != null ) {
             DMNCompilerHelper.checkVariableName( model, input, input.getName() );
-            DMNType type = compiler.resolveTypeRef( model, idn, de, input.getVariable(), input.getVariable().getTypeRef() );
+            DMNType type = compiler.resolveTypeRef(model, de, input.getVariable(), input.getVariable().getTypeRef());
             idn.setType( type );
         } else {
-            idn.setType( DMNTypeRegistry.UNKNOWN );
+            idn.setType(model.getTypeRegistry().unknown());
             DMNCompilerHelper.reportMissingVariable( model, de, input, Msg.MISSING_VARIABLE_FOR_INPUT );
         }
         model.addInput( idn );

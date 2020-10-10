@@ -15,16 +15,20 @@
 
 package org.drools.template;
 
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.assertj.core.api.Assertions;
 import org.drools.template.parser.Column;
 import org.drools.template.parser.DefaultTemplateContainer;
 import org.drools.template.parser.TemplateContainer;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.InputStream;
-import java.util.*;
-
-import static org.junit.Assert.assertEquals;
 
 public class DataProviderCompilerTest {
 
@@ -49,10 +53,10 @@ public class DataProviderCompilerTest {
         String rule0_then = "\tthen\n\t\tresult.setSchedule(new FeeSchedule(\"1\", \"STANDARD\", 750));\nend\n\n\n";
 
         EXPECTED_RULES.append(head);
-        EXPECTED_RULES.append(rule3_a).append(rule3_b).append(rule3_then);
-        EXPECTED_RULES.append(rule2_a).append(rule2_b).append(rule2_then);
-        EXPECTED_RULES.append(rule1_a).append(rule1_b).append(rule1_then);
         EXPECTED_RULES.append(rule0_a).append(rule0_b).append(rule0_then);
+        EXPECTED_RULES.append(rule1_a).append(rule1_b).append(rule1_then);
+        EXPECTED_RULES.append(rule2_a).append(rule2_b).append(rule2_then);
+        EXPECTED_RULES.append(rule3_a).append(rule3_b).append(rule3_then);
     }
 
     private class TestDataProvider
@@ -133,9 +137,8 @@ public class DataProviderCompilerTest {
         final DataProviderCompiler converter = new DataProviderCompiler();
         final String drl = converter.compile(tdp,
                                              "/templates/rule_template_1.drl");
-        //        System.out.println( drl );
-        assertEqualsIgnoreWhitespace(EXPECTED_RULES.toString(),
-                                     drl);
+
+        Assertions.assertThat(EXPECTED_RULES.toString()).isEqualToIgnoringWhitespace(drl);
     }
     
     @Test
@@ -144,8 +147,7 @@ public class DataProviderCompilerTest {
         final DataProviderCompiler converter = new DataProviderCompiler();
         final String drl = converter.compile( tdp,
                                               "/templates/rule_template_indented.drl" );
-        assertEqualsIgnoreWhitespace( EXPECTED_RULES.toString(),
-                                      drl );
+        Assertions.assertThat(EXPECTED_RULES.toString()).isEqualToIgnoringWhitespace(drl);
     }
 
     @Test
@@ -172,9 +174,7 @@ public class DataProviderCompilerTest {
                 this.getClass().getResourceAsStream("/templates/rule_template_1.drl");
         final String drl = converter.compile(maps,
                                              templateStream);
-        //        System.out.println( drl );
-        assertEqualsIgnoreWhitespace(EXPECTED_RULES.toString(),
-                                     drl);
+        Assertions.assertThat(EXPECTED_RULES.toString()).isEqualToIgnoringWhitespace(drl);
     }
 
     public static class OBJ {
@@ -242,19 +242,7 @@ public class DataProviderCompilerTest {
         }
         final String drl = converter.compile(objs,
                                              templateStream);
-        //        System.out.println( drl );
-        assertEqualsIgnoreWhitespace(EXPECTED_RULES.toString(),
-                                     drl);
-    }
-
-    private static void assertEqualsIgnoreWhitespace(final String expected,
-                                                     final String actual) {
-        final String cleanExpected = expected.replaceAll("\\s+",
-                                                         "");
-        final String cleanActual = actual.replaceAll("\\s+",
-                                                     "");
-        assertEquals(cleanExpected,
-                     cleanActual);
+        Assertions.assertThat(EXPECTED_RULES.toString()).isEqualToIgnoringWhitespace(drl);
     }
 
 }

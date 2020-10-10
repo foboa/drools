@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.kie</groupId>
     <artifactId>kie-dmn</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>kie-dmn-api</artifactId>
@@ -16,7 +16,7 @@
   <name>KIE :: Decision Model Notation :: API</name>
 
   <properties>
-    <osgi.Bundle-SymbolicName>org.kie.dmn.api</osgi.Bundle-SymbolicName>
+    <java.module.name>org.kie.dmn.api</java.module.name>
   </properties>
   
   <dependencies>
@@ -58,4 +58,15 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>sonarcloud-analysis</id>
+      <properties>
+        <!-- Excluding the entire module from coverage statistics. API modules like this one contain only interfaces
+             and enums, thus nothing JaCoCo can measure. -->
+        <sonar.coverage.exclusions>**/*.java</sonar.coverage.exclusions>
+      </properties>
+    </profile>
+  </profiles>
 </project>

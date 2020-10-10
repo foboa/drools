@@ -66,7 +66,7 @@ public class SerializablePlaceholderResolverStrategy
         SerializablePlaceholderStrategyContext ctx = (SerializablePlaceholderStrategyContext)context;
         int index = ctx.data.size();
         ctx.data.add( object );
-        return PersisterHelper.intToByteArray( index );
+        return MarshallingHelper.intToByteArray( index );
     }
 
     public Object unmarshal(Context context,
@@ -74,7 +74,7 @@ public class SerializablePlaceholderResolverStrategy
                             byte[] object, 
                             ClassLoader classloader) throws IOException, ClassNotFoundException {
         SerializablePlaceholderStrategyContext ctx = (SerializablePlaceholderStrategyContext)context;
-        return ctx.data.get( PersisterHelper.byteArrayToInt( object ) );
+        return ctx.data.get( MarshallingHelper.byteArrayToInt( object ) );
     }
     
     public Context createContext() {
@@ -85,7 +85,7 @@ public class SerializablePlaceholderResolverStrategy
         // this data map is used when marshalling out objects in order
         // to preserve graph references without cloning objects all over
         // the place.
-        public List<Object> data = new ArrayList<Object>();
+        public List<Object> data = new ArrayList<>();
 
         @SuppressWarnings("unchecked")
         public void read(ObjectInputStream ois) throws IOException,
@@ -97,5 +97,11 @@ public class SerializablePlaceholderResolverStrategy
             oos.writeObject( this.data );
         }
     }
-    
+
+    @Override
+    public String toString() {
+        return "SerializablePlaceholderResolverStrategy{" +
+                "acceptor=" + acceptor +
+                '}';
+    }
 }

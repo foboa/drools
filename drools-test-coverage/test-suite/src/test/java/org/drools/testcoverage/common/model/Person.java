@@ -17,6 +17,8 @@
 package org.drools.testcoverage.common.model;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Person implements Serializable {
 
@@ -27,6 +29,14 @@ public class Person implements Serializable {
     private int age;
     private String likes;
     private Address address;
+    private List<Address> addresses = new ArrayList<>();
+    private Pet pet;
+    private boolean alive;
+    private boolean happy;
+    private Cheese cheese;
+    private String hair;
+
+    private Object object;
 
     public Person() {
     }
@@ -45,6 +55,11 @@ public class Person implements Serializable {
         this.name = name;
         this.likes = likes;
         this.age = age;
+    }
+
+    public Person(final String name, final String likes) {
+        this.name = name;
+        this.likes = likes;
     }
 
     public int getId() {
@@ -79,12 +94,76 @@ public class Person implements Serializable {
         return age;
     }
 
+    public int getDoubleAge() {
+        return this.age * 2;
+    }
+
     public void setLikes(final String likes) {
         this.likes = likes;
     }
 
     public String getLikes() {
         return likes;
+    }
+
+    public void addAddress(final Address address) {
+        addresses.add(address);
+    }
+
+    public List<Address> getAddresses() {
+        return addresses;
+    }
+
+    public void setAddresses(final List<Address> addresses) {
+        this.addresses = addresses;
+    }
+
+    public Pet getPet() {
+        return pet;
+    }
+
+    public void setPet(final Pet pet) {
+        this.pet = pet;
+    }
+
+    public boolean isAlive() {
+        return alive;
+    }
+
+    public void setAlive(final boolean alive) {
+        this.alive = alive;
+    }
+
+    public boolean isHappy() {
+        return happy;
+    }
+
+    public void setHappy(final boolean happy) {
+        this.happy = happy;
+    }
+
+    public Cheese getCheese() {
+        return cheese;
+    }
+
+    public Object getObject() {
+        return object;
+    }
+
+    public void setObject(final Object object) {
+        this.object = object;
+    }
+
+    public void setCheese(final Cheese cheese) {
+        this.cheese = cheese;
+    }
+
+    public String getHair() {
+        return hair;
+    }
+
+    public void setHair(final String hair) {
+        this.hair = hair;
     }
 
     @Override
@@ -102,7 +181,7 @@ public class Person implements Serializable {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(final Object obj) {
         if (this == obj) {
             return true;
         }
@@ -117,12 +196,9 @@ public class Person implements Serializable {
             return false;
         }
         if (name == null) {
-            if (other.name != null) {
-                return false;
-            }
-        } else if (!name.equals(other.name)) {
-            return false;
+            return other.name == null;
+        } else {
+            return name.equals(other.name);
         }
-        return true;
     }
 }

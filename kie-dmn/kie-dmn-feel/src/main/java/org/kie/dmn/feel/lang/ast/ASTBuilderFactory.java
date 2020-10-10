@@ -16,11 +16,12 @@
 
 package org.kie.dmn.feel.lang.ast;
 
-import org.antlr.v4.runtime.ParserRuleContext;
-import org.kie.dmn.feel.lang.Type;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import org.antlr.v4.runtime.ParserRuleContext;
+import org.kie.dmn.feel.lang.Type;
+import org.kie.dmn.feel.parser.feel11.FEEL_1_1Parser.AtLiteralContext;
 
 public class ASTBuilderFactory {
 
@@ -50,6 +51,10 @@ public class ASTBuilderFactory {
 
     public static BetweenNode newBetweenNode(ParserRuleContext ctx, BaseNode value, BaseNode start, BaseNode end) {
         return new BetweenNode( ctx, value, start, end );
+    }
+
+    public static UnaryTestListNode newUnaryTestListNode(ParserRuleContext ctx, List<BaseNode> exprs, UnaryTestListNode.State state) {
+        return new UnaryTestListNode( ctx, exprs, state );
     }
 
     public static ListNode newListNode(ParserRuleContext ctx, List<BaseNode> exprs) {
@@ -88,8 +93,16 @@ public class ASTBuilderFactory {
         return new FunctionDefNode( ctx, parameters, external, body );
     }
 
+    public static FormalParameterNode newFormalParameter(ParserRuleContext ctx, NameDefNode name, TypeNode type) {
+        return new FormalParameterNode(ctx, name, type);
+    }
+
     public static IterationContextNode newIterationContextNode(ParserRuleContext ctx, NameDefNode name, BaseNode expr) {
         return new IterationContextNode( ctx, name, expr );
+    }
+
+    public static IterationContextNode newIterationContextNode(ParserRuleContext ctx, NameDefNode name, BaseNode expr, BaseNode rangeEndExpr) {
+        return new IterationContextNode(ctx, name, expr, rangeEndExpr);
     }
 
     public static ForExpressionNode newForExpression(ParserRuleContext ctx, ListNode list, BaseNode expr) {
@@ -98,6 +111,10 @@ public class ASTBuilderFactory {
 
     public static NameRefNode newNameRefNode( ParserRuleContext ctx, Type type ) {
         return new NameRefNode( ctx, type );
+    }
+
+    public static NameRefNode newNameRefNode( ParserRuleContext ctx, String name, Type type ) {
+        return new NameRefNode( ctx, name, type );
     }
 
     public static QualifiedNameNode newQualifiedNameNode(ParserRuleContext ctx, ArrayList<NameRefNode> parts, Type type ) {
@@ -136,7 +153,11 @@ public class ASTBuilderFactory {
         return new DashNode( ctx );
     }
 
-    public static TypeNode newTypeNode(ParserRuleContext ctx) {
-        return new TypeNode( ctx );
+    public static CTypeNode newCTypeNode(ParserRuleContext ctx, Type type) {
+        return new CTypeNode(ctx, type);
+    }
+
+    public static BaseNode newAtLiteralNode(AtLiteralContext ctx, StringNode stringLiteral) {
+        return new AtLiteralNode(ctx, stringLiteral);
     }
 }

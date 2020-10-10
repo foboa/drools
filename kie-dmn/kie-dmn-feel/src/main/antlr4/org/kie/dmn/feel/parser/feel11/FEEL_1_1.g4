@@ -10,22 +10,17 @@ grammar FEEL_1_1;
 
 @parser::header {
     import org.kie.dmn.feel.parser.feel11.ParserHelper;
-    import org.kie.dmn.feel.parser.feel11.Keywords;
 }
 
 @parser::members {
     private ParserHelper helper = null;
-
+    
     public void setHelper( ParserHelper helper ) {
         this.helper = helper;
     }
 
     public ParserHelper getHelper() {
         return helper;
-    }
-
-    private boolean isKeyword( Keywords k ) {
-        return k.symbol.equals( _input.LT(1).getText() );
     }
 
     private String getOriginalText( ParserRuleContext ctx ) {
@@ -56,23 +51,23 @@ textualExpression
 
 // #41
 parameters
-    : '(' ')'                       #parametersEmpty
-    | '(' namedParameters ')'       #parametersNamed
-    | '(' positionalParameters ')'  #parametersPositional
+    : LPAREN RPAREN                       #parametersEmpty
+    | LPAREN namedParameters RPAREN       #parametersNamed
+    | LPAREN positionalParameters RPAREN  #parametersPositional
     ;
 
 // #42 #43
 namedParameters
-    : namedParameter (',' namedParameter)*
+    : namedParameter (COMMA namedParameter)*
     ;
 
 namedParameter
-    : name=nameDefinition ':' value=expression
+    : name=nameDefinition COLON value=expression
     ;
 
 // #44
 positionalParameters
-    : expression ( ',' expression )*
+    : expression ( COMMA expression )*
     ;
 
 // #46
@@ -83,20 +78,21 @@ forExpression
 @after {
     helper.popScope();
 }
-    : for_key iterationContexts return_key {helper.enableDynamicResolution();} expression {helper.disableDynamicResolution();}
+    : FOR iterationContexts RETURN {helper.enableDynamicResolution();} expression {helper.disableDynamicResolution();}
     ;
 
 iterationContexts
-    : iterationContext ( ',' iterationContext )*
+    : iterationContext ( COMMA iterationContext )*
     ;
 
 iterationContext
-    : nameDefinition in_key expression
+    : {helper.isFeatDMN12EnhancedForLoopEnabled()}? iterationNameDefinition IN expression '..' expression
+    | iterationNameDefinition IN expression
     ;
-
+    
 // #47
 ifExpression
-    : if_key c=expression then_key t=expression else_key e=expression
+    : IF c=expression THEN t=expression ELSE e=expression
     ;
 
 // #48
@@ -107,19 +103,29 @@ quantifiedExpression
 @after {
     helper.popScope();
 }
-    : some_key iterationContexts satisfies_key {helper.enableDynamicResolution();} expression {helper.disableDynamicResolution();}    #quantExprSome
-    | every_key iterationContexts satisfies_key {helper.enableDynamicResolution();} expression {helper.disableDynamicResolution();}   #quantExprEvery
+    : SOME iterationContexts SATISFIES {helper.enableDynamicResolution();} expression {helper.disableDynamicResolution();}    #quantExprSome
+    | EVERY iterationContexts SATISFIES {helper.enableDynamicResolution();} expression {helper.disableDynamicResolution();}   #quantExprEvery
     ;
 
 // #54
 type
-    : ( function_key | qualifiedName )
+@init {
+    helper.pushTypeScope();
+}
+@after {
+    helper.popScope();
+}
+    : sk=Identifier {$sk.getText().equals("list");} LT type GT                                                        #listType
+    | sk=Identifier {$sk.getText().equals("context");} LT Identifier COLON type ( COMMA Identifier COLON type )* GT   #contextType
+    | FUNCTION                                                                                                        #qnType
+    | FUNCTION LT type ( COMMA type )* GT RARROW type                                                                 #functionType
+    | qualifiedName                                                                                                   #qnType
     ;
 
 // #56
 list
-    : '[' ']'
-    | '[' expressionList ']'
+    : LBRACK RBRACK
+    | LBRACK expressionList RBRACK
     ;
 
 // #57
@@ -130,16 +136,17 @@ functionDefinition
 @after {
     helper.popScope();
 }
-    : function_key '(' formalParameters? ')' external=external_key? {helper.enableDynamicResolution();} body=expression {helper.disableDynamicResolution();}
+    : FUNCTION LPAREN formalParameters? RPAREN external=EXTERNAL? {helper.enableDynamicResolution();} body=expression {helper.disableDynamicResolution();}
     ;
 
 formalParameters
-    : formalParameter ( ',' formalParameter )*
+    : formalParameter ( COMMA formalParameter )*
     ;
 
 // #58
 formalParameter
-    : nameDefinition
+    : nameDefinition COLON type
+    | nameDefinition
     ;
 
 // #59
@@ -150,18 +157,18 @@ context
 @after {
     helper.popScope();
 }
-    : '{' '}'
-    | '{' contextEntries '}'
+    : LBRACE RBRACE
+    | LBRACE contextEntries RBRACE
     ;
 
 contextEntries
-    : contextEntry ( ',' contextEntry )*
+    : contextEntry ( COMMA contextEntry )*
     ;
 
 // #60
 contextEntry
     : key { helper.pushName( $key.ctx ); }
-      ':' expression { helper.popName(); helper.defineVariable( $key.ctx ); }
+      COLON expression { helper.popName(); helper.defineVariable( $key.ctx ); }
     ;
 
 // #61
@@ -173,8 +180,27 @@ key
 nameDefinition
     : nameDefinitionTokens { helper.defineVariable( $nameDefinitionTokens.ctx ); }
     ;
+    
+nameDefinitionWithEOF
+    : nameDefinition EOF
+    ;
 
 nameDefinitionTokens
+    : Identifier
+        ( Identifier
+        | additionalNameSymbol
+        | IntegerLiteral
+        | FloatingPointLiteral
+        | reusableKeywords
+        | IN
+        )*
+    ;
+
+iterationNameDefinition
+    : iterationNameDefinitionTokens { helper.defineVariable( $iterationNameDefinitionTokens.ctx ); }
+    ;
+
+iterationNameDefinitionTokens
     : Identifier
         ( Identifier
         | additionalNameSymbol
@@ -186,69 +212,73 @@ nameDefinitionTokens
 
 
 additionalNameSymbol
-    : ( '.' | '/' | '-' | '\'' | '+' | '*' )
+    : //( '.' | '/' | '-' | '\'' | '+' | '*' )
+    DOT | DIV | SUB | ADD | MUL | QUOTE
     ;
 
 conditionalOrExpression
 	:	conditionalAndExpression                                                 #condOrAnd
- 	|	left=conditionalOrExpression op=or_key right=conditionalAndExpression    #condOr
+ 	|	left=conditionalOrExpression op=OR right=conditionalAndExpression    #condOr
 	;
 
 conditionalAndExpression
 	:	comparisonExpression                                                   #condAndComp
-	|	left=conditionalAndExpression op=and_key right=comparisonExpression      #condAnd
+	|	left=conditionalAndExpression op=AND right=comparisonExpression      #condAnd
 	;
 
 comparisonExpression
 	:	relationalExpression                                                                   #compExpressionRel
-	|   left=comparisonExpression op=('<'|'>'|'<='|'>='|'='|'!=') right=relationalExpression   #compExpression
+	|   left=comparisonExpression op=(LT |
+                                      GT |
+                                      LE |
+                                      GE |
+                                      EQUAL |
+                                      NOTEQUAL) right=relationalExpression   #compExpression
 	;
 
 relationalExpression
 	:	additiveExpression                                                                           #relExpressionAdd
-	|	val=relationalExpression between_key start=additiveExpression and_key end=additiveExpression   #relExpressionBetween
-	|   val=relationalExpression in_key '(' expressionList ')'                                       #relExpressionValueList
-	|   val=relationalExpression in_key '(' simpleUnaryTests ')'                                     #relExpressionTestList
-    |   val=relationalExpression in_key expression                                                   #relExpressionValue        // includes simpleUnaryTest
-    |   val=relationalExpression instance_key of_key type                                            #relExpressionInstanceOf
+	|	val=relationalExpression BETWEEN start=additiveExpression AND end=additiveExpression   #relExpressionBetween
+	|   val=relationalExpression IN LPAREN positiveUnaryTests RPAREN                                     #relExpressionTestList
+    |   val=relationalExpression IN expression                                                   #relExpressionValue        // includes simpleUnaryTest
+    |   val=relationalExpression INSTANCE OF type                                            #relExpressionInstanceOf
 	;
 
 expressionList
-    :   expression  (',' expression)*
+    :   expression  (COMMA expression)*
     ;
 
 additiveExpression
 	:	multiplicativeExpression                            #addExpressionMult
-	|	additiveExpression op='+' multiplicativeExpression  #addExpression
-	|	additiveExpression op='-' multiplicativeExpression  #addExpression
+	|	additiveExpression op=ADD multiplicativeExpression  #addExpression
+	|	additiveExpression op=SUB multiplicativeExpression  #addExpression
 	;
 
 multiplicativeExpression
 	:	powerExpression                                              #multExpressionPow
-	|	multiplicativeExpression op=( '*' | '/' ) powerExpression    #multExpression
+	|	multiplicativeExpression op=( MUL | DIV ) powerExpression    #multExpression
 	;
 
 powerExpression
     :   filterPathExpression                           #powExpressionUnary
-    |   powerExpression op='**' filterPathExpression   #powExpression
+    |   powerExpression op=POW filterPathExpression   #powExpression
     ;
 
 filterPathExpression
     :   unaryExpression
-    |   filterPathExpression '[' {helper.enableDynamicResolution();} filter=expression {helper.disableDynamicResolution();} ']'
-    |   filterPathExpression '.' {helper.enableDynamicResolution();} qualifiedName {helper.disableDynamicResolution();}
+    |   filterPathExpression LBRACK {helper.enableDynamicResolution();} filter=expression {helper.disableDynamicResolution();} RBRACK
+    |   filterPathExpression DOT {helper.enableDynamicResolution();} qualifiedName {helper.disableDynamicResolution();}
     ;
 
 unaryExpression
-    :   unaryExpressionNotPlusMinus              #nonSignedUnaryExpression
-	|	'+' unaryExpressionNotPlusMinus          #signedUnaryExpression
-	|	'-' unaryExpressionNotPlusMinus          #signedUnaryExpression
+	:	SUB unaryExpression                      #signedUnaryExpressionMinus
+	|   unaryExpressionNotPlusMinus              #nonSignedUnaryExpression
+    |	ADD unaryExpressionNotPlusMinus          #signedUnaryExpressionPlus
+    | unaryExpression parameters #fnInvocation
 	;
 
 unaryExpressionNotPlusMinus
-	:   not_key '(' simpleUnaryTests ')'  #negatedUnaryTests
-	|	not_key unaryExpression           #logicalNegation
-	|   primary ('.' {helper.recoverScope();helper.enableDynamicResolution();} qualifiedName {helper.disableDynamicResolution();helper.dismissScope();} )?   #uenpmPrimary
+	: primary (DOT {helper.recoverScope();helper.enableDynamicResolution();} qualifiedName parameters? {helper.disableDynamicResolution();helper.dismissScope();} )?   #uenpmPrimary
 	;
 
 primary
@@ -259,44 +289,84 @@ primary
     | interval                    #primaryInterval
     | list                        #primaryList
     | context                     #primaryContext
-    | '(' expression ')'          #primaryParens
-    | simpleUnaryTest             #primaryUnaryTest
-    | qualifiedName parameters?   #primaryName
+    | LPAREN expression RPAREN          #primaryParens
+    | simplePositiveUnaryTest     #primaryUnaryTest
+    | qualifiedName    #primaryName
     ;
 
 // #33 - #39
 literal
     :	IntegerLiteral          #numberLiteral
     |	FloatingPointLiteral    #numberLiteral
-    |	booleanLiteral          #boolLiteral
+    |	BooleanLiteral          #boolLiteral
+    |   atLiteral               #atLiteralLabel
     |	StringLiteral           #stringLiteral
-    |	null_key                #nullLiteral
+    |	NULL                #nullLiteral
+    ;
+    
+atLiteral
+    : AT atLiteralValue
+    ;
+    
+atLiteralValue 
+    : StringLiteral 
     ;
 
-booleanLiteral
-    :   true_key
-    |   false_key
+BooleanLiteral
+    :   TRUE
+    |   FALSE
     ;
 
 /**************************
  *    OTHER CONSTRUCTS
  **************************/
-// #13
-simpleUnaryTests
-    : (simpleUnaryTest|primary) ( ',' (simpleUnaryTest|primary) )*
-    ;
 
 // #7
-simpleUnaryTest
-    : op='<'  {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneq
-    | op='>'  {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneq
-    | op='<=' {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneq
-    | op='>=' {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneq
-    | op='='  {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneq
-    | op='!=' {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneq
+simplePositiveUnaryTest
+    : op=LT  {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneqInterval
+    | op=GT  {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneqInterval
+    | op=LE {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneqInterval
+    | op=GE {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneqInterval
+    | op=EQUAL  {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneq
+    | op=NOTEQUAL {helper.enableDynamicResolution();}  endpoint {helper.disableDynamicResolution();}   #positiveUnaryTestIneq
     | interval           #positiveUnaryTestInterval
-    | null_key           #positiveUnaryTestNull
-    | '-'                #positiveUnaryTestDash
+    ;
+
+
+// #13
+simplePositiveUnaryTests
+    : simplePositiveUnaryTest ( COMMA simplePositiveUnaryTest )*
+    ;
+
+
+// #14
+simpleUnaryTests
+    : simplePositiveUnaryTests                     #positiveSimplePositiveUnaryTests
+    | NOT LPAREN simplePositiveUnaryTests RPAREN     #negatedSimplePositiveUnaryTests
+    | SUB                                          #positiveUnaryTestDash
+    ;
+
+// #15
+positiveUnaryTest
+    : expression
+    ;
+
+// #16
+positiveUnaryTests
+    : positiveUnaryTest ( COMMA positiveUnaryTest )*
+    ;
+
+
+unaryTestsRoot
+    : unaryTests EOF
+    ;
+
+// #17 (root for decision tables)
+unaryTests
+    :
+    NOT LPAREN positiveUnaryTests RPAREN #unaryTests_negated
+    | positiveUnaryTests               #unaryTests_positive
+    | SUB                              #unaryTests_empty
     ;
 
 // #18
@@ -306,15 +376,15 @@ endpoint
 
 // #8-#12
 interval
-    : low='(' start=endpoint '..' end=endpoint up=')'
-    | low='(' start=endpoint '..' end=endpoint up='['
-    | low='(' start=endpoint '..' end=endpoint up=']'
-    | low=']' start=endpoint '..' end=endpoint up=')'
-    | low=']' start=endpoint '..' end=endpoint up='['
-    | low=']' start=endpoint '..' end=endpoint up=']'
-    | low='[' start=endpoint '..' end=endpoint up=')'
-    | low='[' start=endpoint '..' end=endpoint up='['
-    | low='[' start=endpoint '..' end=endpoint up=']'
+    : low=LPAREN start=endpoint ELIPSIS end=endpoint up=RPAREN
+    | low=LPAREN start=endpoint ELIPSIS end=endpoint up=LBRACK
+    | low=LPAREN start=endpoint ELIPSIS end=endpoint up=RBRACK
+    | low=RBRACK start=endpoint ELIPSIS end=endpoint up=RPAREN
+    | low=RBRACK start=endpoint ELIPSIS end=endpoint up=LBRACK
+    | low=RBRACK start=endpoint ELIPSIS end=endpoint up=RBRACK
+    | low=LBRACK start=endpoint ELIPSIS end=endpoint up=RPAREN
+    | low=LBRACK start=endpoint ELIPSIS end=endpoint up=LBRACK
+    | low=LBRACK start=endpoint ELIPSIS end=endpoint up=RBRACK
     ;
 
 // #20
@@ -329,7 +399,7 @@ qualifiedName
         helper.dismissScope();
 }
     : n1=nameRef { name = getOriginalText( $n1.ctx ); qn.add( name ); helper.validateVariable( $n1.ctx, qn, name ); }
-        ( '.'
+        ( DOT
             {helper.recoverScope( name ); count++;}
             n2=nameRef
             {name=getOriginalText( $n2.ctx );  qn.add( name ); helper.validateVariable( $n1.ctx, qn, name ); }
@@ -337,117 +407,121 @@ qualifiedName
     ;
 
 nameRef
-    : st=Identifier { helper.startVariable( $st ); } nameRefOtherToken*
+    : ( st=Identifier { helper.startVariable( $st ); }
+       | not_st=NOT { helper.startVariable( $not_st ); }
+       )  nameRefOtherToken*
     ;
 
 nameRefOtherToken
-    : { helper.followUp( _input.LT(1), _localctx==null ) }? ~('('|')'|'['|']'|'{'|'}')
+    : { helper.followUp( _input.LT(1), _localctx==null ) }?
+        ~(LPAREN|RPAREN|LBRACK|RBRACK|LBRACE|RBRACE|LT|GT|EQUAL|BANG|COMMA)
     ;
 
 /********************************
  *      KEYWORDS
  ********************************/
 reusableKeywords
-    : for_key
-    | return_key
-    | if_key
-    | then_key
-    | else_key
-    | some_key
-    | every_key
-    | satisfies_key
-    | instance_key
-    | of_key
-    | function_key
-    | external_key
-    | or_key
-    | and_key
-    | between_key
-    | not_key
-    | null_key
-    | true_key
-    | false_key
+    : FOR
+    | RETURN
+    | IF
+    | THEN
+    | ELSE
+    | SOME
+    | EVERY
+    | SATISFIES
+    | INSTANCE
+    | OF
+    | FUNCTION
+    | EXTERNAL
+    | OR
+    | AND
+    | BETWEEN
+    | NOT
+    | NULL
+    | TRUE
+    | FALSE
     ;
 
-for_key
+FOR
     : 'for'
     ;
 
-return_key
+RETURN
     : 'return'
     ;
 
 // can't be reused
-in_key
+IN
     : 'in'
     ;
 
-if_key
+IF
     : 'if'
     ;
 
-then_key
+THEN
     : 'then'
     ;
 
-else_key
+ELSE
     : 'else'
     ;
 
-some_key
+SOME
     : 'some'
     ;
 
-every_key
+EVERY
     : 'every'
     ;
 
-satisfies_key
+SATISFIES
     : 'satisfies'
     ;
 
-instance_key
+INSTANCE
     : 'instance'
     ;
 
-of_key
+OF
     : 'of'
     ;
 
-function_key
+FUNCTION
     : 'function'
     ;
 
-external_key
+EXTERNAL
     : 'external'
     ;
 
-or_key
+OR
     : 'or'
     ;
 
-and_key
+AND
     : 'and'
     ;
 
-between_key
+BETWEEN
     : 'between'
     ;
 
-not_key
-    : 'not'
-    ;
-
-null_key
+NULL
     : 'null'
     ;
 
-true_key
+TRUE
     : 'true'
     ;
 
-false_key
+FALSE
     : 'false'
+    ;
+
+QUOTE
+    :
+    '\''
     ;
 
 /********************************
@@ -638,7 +712,8 @@ ZeroToThree
 // This is not in the spec but prevents having to preprocess the input
 fragment
 UnicodeEscape
-    :   '\\' 'u' HexDigit HexDigit HexDigit HexDigit
+    :   '\\' 'U' HexDigit HexDigit HexDigit HexDigit HexDigit HexDigit
+    |   '\\' 'u' HexDigit HexDigit HexDigit HexDigit
     ;
 
 // The Null Literal
@@ -666,37 +741,39 @@ NOTEQUAL : '!=';
 
 COLON : ':';
 
+RARROW : '->';
+
 POW : '**';
 ADD : '+';
 SUB : '-';
 MUL : '*';
 DIV : '/';
+BANG
+    : '!'
+    ;
+
+NOT
+    : 'not'
+    ;
+
+AT  : '@';
 
 Identifier
-	:	JavaLetter JavaLetterOrDigit*
-	;
+    : NameStartChar NameStartCharOrPart*
+    ;
 
 fragment
-JavaLetter
-	:	[a-zA-Z$_] // these are the "java letters" below 0x7F
-	|   '?'
-	|	// covers all characters above 0x7F which are not a surrogate
-		~[\u0000-\u007F\uD800-\uDBFF]
-		{Character.isJavaIdentifierStart(_input.LA(-1))}?
-	|	// covers UTF-16 surrogate pairs encodings for U+10000 to U+10FFFF
-		[\uD800-\uDBFF] [\uDC00-\uDFFF]
-		{Character.isJavaIdentifierStart(Character.toCodePoint((char)_input.LA(-2), (char)_input.LA(-1)))}?
-	;
+NameStartChar
+    : '?' | [A-Z] | '_' | [a-z] | [\u00C0-\u00D6] | [\u00D8-\u00F6] | [\u00F8-\u02FF] | [\u0370-\u037D] | [\u037F-\u1FFF] |
+    [\u200C-\u200D] | [\u2070-\u218F] | [\u2C00-\u2FEF] | [\u3001-\uD7FF] | [\uF900-\uFDCF] | [\uFDF0-\uFFFD] | 
+    [\u{10000}-\u{EFFFF}];
 
 fragment
-JavaLetterOrDigit
-	:	[a-zA-Z0-9$_] // these are the "java letters or digits" below 0x7F
-	|	// covers all characters above 0x7F which are not a surrogate
-		~[\u0000-\u007F\uD800-\uDBFF]
-		{Character.isJavaIdentifierPart(_input.LA(-1))}?
-	|	// covers UTF-16 surrogate pairs encodings for U+10000 to U+10FFFF
-		[\uD800-\uDBFF] [\uDC00-\uDFFF]
-		{Character.isJavaIdentifierPart(Character.toCodePoint((char)_input.LA(-2), (char)_input.LA(-1)))}?
+NameStartCharOrPart
+    : '?' | [A-Z] | '_' | [a-z] | [\u00C0-\u00D6] | [\u00D8-\u00F6] | [\u00F8-\u02FF] | [\u0370-\u037D] | [\u037F-\u1FFF] |
+    [\u200C-\u200D] | [\u2070-\u218F] | [\u2C00-\u2FEF] | [\u3001-\uD7FF] | [\uF900-\uFDCF] | [\uFDF0-\uFFFD] | 
+    [\u{10000}-\u{EFFFF}]
+    | [0-9] | '\u00B7' | [\u0300-\u036F] | [\u203F-\u2040]
 	;
 
 //

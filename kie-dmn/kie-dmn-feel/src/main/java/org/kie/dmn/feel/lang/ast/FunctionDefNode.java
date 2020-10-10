@@ -16,15 +16,6 @@
 
 package org.kie.dmn.feel.lang.ast;
 
-import org.antlr.v4.runtime.ParserRuleContext;
-import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
-import org.kie.dmn.feel.lang.EvaluationContext;
-import org.kie.dmn.feel.lang.Type;
-import org.kie.dmn.feel.lang.types.BuiltInType;
-import org.kie.dmn.feel.runtime.functions.CustomFEELFunction;
-import org.kie.dmn.feel.runtime.functions.JavaFunction;
-import org.kie.dmn.feel.util.Msg;
-
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,15 +24,25 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.antlr.v4.runtime.ParserRuleContext;
+import org.kie.dmn.api.feel.runtime.events.FEELEvent.Severity;
+import org.kie.dmn.feel.lang.EvaluationContext;
+import org.kie.dmn.feel.lang.Type;
+import org.kie.dmn.feel.lang.types.BuiltInType;
+import org.kie.dmn.feel.runtime.FEELFunction.Param;
+import org.kie.dmn.feel.runtime.functions.CustomFEELFunction;
+import org.kie.dmn.feel.runtime.functions.JavaFunction;
+import org.kie.dmn.feel.util.Msg;
+
 public class FunctionDefNode
         extends BaseNode {
 
     private static final String ANONYMOUS = "<anonymous>";
-    private final Pattern METHOD_PARSER = Pattern.compile( "(.+)\\((.*)\\)" );
-    private final Pattern PARAMETER_PARSER = Pattern.compile( "([^, ]+)" );
+    private static final Pattern METHOD_PARSER = Pattern.compile( "(.+)\\((.*)\\)" );
+    private static final Pattern PARAMETER_PARSER = Pattern.compile( "([^, ]+)" );
 
 
-    private List<NameDefNode> formalParameters;
+    private List<FormalParameterNode> formalParameters;
     private boolean external;
     private BaseNode body;
 
@@ -52,16 +53,16 @@ public class FunctionDefNode
         this.body = body;
         if( formalParameters != null ) {
             for( BaseNode name : formalParameters.getElements() ) {
-                this.formalParameters.add( (NameDefNode) name );
+                this.formalParameters.add((FormalParameterNode) name);
             }
         }
     }
 
-    public List<NameDefNode> getFormalParameters() {
+    public List<FormalParameterNode> getFormalParameters() {
         return formalParameters;
     }
 
-    public void setFormalParameters(List<NameDefNode> formalParameters) {
+    public void setFormalParameters(List<FormalParameterNode> formalParameters) {
         this.formalParameters = formalParameters;
     }
 
@@ -83,7 +84,7 @@ public class FunctionDefNode
 
     @Override
     public Object evaluate(EvaluationContext ctx) {
-        List<String> params = formalParameters.stream().map( p -> p.evaluate( ctx ) ).collect( Collectors.toList() );
+        List<Param> params = formalParameters.stream().map(p -> p.evaluate(ctx)).collect(Collectors.toList());
         if( external ) {
             try {
                 // creating a simple algorithm to find the method in java
@@ -96,7 +97,7 @@ public class FunctionDefNode
                     String methodSignature = (String) java.get( "method signature" );
                     if( clazzName != null && methodSignature != null ) {
                         // might need to explicitly use a classloader here
-                        Class<?> clazz = Class.forName( clazzName );
+                        Class<?> clazz = Class.forName(clazzName, true, ctx.getRootClassLoader());
                         if( clazz != null ) {
                             String[] mp = parseMethod( methodSignature );
                             if( mp != null ) {
@@ -106,10 +107,10 @@ public class FunctionDefNode
                                 if( numberOfParams == params.size() ) {
                                     Class[] paramTypes = new Class[ numberOfParams ];
                                     for( int i = 0; i < numberOfParams; i++ ) {
-                                        paramTypes[i] = getType( paramTypeNames[i] );
+                                        paramTypes[i] = getType(paramTypeNames[i], ctx.getRootClassLoader());
                                     }
                                     Method method = clazz.getMethod( methodName, paramTypes );
-                                    return new JavaFunction( ANONYMOUS, params, clazz, method );
+                                    return new JavaFunction(ANONYMOUS, params, clazz, method);
                                 } else {
                                     ctx.notifyEvt( astEvent(Severity.ERROR, Msg.createMessage(Msg.PARAMETER_COUNT_MISMATCH_ON_FUNCTION_DEFINITION, getText()) ) );
                                     return null;
@@ -124,23 +125,22 @@ public class FunctionDefNode
             }
             return null;
         } else {
-            return new CustomFEELFunction( ANONYMOUS, params, body );
+            return new CustomFEELFunction( ANONYMOUS, params, body, ctx.current() ); // DMN spec, 10.3.2.13.2 User-defined functions: FEEL functions are lexical closures
         }
     }
 
-    private Class<?> getType(String typeName)
-            throws ClassNotFoundException {
+    public static Class<?> getType(String typeName, ClassLoader classLoader) throws ClassNotFoundException {
         // first check if it is primitive
         Class<?> type = convertPrimitiveNameToType( typeName );
         if( type == null ) {
             // if it is not, then try to load it
-            type = Class.forName( typeName );
+            type = Class.forName(typeName, true, classLoader);
 
         }
         return type;
     }
 
-    public String[] parseMethod(String signature ) {
+    public static String[] parseMethod(String signature ) {
         Matcher m = METHOD_PARSER.matcher( signature );
         if( m.matches() ) {
             String[] result = new String[2];
@@ -152,7 +152,7 @@ public class FunctionDefNode
     }
 
 
-    public String[] parseParams(String params) {
+    public static String[] parseParams(String params) {
         List<String> ps = new ArrayList<>(  );
         if( params.trim().length() > 0 ) {
             Matcher m = PARAMETER_PARSER.matcher( params.trim() );
@@ -163,7 +163,7 @@ public class FunctionDefNode
         return ps.toArray( new String[ps.size()] );
     }
 
-    public static Class<?> convertPrimitiveNameToType( String typeName ) {
+    private static Class<?> convertPrimitiveNameToType( String typeName ) {
         if (typeName.equals( "int" )) {
             return int.class;
         }
@@ -196,4 +196,18 @@ public class FunctionDefNode
         // TODO when built-in type can be parametrized as FUNCTION<type>
         return BuiltInType.FUNCTION;
     }
+
+    @Override
+    public ASTNode[] getChildrenNode() {
+        ASTNode[] children = new ASTNode[ formalParameters.size() + 1 ];
+        System.arraycopy(formalParameters.toArray(new ASTNode[]{}), 0, children, 0, formalParameters.size());
+        children[ children.length-1 ] = body;
+        return children;
+    }
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
+    }
+
 }

@@ -5,7 +5,7 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <groupId>org.kie</groupId>
@@ -13,6 +13,10 @@
 
   <name>KIE :: Test Utility Classes</name>
   <!-- IMPORTANT! This module should only be added as a "test" scoped dependency. -->
+
+  <properties>
+    <java.module.name>org.kie.testutil</java.module.name>
+  </properties>
 
   <dependencies>
     <!-- IMPORTANT! Do not add any drools/jbpm/kie dependencies here. -->
@@ -28,8 +32,8 @@
     </dependency>
 
     <dependency>
-      <groupId>org.hibernate.javax.persistence</groupId>
-      <artifactId>hibernate-jpa-2.1-api</artifactId>
+      <groupId>javax.persistence</groupId>
+      <artifactId>javax.persistence-api</artifactId>
       <optional>true</optional>
     </dependency>
     <dependency>
@@ -39,6 +43,10 @@
     <dependency>
       <groupId>org.jboss.narayana.jta</groupId>
       <artifactId>narayana-jta</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.tomcat</groupId>
+      <artifactId>tomcat-dbcp</artifactId>
     </dependency>
     <dependency>
       <groupId>simple-jndi</groupId>

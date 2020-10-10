@@ -19,6 +19,9 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -74,7 +77,7 @@ class RuleModelPersistenceHelper {
 
     static String getSimpleFactType(final String className,
                                     final PackageDataModelOracle dmo) {
-        for (String type : dmo.getProjectModelFields().keySet()) {
+        for (String type : dmo.getModuleModelFields().keySet()) {
             if (type.equals(className)) {
                 return type.substring(type.lastIndexOf(".") + 1);
             }
@@ -103,7 +106,7 @@ class RuleModelPersistenceHelper {
                                 final boolean isJavaDialect) {
         int nature = (StringUtils.isEmpty(value) ? FieldNatureType.TYPE_UNDEFINED : FieldNatureType.TYPE_LITERAL);
 
-        if (dataType == DataType.TYPE_COLLECTION) {
+        if (DataType.TYPE_COLLECTION.equals(dataType)) {
             return FieldNatureType.TYPE_FORMULA;
         } else if (DataType.TYPE_BOOLEAN.equals(dataType)) {
             if (!(Boolean.TRUE.equals(Boolean.parseBoolean(value)) || Boolean.FALSE.equals(Boolean.parseBoolean(value)))) {
@@ -116,10 +119,20 @@ class RuleModelPersistenceHelper {
                 new SimpleDateFormat(DateUtils.getDateFormatMask(),
                                      Locale.ENGLISH).parse(adjustParam(dataType,
                                                                        value,
-                                                                       Collections.EMPTY_MAP,
+                                                                       Collections.emptyMap(),
                                                                        isJavaDialect));
                 return FieldNatureType.TYPE_LITERAL;
             } catch (ParseException e) {
+                return FieldNatureType.TYPE_FORMULA;
+            }
+        } else if (DataType.TYPE_LOCAL_DATE.equals(dataType)) {
+            try {
+                LocalDate.parse(adjustParam(dataType,
+                                            value,
+                                            Collections.emptyMap(),
+                                            isJavaDialect), DateTimeFormatter.ofPattern(DateUtils.getDateFormatMask()));
+                return FieldNatureType.TYPE_LITERAL;
+            } catch (DateTimeParseException e) {
                 return FieldNatureType.TYPE_FORMULA;
             }
         } else if (DataType.TYPE_STRING.equals(dataType)) {
@@ -225,20 +238,20 @@ class RuleModelPersistenceHelper {
     static ModelField[] findFields(final RuleModel m,
                                    final PackageDataModelOracle dmo,
                                    final String type) {
-        ModelField[] fields = dmo.getProjectModelFields().get(type);
+        ModelField[] fields = dmo.getModuleModelFields().get(type);
         if (fields != null) {
             return fields;
         }
         for (String i : m.getImports().getImportStrings()) {
             if (i.endsWith("." + type)) {
-                fields = dmo.getProjectModelFields().get(i);
+                fields = dmo.getModuleModelFields().get(i);
                 if (fields != null) {
                     return fields;
                 }
             }
         }
 
-        return dmo.getProjectModelFields().get(m.getPackageName() + "." + type);
+        return dmo.getModuleModelFields().get(m.getPackageName() + "." + type);
     }
 
     static ModelField findField(final ModelField[] typeFields,
@@ -305,19 +318,19 @@ class RuleModelPersistenceHelper {
         }
 
         //Lookup without package prefix or imports
-        ModelField[] modelFields = dmo.getProjectModelFields().get(factType);
+        ModelField[] modelFields = dmo.getModuleModelFields().get(factType);
 
         //Lookup with package prefix
         if (modelFields == null) {
             String fqcn = dmo.getPackageName() + "." + factType;
-            modelFields = dmo.getProjectModelFields().get(fqcn);
+            modelFields = dmo.getModuleModelFields().get(fqcn);
         }
 
         //Lookup from imports
         if (modelFields == null) {
             for (Import item : imports.getImports()) {
                 if (item.getType().endsWith(factType)) {
-                    modelFields = dmo.getProjectModelFields().get(item.getType());
+                    modelFields = dmo.getModuleModelFields().get(item.getType());
                     if (modelFields != null) {
                         break;
                     }
@@ -427,9 +440,9 @@ class RuleModelPersistenceHelper {
                                                             factType,
                                                             dmo);
         final String key = fullyQualifiedFactType + "#" + fieldName;
-        final Map<String, String[]> projectJavaEnumDefinitions = dmo.getProjectJavaEnumDefinitions();
+        final Map<String, String[]> moduleJavaEnumDefinitions = dmo.getModuleJavaEnumDefinitions();
 
-        return projectJavaEnumDefinitions.containsKey(key);
+        return moduleJavaEnumDefinitions.containsKey(key);
     }
 
     static String inferDataTypeFromAction(final ActionFieldList action,
@@ -465,6 +478,8 @@ class RuleModelPersistenceHelper {
                                                final boolean isJavaDialect) {
         if (param.startsWith("sdf.parse(\"")) {
             return DataType.TYPE_DATE;
+        } else if (param.startsWith("java.time.LocalDate.parse(\"")) {
+            return DataType.TYPE_LOCAL_DATE;
         } else if (param.startsWith("\"")) {
             return DataType.TYPE_STRING;
         } else if (param.equals("true") || param.equals("false")) {
@@ -489,6 +504,13 @@ class RuleModelPersistenceHelper {
             if (param.contains("sdf.parse(\"")) {
                 return param.substring("sdf.parse(\"".length(),
                                        param.length() - 2);
+            } else {
+                return param;
+            }
+        } else if (DataType.TYPE_LOCAL_DATE.equals(dataType)) {
+            if (param.contains("java.time.LocalDate.parse(\"")) {
+                return param.substring("java.time.LocalDate.parse(\"".length(),
+                                       param.length() - "\", dtf)".length());
             } else {
                 return param;
             }
@@ -524,11 +546,11 @@ class RuleModelPersistenceHelper {
     static List<MethodInfo> getMethodInfosForType(final RuleModel model,
                                                   final PackageDataModelOracle dmo,
                                                   final String variableType) {
-        List<MethodInfo> methods = dmo.getProjectMethodInformation().get(variableType);
+        List<MethodInfo> methods = dmo.getModuleMethodInformation().get(variableType);
         if (methods == null) {
             for (String imp : model.getImports().getImportStrings()) {
                 if (imp.endsWith("." + variableType)) {
-                    methods = dmo.getProjectMethodInformation().get(imp);
+                    methods = dmo.getModuleMethodInformation().get(imp);
                     if (methods != null) {
                         break;
                     }
@@ -562,7 +584,7 @@ class RuleModelPersistenceHelper {
     static String getFQFactType(final RuleModel ruleModel,
                                 final String factType,
                                 final PackageDataModelOracle dmo) {
-        Set<String> factTypes = dmo.getProjectModelFields().keySet();
+        Set<String> factTypes = dmo.getModuleModelFields().keySet();
 
         if (factTypes.contains(ruleModel.getPackageName() + "." + factType)) {
             return ruleModel.getPackageName() + "." + factType;

@@ -15,21 +15,19 @@
 
 package org.drools.decisiontable;
 
-import org.drools.compiler.compiler.DecisionTableProvider;
-import org.drools.core.util.StringUtils;
-import org.kie.api.io.Resource;
-import org.kie.internal.builder.DecisionTableConfiguration;
-import org.kie.internal.builder.DecisionTableInputType;
-import org.kie.internal.builder.KnowledgeBuilderFactory;
-import org.kie.internal.builder.RuleTemplateConfiguration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.drools.compiler.compiler.DecisionTableProvider;
+import org.drools.core.util.StringUtils;
+import org.kie.api.io.Resource;
+import org.kie.internal.builder.DecisionTableConfiguration;
+import org.kie.internal.builder.RuleTemplateConfiguration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DecisionTableProviderImpl
     implements
@@ -53,7 +51,11 @@ public class DecisionTableProviderImpl
         ExternalSpreadsheetCompiler converter = new ExternalSpreadsheetCompiler();
         for ( RuleTemplateConfiguration template : configuration.getRuleTemplateConfigurations() ) {
             try {
-                drls.add(converter.compile(resource.getInputStream(), template.getTemplate().getInputStream(), template.getRow(), template.getCol()));
+                drls.add(converter.compile(resource.getInputStream(),
+                                           template.getTemplate().getInputStream(),
+                                           InputType.getInputTypeFromDecisionTableInputType(configuration.getInputType()),
+                                           template.getRow(),
+                                           template.getCol()));
             } catch (IOException e) {
                 logger.error( "Cannot open " + template.getTemplate(), e );
             }
@@ -63,13 +65,7 @@ public class DecisionTableProviderImpl
 
     private String compileResource(Resource resource,
                                    DecisionTableConfiguration configuration) throws IOException {
-        SpreadsheetCompiler compiler = new SpreadsheetCompiler();
-
-        //JBRULES-3005: Sensible default when DecisionTableConfiguration is not provided
-        if ( configuration == null ) {
-            configuration = KnowledgeBuilderFactory.newDecisionTableConfiguration();
-            configuration.setInputType( DecisionTableInputType.XLS );
-        }
+        SpreadsheetCompiler compiler = new SpreadsheetCompiler(configuration.isTrimCell());
 
         switch ( configuration.getInputType() ) {
             case XLS :

@@ -24,6 +24,8 @@ import java.util.List;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.maven.model.Dependency;
+import org.appformer.maven.integration.MavenRepository;
+import org.appformer.maven.integration.embedder.MavenEmbedderUtils;
 import org.drools.compiler.kie.builder.impl.InternalKieModule;
 import org.drools.compiler.kie.builder.impl.InternalKieScanner;
 import org.drools.compiler.kie.builder.impl.KieFileSystemImpl;
@@ -48,16 +50,20 @@ import org.kie.api.event.kiescanner.KieScannerStatusChangeEvent;
 import org.kie.api.event.kiescanner.KieScannerUpdateResultsEvent;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
-import org.appformer.maven.integration.MavenRepository;
-import org.appformer.maven.integration.embedder.MavenEmbedderUtils;
-import org.kie.scanner.event.KieScannerStatusChangeEventImpl;
-import org.kie.scanner.event.KieScannerUpdateResultsEventImpl;
+import org.drools.compiler.kie.builder.impl.event.KieScannerStatusChangeEventImpl;
+import org.drools.compiler.kie.builder.impl.event.KieScannerUpdateResultsEventImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static java.util.Arrays.asList;
-import static org.junit.Assert.*;
+
 import static org.appformer.maven.integration.MavenRepository.getMavenRepository;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.kie.scanner.KieMavenRepository.getKieMavenRepository;
 
 
@@ -156,7 +162,77 @@ public class KieRepositoryScannerTest extends AbstractKieCiTest {
         KieContainer kieContainer2 = ks.newKieContainer( releaseIdWithDep );
         System.out.println("done in " + (System.nanoTime() - start));
     }
-    
+
+    @Test @Ignore("avoid use external dependency")
+    public void testKScannerWithTransitiveInclusion() throws Exception {
+        String pom = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                "<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
+                "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd\">\n" +
+                "  <modelVersion>4.0.0</modelVersion>\n" +
+                "\n" +
+                "  <groupId>org.kie</groupId>\n" +
+                "  <artifactId>test-with-inc</artifactId>\n" +
+                "  <version>1.0-SNAPSHOT</version>\n" +
+                "  \n" +
+                "        <dependencies>\n" +
+                "            <dependency>\n" +
+                "                <groupId>io.swagger</groupId>\n" +
+                "                <artifactId>swagger-jaxrs</artifactId>\n" +
+                "                <version>1.5.0</version>\n" +
+                "            </dependency>\n" +
+                "        </dependencies>\n" +
+                "</project>";
+
+        KieServices ks = KieServices.Factory.get();
+        ReleaseId releaseIdWithExc = ks.newReleaseId( "org.kie", "test-with-inc", "1.0-SNAPSHOT" );
+        InternalKieModule kJar = createKieJarWithPom( ks, releaseIdWithExc, false, "rule1", pom);
+        KieContainer kieContainer = ks.newKieContainer( releaseIdWithExc );
+
+        try {
+            Class.forName("com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider", true, kieContainer.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            fail("the transitive dependency class should be present");
+        }
+    }
+
+    @Test @Ignore("avoid use external dependency")
+    public void testKScannerWithExclusion() throws Exception {
+        String pom = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                "<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
+                "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd\">\n" +
+                "  <modelVersion>4.0.0</modelVersion>\n" +
+                "\n" +
+                "  <groupId>org.kie</groupId>\n" +
+                "  <artifactId>test-with-exc</artifactId>\n" +
+                "  <version>1.0-SNAPSHOT</version>\n" +
+                "  \n" +
+                "        <dependencies>\n" +
+                "            <dependency>\n" +
+                "                <groupId>io.swagger</groupId>\n" +
+                "                <artifactId>swagger-jaxrs</artifactId>\n" +
+                "                <version>1.5.0</version>\n" +
+                "                <exclusions>\n" +
+                "                    <exclusion>\n" +
+                "                        <groupId>com.fasterxml.jackson.jaxrs</groupId>\n" +
+                "                        <artifactId>*</artifactId>\n" +
+                "                    </exclusion>\n" +
+                "                </exclusions>\n" +
+                "            </dependency>\n" +
+                "        </dependencies>\n" +
+                "</project>";
+
+        KieServices ks = KieServices.Factory.get();
+        ReleaseId releaseIdWithExc = ks.newReleaseId( "org.kie", "test-with-exc", "1.0-SNAPSHOT" );
+        InternalKieModule kJar = createKieJarWithPom( ks, releaseIdWithExc, false, "rule1", pom);
+        KieContainer kieContainer = ks.newKieContainer( releaseIdWithExc );
+
+        try {
+            Class.forName("com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider", true, kieContainer.getClassLoader());
+            fail("the excluded class shouldn't be present");
+        } catch (ClassNotFoundException e) {
+        }
+    }
+
     @Test
     public void testKieScannerScopesNotRequired() throws Exception {
         MavenRepository repository = getMavenRepository();
@@ -1198,5 +1274,41 @@ public class KieRepositoryScannerTest extends AbstractKieCiTest {
         kieContainer = ks.newKieContainer(depReleaseId);
         ksession = kieContainer.newKieSession();
         checkKSession(ksession, "rule1");
+    }
+
+    @Test
+    public void testKScannerNewContainer() throws Exception {
+        KieServices ks = KieServices.Factory.get();
+        ReleaseId releaseId = ks.newReleaseId("org.kie", "scanner-test", "1.0-SNAPSHOT");
+
+        InternalKieModule kJar1 = createKieJar(ks, releaseId, "rule1", "rule2");
+
+        KieMavenRepository repository = getKieMavenRepository();
+        repository.installArtifact(releaseId, kJar1, createKPom(fileManager, releaseId));
+
+        ks.getRepository().removeKieModule( releaseId );
+
+        KieContainer kieContainer = ks.newKieContainer(releaseId);
+
+        // create a ksesion and check it works as expected
+        KieSession ksession = kieContainer.newKieSession("KSession1");
+        checkKSession(ksession, "rule1", "rule2");
+
+        // create a new kjar
+        InternalKieModule kJar2 = createKieJar(ks, releaseId, "rule2", "rule3");
+
+        // deploy it on maven
+        repository.installArtifact(releaseId, kJar2, createKPom(fileManager, releaseId));
+
+        ks.getRepository().removeKieModule( releaseId );
+
+        // create new KieContainer
+        KieContainer kieContainer2 = ks.newKieContainer(releaseId);
+
+        // create a ksession for the new container and check it works as expected
+        KieSession ksession2 = kieContainer2.newKieSession("KSession1");
+        checkKSession(ksession2, "rule2", "rule3");
+
+        ks.getRepository().removeKieModule(releaseId);
     }
 }

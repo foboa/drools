@@ -17,15 +17,16 @@
 package org.kie.dmn.core.compiler;
 
 import org.kie.dmn.api.core.DMNType;
-import org.kie.dmn.api.core.ast.BusinessKnowledgeModelNode;
 import org.kie.dmn.api.core.ast.DMNNode;
 import org.kie.dmn.core.api.DMNExpressionEvaluator;
 import org.kie.dmn.core.ast.BusinessKnowledgeModelNodeImpl;
 import org.kie.dmn.core.impl.DMNModelImpl;
 import org.kie.dmn.core.util.Msg;
-import org.kie.dmn.model.v1_1.BusinessKnowledgeModel;
-import org.kie.dmn.model.v1_1.DRGElement;
-import org.kie.dmn.model.v1_1.FunctionDefinition;
+import org.kie.dmn.model.api.BusinessKnowledgeModel;
+import org.kie.dmn.model.api.DRGElement;
+import org.kie.dmn.model.api.FunctionDefinition;
+
+import static org.kie.dmn.core.compiler.DecisionCompiler.loadInCtx;
 
 public class BusinessKnowledgeModelCompiler implements DRGElementCompiler {
     @Override
@@ -43,10 +44,10 @@ public class BusinessKnowledgeModelCompiler implements DRGElementCompiler {
         }
         DMNCompilerHelper.checkVariableName( model, bkm, bkm.getName() );
         if ( bkm.getVariable() != null && bkm.getVariable().getTypeRef() != null ) {
-            type = compiler.resolveTypeRef( model, bkmn, bkm, bkm.getVariable(), bkm.getVariable().getTypeRef() );
+            type = compiler.resolveTypeRef(model, bkm, bkm.getVariable(), bkm.getVariable().getTypeRef());
         } else {
             // for now the call bellow will return type UNKNOWN
-            type = compiler.resolveTypeRef( model, bkmn, bkm, bkm, null );
+            type = compiler.resolveTypeRef(model, bkm, bkm, null);
         }
         bkmn.setResultType( type );
         model.addBusinessKnowledgeModel( bkmn );
@@ -62,12 +63,7 @@ public class BusinessKnowledgeModelCompiler implements DRGElementCompiler {
 
         ctx.enterFrame();
         try {
-            for( DMNNode dep : bkmi.getDependencies().values() ) {
-                if( dep instanceof BusinessKnowledgeModelNode ) {
-                    // might need to create a DMNType for "functions" and replace the type here by that
-                    ctx.setVariable( dep.getName(), ((BusinessKnowledgeModelNode)dep).getResultType() );
-                }
-            }
+            loadInCtx(bkmi, ctx, model);
             // to allow recursive call from inside a BKM node, a variable for self must be available for the compiler context:
             ctx.setVariable(bkmi.getName(), bkmi.getResultType());
             FunctionDefinition funcDef = bkmi.getBusinessKnowledModel().getEncapsulatedLogic();

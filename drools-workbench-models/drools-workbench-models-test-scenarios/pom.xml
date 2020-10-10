@@ -6,7 +6,7 @@
   <parent>
     <artifactId>drools-workbench-models</artifactId>
     <groupId>org.drools</groupId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>drools-workbench-models-test-scenarios</artifactId>
@@ -14,12 +14,11 @@
   <name>Drools Workbench - Test Scenarios Model</name>
   <description>Drools Workbench - Test Scenarios Model</description>
 
-  <dependencies>
+  <properties>
+    <java.module.name>org.drools.workbench.models.guided.testscenarios</java.module.name>
+  </properties>
 
-    <dependency>
-      <groupId>org.drools</groupId>
-      <artifactId>drools-workbench-models-commons</artifactId>
-    </dependency>
+  <dependencies>
 
     <dependency>
       <groupId>junit</groupId>
@@ -57,11 +56,6 @@
     </dependency>
 
     <dependency>
-      <groupId>org.kie.soup</groupId>
-      <artifactId>kie-soup-project-datamodel-commons</artifactId>
-    </dependency>
-
-    <dependency>
       <groupId>org.drools</groupId>
       <artifactId>drools-workbench-models-datamodel-api</artifactId>
     </dependency>
@@ -69,6 +63,17 @@
     <dependency>
       <groupId>org.mvel</groupId>
       <artifactId>mvel2</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>kie-pmml</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-workbench-models-guided-scorecard</artifactId>
+      <scope>test</scope>
     </dependency>
 
   </dependencies>

@@ -1,12 +1,12 @@
 /*
  * Copyright 2012 Red Hat, Inc. and/or its affiliates.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -16,6 +16,7 @@
 package org.drools.workbench.models.guided.dtable.backend.util;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -176,31 +177,54 @@ public class GuidedDTBRDRLPersistence extends RuleModelDRLPersistenceImpl {
         }
 
         @Override
+        protected void generatePredicateSingleFieldConstraint(final SingleFieldConstraint constr,
+                                                              final LHSGeneratorContext gctx) {
+            Optional<StringBuffer> interpolatedResult = getInterpolatedResult(constr.getValue());
+            if (!interpolatedResult.isPresent()) {
+                return;
+            }
+
+            buf.append("eval( ");
+            buf.append(interpolatedResult.get().toString());
+            buf.append(" )");
+            gctx.setHasOutput(true);
+        }
+
+        @Override
         public void visitFreeFormLine(final FreeFormLine ffl) {
+            final Optional<StringBuffer> interpolatedResult = getInterpolatedResult(ffl.getText());
+            if (!interpolatedResult.isPresent()) {
+                return;
+            }
+
+            //Don't update the original FreeFormLine object
+            FreeFormLine fflClone = new FreeFormLine();
+            fflClone.setText(interpolatedResult.get().toString());
+            super.visitFreeFormLine(fflClone);
+        }
+
+        protected Optional<StringBuffer> getInterpolatedResult(final String text) {
             StringBuffer interpolatedResult = new StringBuffer();
-            final Matcher matcherTemplateKey = patternTemplateKey.matcher(ffl.getText());
+            final Matcher matcherTemplateKey = patternTemplateKey.matcher(text);
             while (matcherTemplateKey.find()) {
                 String varName = matcherTemplateKey.group(1);
                 String value = rowDataProvider.getTemplateKeyValue(varName);
 
                 // All vars must be populated for a single FreeFormLine
                 if (StringUtils.isEmpty(value)) {
-                    return;
+                    return Optional.empty();
                 }
 
                 matcherTemplateKey.appendReplacement(interpolatedResult,
                                                      value);
             }
             matcherTemplateKey.appendTail(interpolatedResult);
-
-            //Don't update the original FreeFormLine object
-            FreeFormLine fflClone = new FreeFormLine();
-            fflClone.setText(interpolatedResult.toString());
-            super.visitFreeFormLine(fflClone);
+            return Optional.of(interpolatedResult);
         }
 
+        @Override
         public void visitFromCollectCompositeFactPattern(final FromCollectCompositeFactPattern pattern,
-                                                         final boolean isSubPattern) {
+                                                         final LHSGeneratorContext parentContext) {
 
             if (pattern.getRightPattern() instanceof FreeFormLine) {
                 // must skip the collect, if the any variable is empty for the FFL
@@ -218,7 +242,7 @@ public class GuidedDTBRDRLPersistence extends RuleModelDRLPersistenceImpl {
                 }
             }
             super.visitFromCollectCompositeFactPattern(pattern,
-                                                       isSubPattern);
+                                                       parentContext);
         }
     }
 

@@ -20,32 +20,18 @@ package org.drools.compiler.commons.jci.compilers;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.drools.compiler.rule.builder.dialect.java.JavaDialectConfiguration;
-import org.drools.compiler.rule.builder.dialect.java.JavaDialectConfiguration.CompilerType;
+import org.drools.compiler.compiler.JavaConfiguration;
 import org.drools.core.util.ClassUtils;
-
 
 /**
  * Creates JavaCompilers
- * 
- * TODO use META-INF discovery mechanism
  */
-public final class JavaCompilerFactory {
+public enum JavaCompilerFactory {
 
-    /**
-     * @deprecated will be remove after the next release, please create an instance yourself
-     */
-    private static final JavaCompilerFactory INSTANCE = new JavaCompilerFactory();
+    INSTANCE;
 
     private final Map classCache = new HashMap();
     
-    /**
-     * @deprecated will be remove after the next release, please create an instance yourself
-     */
-    public static JavaCompilerFactory getInstance() {
-        return JavaCompilerFactory.INSTANCE;
-    }
-
     /**
      * Tries to guess the class name by convention. So for compilers
      * following the naming convention
@@ -74,8 +60,8 @@ public final class JavaCompilerFactory {
             try {
                 clazz = Class.forName(className);
                 classCache.put(className, clazz);
-            } catch (ClassNotFoundException e) {
-                clazz = null;
+            } catch (ClassNotFoundException ignored) {
+                // Ignored
             }
         }
 
@@ -90,11 +76,11 @@ public final class JavaCompilerFactory {
         }
     }
 
-    public JavaCompiler loadCompiler(JavaDialectConfiguration configuration) {
+    public JavaCompiler loadCompiler( JavaConfiguration configuration) {
         return loadCompiler( configuration.getCompiler(), configuration.getJavaLanguageLevel() );
     }
 
-    public JavaCompiler loadCompiler( CompilerType compilerType, String lngLevel ) {
+    public JavaCompiler loadCompiler( JavaConfiguration.CompilerType compilerType, String lngLevel ) {
         JavaCompiler compiler;
         switch ( compilerType ) {
             case JANINO : {
@@ -103,13 +89,21 @@ public final class JavaCompilerFactory {
             }
             case NATIVE : {
                 compiler = createCompiler( "native" );
-                updateSettings( compiler.createDefaultSettings(), lngLevel );
+                if (compiler == null) {
+                    throw new RuntimeException("Instance of native compiler cannot be created!");
+                } else {
+                    updateSettings( compiler.createDefaultSettings(), lngLevel );
+                }
                 break;
             }
             case ECLIPSE :
             default : {
                 compiler = createCompiler( "eclipse" );
-                updateSettings( compiler.createDefaultSettings(), lngLevel );
+                if (compiler == null) {
+                    throw new RuntimeException("Instance of eclipse compiler cannot be created!");
+                } else {
+                    updateSettings( compiler.createDefaultSettings(), lngLevel );
+                }
                 break;
             }
         }

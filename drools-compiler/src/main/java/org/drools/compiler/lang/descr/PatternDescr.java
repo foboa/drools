@@ -18,9 +18,13 @@ package org.drools.compiler.lang.descr;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 
 import org.drools.compiler.rule.builder.RuleBuildContext;
+import org.drools.core.factmodel.GenericTypeDefinition;
 import org.drools.core.rule.Declaration;
+
+import static org.drools.core.factmodel.GenericTypeDefinition.parseType;
 
 public class PatternDescr extends AnnotatedBaseDescr
     implements
@@ -36,6 +40,7 @@ public class PatternDescr extends AnnotatedBaseDescr
     private List<BehaviorDescr>     behaviors;
     private boolean                 query;
     private Declaration             xpathStartDeclaration;
+    private GenericTypeDefinition genericType;
 
     public PatternDescr() {
         this( null,
@@ -77,6 +82,17 @@ public class PatternDescr extends AnnotatedBaseDescr
         return this.objectType;
     }
 
+    public boolean resolveObjectType( Function<String, String> resolver ) {
+        if (genericType == null) {
+            genericType = parseType(objectType, resolver);
+        }
+        return genericType != null;
+    }
+
+    public GenericTypeDefinition getGenericType() {
+        return genericType == null ? new GenericTypeDefinition(objectType) : genericType;
+    }
+
     public String getIdentifier() {
         return this.identifier;
     }
@@ -108,6 +124,11 @@ public class PatternDescr extends AnnotatedBaseDescr
 
     public ConditionalElementDescr getConstraint() {
         return this.constraint;
+    }
+
+    public PatternDescr negateConstraint() {
+        this.constraint = (ConditionalElementDescr) ((BaseDescr)this.constraint).negate();
+        return this;
     }
 
     public List< ? extends BaseDescr> getPositionalConstraints() {
@@ -261,5 +282,9 @@ public class PatternDescr extends AnnotatedBaseDescr
         }
         clone.setXpathStartDeclaration( xpathStartDeclaration );
         return clone;
+    }
+
+    public void accept(DescrVisitor visitor) {
+        visitor.visit(this);
     }
 }

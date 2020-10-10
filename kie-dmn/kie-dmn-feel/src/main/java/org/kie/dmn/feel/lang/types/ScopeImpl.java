@@ -16,19 +16,22 @@
 
 package org.kie.dmn.feel.lang.types;
 
-import org.antlr.v4.runtime.ANTLRInputStream;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.antlr.v4.runtime.CharStream;
+import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.Token;
-import org.kie.dmn.feel.parser.feel11.FEEL_1_1Lexer;
 import org.kie.dmn.feel.lang.Scope;
 import org.kie.dmn.feel.lang.Symbol;
 import org.kie.dmn.feel.lang.Type;
+import org.kie.dmn.feel.parser.feel11.FEEL_1_1Lexer;
 import org.kie.dmn.feel.util.EvalHelper;
 import org.kie.dmn.feel.util.TokenTree;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.*;
-import java.util.Map.Entry;
 
 public class ScopeImpl
         implements Scope {
@@ -83,16 +86,16 @@ public class ScopeImpl
 
     public Symbol resolve(String id) {
         Symbol s = symbols.get( EvalHelper.normalizeVariableName( id ) );
-        if ( s == null && parentScope != null ) {
-            return parentScope.resolve( id );
+        if (s == null && getParentScope() != null) {
+            return getParentScope().resolve(id);
         }
         return s;
     }
 
     public Symbol resolve(String[] qualifiedName) {
         Symbol root = symbols.get( EvalHelper.normalizeVariableName( qualifiedName[0] ) );
-        if ( root == null && parentScope != null ) {
-            return parentScope.resolve( qualifiedName );
+        if (root == null && getParentScope() != null) {
+            return getParentScope().resolve(qualifiedName);
         } else if( root != null ) {
             Symbol currentSymbol = root;
             for( int i = 1; i < qualifiedName.length && currentSymbol != null; i++ ) {
@@ -134,29 +137,34 @@ public class ScopeImpl
             initializeTokenTree();
         }
         this.tokenTree.start( token );
-        if( this.parentScope != null ) {
-            this.parentScope.start( token );
+        if (this.getParentScope() != null) {
+            this.getParentScope().start(token);
         }
     }
 
     public boolean followUp( String token, boolean isPredict ) {
         LOG.trace("[{}]: followUp() {}", name, token);
         // must call followup on parent scope
-        boolean parent = this.parentScope != null ? this.parentScope.followUp( token, isPredict ) : false;
+        boolean parent = this.getParentScope() != null && this.getParentScope().followUp(token, isPredict);
         return this.tokenTree.followUp( token, !isPredict ) || parent;
     }
 
     private void initializeTokenTree() {
-        LOG.trace("[{}]: initializeTokenTree()");
-        tokenTree = new TokenTree();
-        for( String symbol : symbols.keySet() ) {
-            List<String> tokens = tokenize( symbol );
-            tokenTree.addName( tokens );
-        }
+        LOG.trace("[]: initializeTokenTree()");
+        tokenTree = tokenTreeFromSymbols(getSymbols());
     }
 
-    private List<String> tokenize(String symbol) {
-        ANTLRInputStream input = new ANTLRInputStream(symbol);
+    public static TokenTree tokenTreeFromSymbols(Map<String, Symbol> symbols) {
+        TokenTree tt = new TokenTree();
+        for( String symbol : symbols.keySet() ) {
+            List<String> tokens = tokenize( symbol );
+            tt.addName(tokens);
+        }
+        return tt;
+    }
+
+    private static List<String> tokenize(String symbol) {
+        CharStream input = CharStreams.fromString(symbol);
         FEEL_1_1Lexer lexer = new FEEL_1_1Lexer( input );
         List<String> tokens = new ArrayList<>(  );
 
@@ -172,7 +180,7 @@ public class ScopeImpl
     public String toString() {
         return "Scope{" +
                " name='" + name + '\'' +
-               ", parentScope='" + ( parentScope != null ? parentScope.getName() : "<null>" ) +
+               ", parentScope='" + (getParentScope() != null ? getParentScope().getName() : "<null>") +
                "' }";
     }
 

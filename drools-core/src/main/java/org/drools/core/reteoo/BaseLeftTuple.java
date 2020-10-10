@@ -419,13 +419,13 @@ public class BaseLeftTuple extends BaseTuple implements LeftTuple {
         return handles;
     }
 
-    public Object[] toObjects() {
+    public Object[] toObjects(boolean reverse) {
         Object[] objs = new Object[this.index + 1];
         LeftTuple entry = this;
         while ( entry != null ) {
             if ( entry.getFactHandle() != null ) {
                 // eval, not, exists have no right input
-                objs[entry.getIndex()] = entry.getFactHandle().getObject();
+                objs[reverse ? objs.length - entry.getIndex() - 1 : entry.getIndex()] = entry.getFactHandle().getObject();
             }
             entry = entry.getParent();
         }
@@ -595,7 +595,7 @@ public class BaseLeftTuple extends BaseTuple implements LeftTuple {
     protected String toExternalString() {
         StringBuilder builder = new StringBuilder();
         builder.append( String.format( "%08X", System.identityHashCode( this ) ) ).append( ":" );
-        int[] ids = new int[this.index+1];
+        long[] ids = new long[this.index+1];
         LeftTuple entry = this;
         while( entry != null ) {
             ids[entry.getIndex()] = entry.getFactHandle().getId();

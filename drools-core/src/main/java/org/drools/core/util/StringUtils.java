@@ -25,12 +25,16 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
+
+import org.kie.api.builder.ReleaseId;
 
 import static java.lang.Character.isWhitespace;
 
@@ -164,8 +168,16 @@ public class StringUtils {
         super();
     }
 
-    public static String ucFirst(final String name) {
-        return name.toUpperCase().charAt( 0 ) + name.substring( 1 );
+    public static String ucFirst(final String s) {
+        return Character.isLowerCase(s.charAt( 0 )) ? Character.toUpperCase( s.charAt( 0 ) ) + s.substring( 1 ) : s;
+    }
+
+    public static String lcFirst(String s) {
+        return Character.isUpperCase(s.charAt( 0 )) ? Character.toLowerCase( s.charAt( 0 ) ) + s.substring( 1 ) : s;
+    }
+
+    public static String lcFirstForBean(String s) {
+        return s.length() > 1 && Character.isUpperCase( s.charAt( 1 ) ) ? s : lcFirst(s);
     }
 
     // Empty checks
@@ -771,7 +783,7 @@ public class StringUtils {
                     } else {
                         // Not 7 Bit use the unicode system
                         sb.append("&#");
-                        sb.append(Integer.valueOf(ci).toString());
+                        sb.append(Integer.toString(ci));
                         sb.append(';');
                     }
                 }
@@ -907,6 +919,50 @@ public class StringUtils {
         return sb.toString();
     }
 
+    /**
+     * Retrieve a package unique identifier. It uses both <b>releaseId</b> and <b>packageName</b>
+     * if the former is not null and not a <b>Snapshot</b>; otherwise a <b>randomly</b> generated one
+     * @param releaseId
+     * @param packageName
+     * @return
+     */
+    public static String getPkgUUID(ReleaseId releaseId, String packageName) {
+        return (releaseId != null && !releaseId.isSnapshot()) ? md5Hash(releaseId.toString()+packageName) :  generateUUID();
+    }
+
+    /**
+     * Retrieve a consistently reproducible package unique identifier. It uses both <b>gav</b> and <b>packageName</b>
+     *
+     * @param gav
+     * @param packageName
+     * @return
+     */
+    public static String getPkgUUID(String gav, String packageName) {
+        return md5Hash(gav+packageName);
+    }
+
+    public static String md5Hash(String s) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            md.update(s.getBytes());
+            return bytesToHex(md.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException( e );
+        }
+    }
+
+    private static final char[] HEX_ARRAY = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
+
+    public static String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for ( int j = 0; j < bytes.length; j++ ) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = HEX_ARRAY[v >>> 4];
+            hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+
     public static String generateUUID() {
         char[] uuid = new char[32];
         char[] chars = UUID.randomUUID().toString().toCharArray();
@@ -921,15 +977,17 @@ public class StringUtils {
     }
 
     public static int extractFirstIdentifier(String string, StringBuilder builder, int start) {
+        boolean isQuoted = false;
         boolean started = false;
         int i = start;
         for (; i < string.length(); i++) {
             char ch = string.charAt(i);
-            if (Character.isJavaIdentifierStart(ch)) {
+            if (!isQuoted && Character.isJavaIdentifierStart(ch)) {
                 builder.append(ch);
                 started = true;
-            }
-            else if (started && Character.isJavaIdentifierPart(ch)) {
+            } else if (ch == '"' || ch == '\'') {
+                isQuoted = !isQuoted;
+            } else if (started && Character.isJavaIdentifierPart(ch)) {
                 builder.append(ch);
             } else if (started) {
                 break;
@@ -947,22 +1005,27 @@ public class StringUtils {
     }
 
     public static List<String> splitStatements(CharSequence string) {
-        return codeAwareSplitOnChar(string, ';');
+        return codeAwareSplitOnChar(string, true, ';', '\n');
     }
 
     public static List<String> splitArgumentsList(CharSequence string) {
-        return codeAwareSplitOnChar(string, ',');
+        return splitArgumentsList(string, true);
     }
 
-    private static List<String> codeAwareSplitOnChar(CharSequence string, char ch) {
+    public static List<String> splitArgumentsList(CharSequence string, boolean trimArgs) {
+        return codeAwareSplitOnChar(string, trimArgs, ',');
+    }
+
+    private static List<String> codeAwareSplitOnChar(CharSequence string, boolean trimArgs, char... chs) {
         List<String> args = new ArrayList<String>();
         int lastStart = 0;
         int nestedParam = 0;
         boolean isQuoted = false;
         for (int i = 0; i < string.length(); i++) {
-            if (string.charAt( i ) == ch) {
+            if (contains(chs, string.charAt( i ))) {
                 if (!isQuoted && nestedParam == 0) {
-                    args.add(string.subSequence(lastStart, i).toString().trim());
+                    String arg = string.subSequence(lastStart, i).toString();
+                    args.add(trimArgs ? arg.trim() : arg);
                     lastStart = i+1;
                 }
             } else {
@@ -992,11 +1055,21 @@ public class StringUtils {
                 }
             }
         }
-        String lastArg = string.subSequence(lastStart, string.length()).toString().trim();
+        String arg = string.subSequence(lastStart, string.length()).toString();
+        String lastArg = trimArgs ? arg.trim() : arg;
         if (lastArg.length() > 0) {
             args.add(lastArg);
         }
         return args;
+    }
+
+    private static boolean contains(char[] chars, char ch) {
+        for (int i = 0; i < chars.length; i++) {
+            if (chars[i] == ch) {
+                return true;
+            }
+        }
+        return false;
     }
     
     /**
@@ -1113,12 +1186,71 @@ public class StringUtils {
     }
 
     public static int indexOfOutOfQuotes(String str, String searched) {
-        for ( int i = str.indexOf(searched); i >= 0; i = str.indexOf(searched, i+1) ) {
-            if ( countQuoteOccurrences( str, 0, i ) % 2 == 0 ) {
+        return indexOfOutOfQuotes(str, searched, 0);
+    }
+
+    public static int indexOfOutOfQuotes(String str, String searched, int fromIndex) {
+        for (int i = str.indexOf(searched, fromIndex); i >= 0; i = str.indexOf(searched, i + 1)) {
+            if ( !isInQuotes( str, i ) ) {
                 return i;
             }
         }
         return -1;
+    }
+
+    public static int codeAwareIndexOf(String str, String searched) {
+        return codeAwareIndexOf(str, searched, 0);
+    }
+
+    public static int codeAwareIndexOf(String str, String searched, int fromIndex) {
+        for (int i = str.indexOf(searched, fromIndex); i >= 0; i = str.indexOf(searched, i + 1)) {
+            if ( !isInQuotes( str, i ) && !isInComment( str, i ) ) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean isInComment( String str, int pos ) {
+        boolean inMultiLineComment = false;
+        boolean inSingleLineComment = false;
+        for (int i = 0; i < pos; i++) {
+            switch (str.charAt( i )) {
+                case '/':
+                    if (!inMultiLineComment && i+1 < pos) {
+                        if (str.charAt( i+1 ) == '*') {
+                            inMultiLineComment = true;
+                        } else if (str.charAt( i+1 ) == '/') {
+                            inSingleLineComment = true;
+                        }
+                        i++;
+                    }
+                    break;
+                case '*':
+                    if (inMultiLineComment && i+1 < pos && str.charAt( i+1 ) == '/') {
+                        i++;
+                        inMultiLineComment = false;
+                    }
+                    break;
+                case '\n':
+                    inSingleLineComment = false;
+                    break;
+            }
+        }
+        return inSingleLineComment || inMultiLineComment;
+    }
+
+    public static String replaceOutOfQuotes( String s, String oldValue, String newValue ) {
+        for (int i = s.indexOf( oldValue ); i >= 0; i = s.indexOf( oldValue, i+newValue.length() )) {
+            if ( !isInQuotes( s, i ) ) {
+                s = s.substring( 0, i ) + newValue + s.substring( i+oldValue.length() );
+            }
+        }
+        return s;
+    }
+
+    private static boolean isInQuotes( String str, int i ) {
+        return countQuoteOccurrences(str, 0, i) % 2 == 1;
     }
 
     private static int countQuoteOccurrences(String str, int start, int end) {

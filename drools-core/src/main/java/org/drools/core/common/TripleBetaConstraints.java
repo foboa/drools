@@ -22,7 +22,6 @@ import org.drools.core.RuleBaseConfiguration;
 import org.drools.core.reteoo.builder.BuildContext;
 import org.drools.core.rule.ContextEntry;
 import org.drools.core.rule.MutableTypeConstraint;
-import org.drools.core.rule.constraint.MvelConstraint;
 import org.drools.core.spi.BetaNodeFieldConstraint;
 import org.drools.core.spi.Tuple;
 import org.drools.core.util.bitmask.BitMask;
@@ -47,7 +46,7 @@ public class TripleBetaConstraints extends MultipleBetaConstraint {
         super(constraints, conf, disableIndexing);
     }
 
-    private TripleBetaConstraints( BetaNodeFieldConstraint[] constraints,
+    protected TripleBetaConstraints( BetaNodeFieldConstraint[] constraints,
                                    IndexPrecedenceOption indexPrecedenceOption,
                                    boolean disableIndexing) {
         super(constraints, indexPrecedenceOption, disableIndexing);
@@ -169,21 +168,15 @@ public class TripleBetaConstraints extends MultipleBetaConstraint {
         throw new UnsupportedOperationException();
     }
 
-    public BitMask getListenedPropertyMask(List<String> settableProperties) {
-        return constraints[0].getListenedPropertyMask(settableProperties)
-                             .setAll(constraints[1].getListenedPropertyMask(settableProperties))
-                             .setAll(constraints[2].getListenedPropertyMask(settableProperties));
+    public BitMask getListenedPropertyMask(Class modifiedClass, List<String> settableProperties) {
+        return constraints[0].getListenedPropertyMask(modifiedClass, settableProperties)
+                             .setAll(constraints[1].getListenedPropertyMask(modifiedClass, settableProperties))
+                             .setAll(constraints[2].getListenedPropertyMask(modifiedClass, settableProperties));
     }
 
     public void registerEvaluationContext(BuildContext buildContext) {
-        if (constraints[0] instanceof MvelConstraint) {
-            ((MvelConstraint) constraints[0]).registerEvaluationContext(buildContext);
-        }
-        if (constraints[1] instanceof MvelConstraint) {
-            ((MvelConstraint) constraints[1]).registerEvaluationContext(buildContext);
-        }
-        if (constraints[2] instanceof MvelConstraint) {
-            ((MvelConstraint) constraints[2]).registerEvaluationContext(buildContext);
-        }
+        this.constraints[0].registerEvaluationContext(buildContext);
+        this.constraints[1].registerEvaluationContext(buildContext);
+        this.constraints[2].registerEvaluationContext(buildContext);
     }
 }

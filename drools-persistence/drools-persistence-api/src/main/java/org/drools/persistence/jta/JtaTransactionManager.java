@@ -118,7 +118,8 @@ public class JtaTransactionManager
                 return tm;
             } catch ( NamingException ex ) {
                 logger.debug( "No JTA TransactionManager found at fallback JNDI location [{}]",
-                              jndiName );
+                              jndiName,
+                              ex);
             }
         }
 
@@ -137,7 +138,7 @@ public class JtaTransactionManager
             try {
                 return InitialContext.doLookup(System.getProperty("jbpm.ut.jndi.lookup", "java:jboss/UserTransaction"));
             } catch (Exception e1) {
-                logger.debug("Unable to find transaction: {}. Might be running in CMT environment" + ex.getMessage());
+                logger.debug("Unable to find transaction: {}. Might be running in CMT environment" + e1.getMessage(), e1);
                 return null;
             }
 
@@ -176,7 +177,7 @@ public class JtaTransactionManager
             } catch (Exception e1) {
                 logger.debug( "No JTA TransactionSynchronizationRegistry found at default JNDI location [{}]",
                         customJndiLocation,
-                        ex );
+                        e1 );
             }
         }
         // Check whether the UserTransaction or TransactionManager implements it...
@@ -247,9 +248,10 @@ public class JtaTransactionManager
                 logger.warn( "Unable to commit transaction", e);
                 throw new RuntimeException( "Unable to commit transaction",
                                             e );
+            } finally {
+                transactionResources.get().clear();
             }
         }
-        transactionResources.get().clear();
     }
     
     public void rollback(boolean transactionOwner) {
@@ -261,8 +263,18 @@ public class JtaTransactionManager
             		this.ut.rollback();
         		}
         	} else {
-        		getUt().setRollbackOnly();
-        	}
+                // use transaction sync registry if available. this works if there is tx associated
+                if (this.tsr != null) {
+                    try {
+                        ((TransactionSynchronizationRegistry) this.tsr).setRollbackOnly();
+                    } catch ( IllegalStateException e) { 
+                        getUt().setRollbackOnly();
+                    }
+                } else {
+                    // if no transaction sync registry available fallback to user transaction
+                    getUt().setRollbackOnly();
+                }
+            }
         } catch ( Exception e ) {
             logger.warn( "Unable to rollback transaction", e);
             throw new RuntimeException( "Unable to rollback transaction",

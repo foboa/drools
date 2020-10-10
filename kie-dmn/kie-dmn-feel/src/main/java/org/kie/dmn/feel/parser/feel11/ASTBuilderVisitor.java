@@ -16,18 +16,9 @@
 
 package org.kie.dmn.feel.parser.feel11;
 
-import org.antlr.v4.runtime.ParserRuleContext;
-import org.antlr.v4.runtime.Token;
-import org.kie.dmn.feel.lang.CompositeType;
-import org.kie.dmn.feel.lang.Type;
-import org.kie.dmn.feel.lang.ast.*;
-import org.kie.dmn.feel.parser.feel11.FEEL_1_1Parser.RelExpressionValueContext;
-import org.kie.dmn.feel.lang.impl.MapBackedType;
-import org.kie.dmn.feel.lang.types.BuiltInType;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
@@ -36,10 +27,47 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.tree.TerminalNode;
+import org.kie.dmn.feel.lang.CompositeType;
+import org.kie.dmn.feel.lang.Type;
+import org.kie.dmn.feel.lang.ast.ASTBuilderFactory;
+import org.kie.dmn.feel.lang.ast.BaseNode;
+import org.kie.dmn.feel.lang.ast.BetweenNode;
+import org.kie.dmn.feel.lang.ast.BooleanNode;
+import org.kie.dmn.feel.lang.ast.ContextEntryNode;
+import org.kie.dmn.feel.lang.ast.ContextTypeNode;
+import org.kie.dmn.feel.lang.ast.DashNode;
+import org.kie.dmn.feel.lang.ast.FunctionInvocationNode;
+import org.kie.dmn.feel.lang.ast.FunctionTypeNode;
+import org.kie.dmn.feel.lang.ast.InNode;
+import org.kie.dmn.feel.lang.ast.InfixOpNode;
+import org.kie.dmn.feel.lang.ast.InstanceOfNode;
+import org.kie.dmn.feel.lang.ast.ListNode;
+import org.kie.dmn.feel.lang.ast.ListTypeNode;
+import org.kie.dmn.feel.lang.ast.NameDefNode;
+import org.kie.dmn.feel.lang.ast.NameRefNode;
+import org.kie.dmn.feel.lang.ast.QualifiedNameNode;
+import org.kie.dmn.feel.lang.ast.QuantifiedExpressionNode;
+import org.kie.dmn.feel.lang.ast.RangeNode;
+import org.kie.dmn.feel.lang.ast.StringNode;
+import org.kie.dmn.feel.lang.ast.TypeNode;
+import org.kie.dmn.feel.lang.ast.UnaryTestListNode;
+import org.kie.dmn.feel.lang.ast.UnaryTestNode;
+import org.kie.dmn.feel.lang.ast.UnaryTestNode.UnaryOperator;
+import org.kie.dmn.feel.lang.types.BuiltInType;
+import org.kie.dmn.feel.lang.types.DefaultBuiltinFEELTypeRegistry;
+import org.kie.dmn.feel.lang.types.FEELTypeRegistry;
+import org.kie.dmn.feel.parser.feel11.FEEL_1_1Parser.RelExpressionValueContext;
+import org.kie.dmn.feel.parser.feel11.FEEL_1_1Parser.TypeContext;
+import org.kie.dmn.feel.util.EvalHelper;
+
 public class ASTBuilderVisitor
         extends FEEL_1_1BaseVisitor<BaseNode> {
     
     private ScopeHelper scopeHelper;
+    private FEELTypeRegistry typeRegistry;
 
     private static class ScopeHelper {
         Deque<Map<String, Type>> stack;
@@ -74,9 +102,10 @@ public class ASTBuilderVisitor
         }
     }
 
-    public ASTBuilderVisitor(Map<String, Type> inputTypes) {
+    public ASTBuilderVisitor(Map<String, Type> inputTypes, FEELTypeRegistry typeRegistry) {
         this.scopeHelper = new ScopeHelper();
         this.scopeHelper.addTypes(inputTypes);
+        this.typeRegistry = typeRegistry != null ? typeRegistry : DefaultBuiltinFEELTypeRegistry.INSTANCE;
     }
 
     @Override
@@ -85,13 +114,25 @@ public class ASTBuilderVisitor
     }
 
     @Override
-    public BaseNode visitBooleanLiteral(FEEL_1_1Parser.BooleanLiteralContext ctx) {
+    public BaseNode visitBoolLiteral(FEEL_1_1Parser.BoolLiteralContext ctx) {
         return ASTBuilderFactory.newBooleanNode( ctx );
     }
 
     @Override
-    public BaseNode visitSignedUnaryExpression(FEEL_1_1Parser.SignedUnaryExpressionContext ctx) {
+    public BaseNode visitAtLiteral(FEEL_1_1Parser.AtLiteralContext ctx) {
+        StringNode stringLiteral = ASTBuilderFactory.newStringNode(ctx.atLiteralValue());
+        return ASTBuilderFactory.newAtLiteralNode(ctx, stringLiteral);
+    }
+
+    @Override
+    public BaseNode visitSignedUnaryExpressionPlus(FEEL_1_1Parser.SignedUnaryExpressionPlusContext ctx) {
         BaseNode node = visit( ctx.unaryExpressionNotPlusMinus() );
+        return ASTBuilderFactory.newSignedUnaryNode( ctx, node );
+    }
+
+    @Override
+    public BaseNode visitSignedUnaryExpressionMinus(FEEL_1_1Parser.SignedUnaryExpressionMinusContext ctx) {
+        BaseNode node = visit( ctx.unaryExpression() );
         return ASTBuilderFactory.newSignedUnaryNode( ctx, node );
     }
 
@@ -108,15 +149,6 @@ public class ASTBuilderVisitor
     @Override
     public BaseNode visitPrimaryParens(FEEL_1_1Parser.PrimaryParensContext ctx) {
         return visit( ctx.expression() );
-    }
-
-    @Override
-    public BaseNode visitLogicalNegation(FEEL_1_1Parser.LogicalNegationContext ctx) {
-        BaseNode name = ASTBuilderFactory.newNameRefNode( ctx.not_key(), BuiltInType.BOOLEAN );
-        BaseNode node = visit( ctx.unaryExpression() );
-        ListNode params = ASTBuilderFactory.newListNode( ctx.unaryExpression(), Arrays.asList( node ) );
-
-        return buildFunctionCall( ctx, name, params );
     }
 
     @Override
@@ -163,13 +195,6 @@ public class ASTBuilderVisitor
     }
 
     @Override
-    public BaseNode visitRelExpressionValueList(FEEL_1_1Parser.RelExpressionValueListContext ctx) {
-        BaseNode value = visit( ctx.val );
-        BaseNode list = visit( ctx.expressionList() );
-        return ASTBuilderFactory.newInNode( ctx, value, list );
-    }
-
-    @Override
     public BaseNode visitInterval(FEEL_1_1Parser.IntervalContext ctx) {
         BaseNode start = visit( ctx.start );
         BaseNode end = visit( ctx.end );
@@ -186,10 +211,28 @@ public class ASTBuilderVisitor
     }
 
     @Override
-    public BaseNode visitSimpleUnaryTests(FEEL_1_1Parser.SimpleUnaryTestsContext ctx) {
+    public BaseNode visitPositiveUnaryTestIneqInterval(FEEL_1_1Parser.PositiveUnaryTestIneqIntervalContext ctx) {
+        BaseNode value = visit(ctx.endpoint());
+        String op = ctx.op.getText();
+        switch (UnaryOperator.determineOperator(op)) {
+            case GT:
+                return ASTBuilderFactory.newIntervalNode(ctx, RangeNode.IntervalBoundary.OPEN, value, ASTBuilderFactory.newNullNode(ctx), RangeNode.IntervalBoundary.OPEN);
+            case GTE:
+                return ASTBuilderFactory.newIntervalNode(ctx, RangeNode.IntervalBoundary.CLOSED, value, ASTBuilderFactory.newNullNode(ctx), RangeNode.IntervalBoundary.OPEN);
+            case LT:
+                return ASTBuilderFactory.newIntervalNode(ctx, RangeNode.IntervalBoundary.OPEN, ASTBuilderFactory.newNullNode(ctx), value, RangeNode.IntervalBoundary.OPEN);
+            case LTE:
+                return ASTBuilderFactory.newIntervalNode(ctx, RangeNode.IntervalBoundary.OPEN, ASTBuilderFactory.newNullNode(ctx), value, RangeNode.IntervalBoundary.CLOSED);
+            default:
+                throw new UnsupportedOperationException("by the parser rule FEEL grammar rule 7.a for range syntax should not have determined the operator " + op);
+        }
+    }
+
+    @Override
+    public BaseNode visitPositiveUnaryTests(FEEL_1_1Parser.PositiveUnaryTestsContext ctx) {
         List<BaseNode> tests = new ArrayList<>();
         for ( int i = 0; i < ctx.getChildCount(); i++ ) {
-            if ( ctx.getChild( i ) instanceof FEEL_1_1Parser.SimpleUnaryTestContext ||
+            if ( ctx.getChild( i ) instanceof FEEL_1_1Parser.PositiveUnaryTestContext ||
                     ctx.getChild( i ) instanceof FEEL_1_1Parser.PrimaryContext) {
                 tests.add( visit( ctx.getChild( i ) ) );
             }
@@ -200,7 +243,7 @@ public class ASTBuilderVisitor
     @Override
     public BaseNode visitRelExpressionTestList(FEEL_1_1Parser.RelExpressionTestListContext ctx) {
         BaseNode value = visit( ctx.val );
-        BaseNode list = visit( ctx.simpleUnaryTests() );
+        BaseNode list = visit( ctx.positiveUnaryTests() );
         return ASTBuilderFactory.newInNode( ctx, value, list );
     }
     
@@ -209,11 +252,6 @@ public class ASTBuilderVisitor
         BaseNode value = visit( ctx.val );
         BaseNode test = visit( ctx.expression() );
         return ASTBuilderFactory.newInNode( ctx, value, test );
-    }
-
-    @Override
-    public BaseNode visitPositiveUnaryTestNull(FEEL_1_1Parser.PositiveUnaryTestNullContext ctx) {
-        return ASTBuilderFactory.newNullNode( ctx );
     }
 
     @Override
@@ -268,8 +306,27 @@ public class ASTBuilderVisitor
     }
 
     @Override
+    public BaseNode visitIterationNameDefinition(FEEL_1_1Parser.IterationNameDefinitionContext ctx) {
+        List<String> tokenStrs = new ArrayList<>();
+        List<Token> tokens = new ArrayList<>(  );
+        for ( int i = 0; i < ctx.getChildCount(); i++ ) {
+            visit( ctx.getChild( i ) );
+        }
+        ParserHelper.getAllTokens( ctx, tokens );
+        for( Token t : tokens ) {
+            tokenStrs.add( t.getText() );
+        }
+        return ASTBuilderFactory.newNameDefNode( ctx, tokenStrs );
+    }
+
+    @Override
     public BaseNode visitKeyString(FEEL_1_1Parser.KeyStringContext ctx) {
-        return ASTBuilderFactory.newNameDefNode( ctx, ctx.getText() );
+        return ASTBuilderFactory.newStringNode(ctx);
+    }
+
+    @Override
+    public BaseNode visitKeyName(FEEL_1_1Parser.KeyNameContext ctx) {
+        return visit(ctx.nameDefinition());
     }
 
     @Override
@@ -316,6 +373,13 @@ public class ASTBuilderVisitor
     }
 
     @Override
+    public BaseNode visitFormalParameter(FEEL_1_1Parser.FormalParameterContext ctx) {
+        NameDefNode name = (NameDefNode) visit(ctx.nameDefinition());
+        TypeNode type = ctx.type() != null ? (TypeNode) visit(ctx.type()) : null;
+        return ASTBuilderFactory.newFormalParameter(ctx, name, type);
+    }
+
+    @Override
     public BaseNode visitFunctionDefinition(FEEL_1_1Parser.FunctionDefinitionContext ctx) {
         ListNode parameters = null;
         if ( ctx.formalParameters() != null ) {
@@ -328,9 +392,14 @@ public class ASTBuilderVisitor
 
     @Override
     public BaseNode visitIterationContext(FEEL_1_1Parser.IterationContextContext ctx) {
-        NameDefNode name = (NameDefNode) visit( ctx.nameDefinition() );
-        BaseNode expr = visit( ctx.expression() );
-        return ASTBuilderFactory.newIterationContextNode( ctx, name, expr );
+        NameDefNode name = (NameDefNode) visit( ctx.iterationNameDefinition() );
+        BaseNode expr = visit(ctx.expression().get(0));
+        if (ctx.expression().size() == 1) {
+            return ASTBuilderFactory.newIterationContextNode(ctx, name, expr);
+        } else {
+            BaseNode rangeEndExpr = visit(ctx.expression().get(1));
+            return ASTBuilderFactory.newIterationContextNode(ctx, name, expr, rangeEndExpr);
+        }
     }
 
     @Override
@@ -371,8 +440,8 @@ public class ASTBuilderVisitor
     @Override
     public BaseNode visitIfExpression(FEEL_1_1Parser.IfExpressionContext ctx) {
         BaseNode c = visit( ctx.c );
-        BaseNode t = visit( ctx.t );
-        BaseNode e = visit( ctx.e );
+        BaseNode t = ctx.t != null ? visit(ctx.t) : null;
+        BaseNode e = ctx.e != null ? visit(ctx.e) : null;
         return ASTBuilderFactory.newIfExpression( ctx, c, t, e );
     }
 
@@ -437,14 +506,15 @@ public class ASTBuilderVisitor
     }
 
     @Override
+    public BaseNode visitFnInvocation(FEEL_1_1Parser.FnInvocationContext ctx) {
+        BaseNode name = visit(ctx.unaryExpression());
+        ListNode params = (ListNode) visit(ctx.parameters());
+        return buildFunctionCall(ctx, name, params);
+    }
+
+    @Override
     public BaseNode visitPrimaryName(FEEL_1_1Parser.PrimaryNameContext ctx) {
-        BaseNode name = visit( ctx.qualifiedName() );
-        if( ctx.parameters() != null ) {
-            ListNode params = (ListNode) visit( ctx.parameters() );
-            return buildFunctionCall( ctx, name, params );
-        } else {
-            return name;
-        }
+        return visit(ctx.qualifiedName());
     }
 
     private String getFunctionName(BaseNode name) {
@@ -452,7 +522,7 @@ public class ASTBuilderVisitor
         if ( name instanceof NameRefNode ) {
             // simple name
             functionName = name.getText();
-        } else {
+        } else if (name instanceof QualifiedNameNode) {
             QualifiedNameNode qn = (QualifiedNameNode) name;
             functionName = qn.getParts().stream().map( p -> p.getText() ).collect( Collectors.joining( " ") );
         }
@@ -461,11 +531,30 @@ public class ASTBuilderVisitor
 
     private BaseNode buildFunctionCall(ParserRuleContext ctx, BaseNode name, ListNode params) {
         String functionName = getFunctionName( name );
-        if( "not".equals( functionName ) ) {
-            return buildNotCall( ctx, name, params );
-        } else {
-            return ASTBuilderFactory.newFunctionInvocationNode( ctx, name, params );
-        }
+        return ASTBuilderFactory.newFunctionInvocationNode( ctx, name, params );
+    }
+
+    @Override
+    public BaseNode visitUnaryTestsRoot(FEEL_1_1Parser.UnaryTestsRootContext ctx) {
+        return visit(ctx.unaryTests());
+    }
+
+    @Override
+    public BaseNode visitUnaryTests_empty(FEEL_1_1Parser.UnaryTests_emptyContext ctx) {
+        return ASTBuilderFactory.newUnaryTestListNode(ctx, Collections.singletonList(ASTBuilderFactory.newDashNode(ctx)), UnaryTestListNode.State.Positive);
+    }
+
+    @Override
+    public BaseNode visitUnaryTests_positive(FEEL_1_1Parser.UnaryTests_positiveContext ctx) {
+        ListNode list = (ListNode) visit(ctx.positiveUnaryTests());
+        return ASTBuilderFactory.newUnaryTestListNode(ctx, list.getElements(), UnaryTestListNode.State.Positive);
+    }
+
+    @Override
+    public BaseNode visitUnaryTests_negated(FEEL_1_1Parser.UnaryTests_negatedContext ctx) {
+        BaseNode name = ASTBuilderFactory.newNameRefNode( ctx, "not", BuiltInType.BOOLEAN ); // negating a unary tests: BOOLEAN-type anyway
+        ListNode value = (ListNode) visit( ctx.positiveUnaryTests() );
+        return ASTBuilderFactory.newUnaryTestListNode(ctx, value.getElements(), UnaryTestListNode.State.Negated);
     }
 
     private BaseNode buildNotCall(ParserRuleContext ctx, BaseNode name, ListNode params) {
@@ -490,6 +579,8 @@ public class ASTBuilderVisitor
                 return ASTBuilderFactory.newFunctionInvocationNode( ctx, name, params );
             } else if( param instanceof InfixOpNode && ((InfixOpNode)param).isBoolean() ) {
                 return ASTBuilderFactory.newFunctionInvocationNode( ctx, name, params );
+            } else if (param instanceof FunctionInvocationNode) {
+                return ASTBuilderFactory.newFunctionInvocationNode(ctx, name, params);
             } else if( param instanceof RangeNode ) {
                 return ASTBuilderFactory.newUnaryTestNode( ctx, "not", params );
             } else if( param instanceof DashNode ) {
@@ -503,8 +594,54 @@ public class ASTBuilderVisitor
     }
 
     @Override
-    public TypeNode visitType(FEEL_1_1Parser.TypeContext ctx) {
-        return ASTBuilderFactory.newTypeNode( ctx );
+    public TypeNode visitQnType(FEEL_1_1Parser.QnTypeContext ctx) {
+        List<String> qns = new ArrayList<>();
+        if (ctx.qualifiedName() != null) {
+            ctx.qualifiedName().nameRef().forEach(nr -> qns.add(EvalHelper.normalizeVariableName(ParserHelper.getOriginalText(nr))));
+        } else if (ctx.FUNCTION() != null) {
+            qns.add("function");
+        } else {
+            throw new IllegalStateException("grammar rule changed.");
+        }
+        return ASTBuilderFactory.newCTypeNode(ctx, typeRegistry.resolveFEELType(qns));
+    }
+
+    @Override
+    public BaseNode visitListType(FEEL_1_1Parser.ListTypeContext ctx) {
+        TypeNode type = (TypeNode) visit(ctx.type());
+        return new ListTypeNode(ctx, type);
+    }
+
+    @Override
+    public BaseNode visitContextType(FEEL_1_1Parser.ContextTypeContext ctx) {
+        List<String> pNames = new ArrayList<>();
+        for (TerminalNode id : ctx.Identifier()) {
+            pNames.add(id.getText());
+        }
+        if (!pNames.get(0).equals("context")) {
+            throw new IllegalStateException("grammar rule changed.");
+        } else {
+            pNames.remove(0);
+        }
+        List<TypeNode> pTypes = new ArrayList<>();
+        for (TypeContext t : ctx.type()) {
+            pTypes.add((TypeNode) visit(t));
+        }
+        Map<String, TypeNode> gens = new HashMap<>();
+        for (int i = 0; i < pNames.size(); i++) {
+            gens.put(pNames.get(i), pTypes.get(i));
+        }
+        return new ContextTypeNode(ctx, gens);
+    }
+
+    @Override
+    public BaseNode visitFunctionType(FEEL_1_1Parser.FunctionTypeContext ctx) {
+        List<TypeNode> argTypes = new ArrayList<>();
+        for (TypeContext t : ctx.type()) {
+            argTypes.add((TypeNode) visit(t));
+        }
+        TypeNode type = argTypes.remove(argTypes.size() - 1);
+        return new FunctionTypeNode(ctx, argTypes, type);
     }
 
     @Override
@@ -543,6 +680,10 @@ public class ASTBuilderVisitor
             BaseNode path = visit( ctx.qualifiedName() );
             expr = ASTBuilderFactory.newPathExpressionNode( ctx, expr, path );
         }
+        if (ctx.parameters() != null) {
+            ListNode params = (ListNode) visit(ctx.parameters());
+            return buildFunctionCall(ctx, expr, params);
+        }
         return expr;
     }
 
@@ -551,10 +692,4 @@ public class ASTBuilderVisitor
         return visit( ctx.expression() );
     }
 
-    @Override
-    public BaseNode visitNegatedUnaryTests(FEEL_1_1Parser.NegatedUnaryTestsContext ctx) {
-        BaseNode name = ASTBuilderFactory.newNameRefNode( ctx.not_key(), BuiltInType.BOOLEAN ); // negating a unary tests: BOOLEAN-type anyway
-        ListNode value = (ListNode) visit( ctx.simpleUnaryTests() );
-        return buildFunctionCall( ctx, name, value );
-    }
 }

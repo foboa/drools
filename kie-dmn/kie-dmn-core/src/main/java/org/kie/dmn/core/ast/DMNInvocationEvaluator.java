@@ -16,11 +16,12 @@
 
 package org.kie.dmn.core.ast;
 
-import org.drools.core.rule.Function;
-import org.kie.dmn.api.core.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.BiFunction;
+
+import javax.xml.namespace.QName;
 
 import org.kie.dmn.api.core.DMNContext;
 import org.kie.dmn.api.core.DMNMessage;
@@ -31,17 +32,19 @@ import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 import org.kie.dmn.core.api.DMNExpressionEvaluator;
 import org.kie.dmn.core.api.EvaluatorResult;
 import org.kie.dmn.core.api.EvaluatorResult.ResultType;
-import org.kie.dmn.core.impl.DMNContextImpl;
+import org.kie.dmn.core.impl.DMNModelImpl;
 import org.kie.dmn.core.impl.DMNResultImpl;
 import org.kie.dmn.core.util.Msg;
 import org.kie.dmn.core.util.MsgUtil;
+import org.kie.dmn.feel.FEEL;
 import org.kie.dmn.feel.lang.impl.EvaluationContextImpl;
 import org.kie.dmn.feel.lang.impl.FEELEventListenersManager;
+import org.kie.dmn.feel.lang.impl.FEELImpl;
 import org.kie.dmn.feel.lang.impl.NamedParameter;
-import org.kie.dmn.feel.runtime.FEELFunction;
 import org.kie.dmn.feel.lang.impl.RootExecutionFrame;
-import org.kie.dmn.model.v1_1.DMNElement;
-import org.kie.dmn.model.v1_1.Invocation;
+import org.kie.dmn.feel.runtime.FEELFunction;
+import org.kie.dmn.model.api.DMNElement;
+import org.kie.dmn.model.api.Invocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,8 +58,13 @@ public class DMNInvocationEvaluator
     private final String     functionName;
     private final List<ActualParameter> parameters = new ArrayList<>();
     private final BiFunction<DMNContext, String, FEELFunction> functionLocator;
+    private final FEEL feel;
 
-    public DMNInvocationEvaluator(String nodeName, DMNElement node, String functionName, Invocation invocation, BiFunction<DMNContext, String, FEELFunction> functionLocator ) {
+    /**
+     * @param functionLocator function to be used to resolve the FEELFunction to be invoked.
+     * @param feel in case functionLocator is not able to resolve the desired function, it will be used for checking the resolution against the configured/built-in FEEL functions.
+     */
+    public DMNInvocationEvaluator(String nodeName, DMNElement node, String functionName, Invocation invocation, BiFunction<DMNContext, String, FEELFunction> functionLocator, FEEL feel) {
         this.nodeName = nodeName;
         this.node = node;
         this.functionName = functionName;
@@ -66,6 +74,7 @@ public class DMNInvocationEvaluator
         } else {
             this.functionLocator = functionLocator;
         }
+        this.feel = feel;
     }
 
     public void addParameter(String name, DMNType type, DMNExpressionEvaluator evaluator) {
@@ -81,19 +90,37 @@ public class DMNInvocationEvaluator
         final List<FEELEvent> events = new ArrayList<>();
         DMNResultImpl result = (DMNResultImpl) dmnr;
         DMNContext previousContext = result.getContext();
-        DMNContextImpl dmnContext = (DMNContextImpl) previousContext.clone();
+        DMNContext dmnContext = previousContext.clone();
         result.setContext( dmnContext );
         Object invocationResult = null;
 
         try {
-            FEELFunction function = this.functionLocator.apply( previousContext, functionName );
+            boolean walkedIntoScope = false;
+            QName importAlias = null;
+            String[] fnameParts = functionName.split("\\.");
+            if (fnameParts.length > 1) {
+                importAlias = ((DMNModelImpl) ((DMNResultImpl) dmnr).getModel()).getImportAliasesForNS().get(fnameParts[0]);
+                dmnContext.pushScope(fnameParts[0], importAlias.getNamespaceURI());
+                walkedIntoScope = true;
+            }
+            FEELFunction function = this.functionLocator.apply(dmnContext, (fnameParts.length > 1) ? fnameParts[1] : functionName);
             if( function == null ) {
-                // check if it is a built in function
-                Object r = RootExecutionFrame.INSTANCE.getValue( functionName );
+                // check if it is a configured/built-in function
+                Object r = null;
+                if (feel != null) {
+                    r = ((FEELImpl) feel).newEvaluationContext(Collections.emptyList(), Collections.emptyMap()).getValue(functionName);
+                } else {
+                    r = RootExecutionFrame.INSTANCE.getValue( functionName );
+                }
                 if( r != null && r instanceof FEELFunction ) {
                     function = (FEELFunction) r;
                 }
             }
+            // this invocation will need to resolve parameters according to the importING scope, but thanks to closure no longer need to pop scope to push it back later at actual invocation.
+            if (walkedIntoScope) {
+                dmnContext.popScope();
+            }
+
             if ( function == null ) {
                 MsgUtil.reportMessage( logger,
                                        DMNMessage.Severity.ERROR,
@@ -106,6 +133,7 @@ public class DMNInvocationEvaluator
                                        nodeName );
                 return new EvaluatorResultImpl( null, ResultType.FAILURE );
             }
+
             Object[] namedParams = new Object[parameters.size()];
             int index = 0;
             for ( ActualParameter param : parameters ) {
@@ -145,6 +173,7 @@ public class DMNInvocationEvaluator
             listenerMgr.addListener(events::add);
 
             EvaluationContextImpl ctx = new EvaluationContextImpl(listenerMgr, eventManager.getRuntime());
+
             invocationResult = function.invokeReflectively( ctx, namedParams );
 
             boolean hasErrors = hasErrors( events, eventManager, result );

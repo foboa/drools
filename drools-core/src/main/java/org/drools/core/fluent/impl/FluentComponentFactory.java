@@ -16,33 +16,33 @@
 
 package org.drools.core.fluent.impl;
 
-import org.kie.api.runtime.builder.ExecutableBuilder;
-import org.kie.api.runtime.builder.KieContainerFluent;
-import org.kie.api.runtime.KieContainer;
-import org.kie.api.runtime.KieSession;
-import org.kie.api.runtime.builder.KieSessionFluent;
-
 import java.util.HashMap;
 import java.util.Map;
 
+import org.kie.api.runtime.KieContainer;
+import org.kie.api.runtime.KieSession;
+import org.kie.internal.builder.fluent.ExecutableBuilder;
+import org.kie.internal.builder.fluent.KieContainerFluent;
+import org.kie.internal.builder.fluent.KieSessionFluent;
+
 public class FluentComponentFactory {
+
     private Map<String, Class> fluents;
     private Map<String, String> fluentTargets;
 
     public FluentComponentFactory() {
-        fluents = new HashMap<String, Class>();
-        fluentTargets = new HashMap<String, String>();
+        fluents = new HashMap<>();
+        fluentTargets = new HashMap<>();
 
         set(KieContainerFluent.class.getName(), KieContainerFluentImpl.class, KieContainer.class.getName());
         set(KieSessionFluent.class.getName(), KieSessionFluentImpl.class, KieSession.class.getName());
-        set( ExecutableBuilder.class.getName(), ExecutableBuilderImpl.class, null );
-
+        set(ExecutableBuilder.class.getName(), ExecutableBuilderImpl.class, null);
     }
 
     public void set(String fluentType, Class fluentImpl, String fluentTarget) {
         fluents.put(fluentType, fluentImpl);
 
-        if ( fluentTargets != null ) {
+        if (fluentTarget != null) {
             // only BatchBuilderFluent is currently null
             fluentTargets.put(fluentType, fluentTarget);
         }

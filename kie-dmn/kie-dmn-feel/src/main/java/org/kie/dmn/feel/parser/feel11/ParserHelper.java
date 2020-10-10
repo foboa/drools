@@ -16,6 +16,11 @@
 
 package org.kie.dmn.feel.parser.feel11;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Stack;
+import java.util.stream.Collectors;
+
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.misc.Interval;
@@ -23,35 +28,23 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 import org.kie.dmn.feel.lang.CompositeType;
-import org.kie.dmn.feel.lang.impl.FEELEventListenersManager;
-import org.kie.dmn.feel.lang.impl.JavaBackedType;
 import org.kie.dmn.feel.lang.Scope;
 import org.kie.dmn.feel.lang.SimpleType;
 import org.kie.dmn.feel.lang.Symbol;
 import org.kie.dmn.feel.lang.Type;
+import org.kie.dmn.feel.lang.impl.FEELEventListenersManager;
+import org.kie.dmn.feel.lang.types.AliasFEELType;
 import org.kie.dmn.feel.lang.types.BuiltInType;
+import org.kie.dmn.feel.lang.types.DefaultBuiltinFEELTypeRegistry;
+import org.kie.dmn.feel.lang.types.FEELTypeRegistry;
+import org.kie.dmn.feel.lang.types.GenListType;
 import org.kie.dmn.feel.lang.types.ScopeImpl;
 import org.kie.dmn.feel.lang.types.SymbolTable;
 import org.kie.dmn.feel.lang.types.VariableSymbol;
-import org.kie.dmn.feel.runtime.FEELFunction;
-import org.kie.dmn.feel.runtime.Range;
-import org.kie.dmn.feel.runtime.UnaryTest;
 import org.kie.dmn.feel.runtime.events.UnknownVariableErrorEvent;
+import org.kie.dmn.feel.util.EvalHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.time.Duration;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.OffsetDateTime;
-import java.time.OffsetTime;
-import java.time.Period;
-import java.time.ZonedDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Stack;
-import java.util.stream.Collectors;
 
 public class ParserHelper {
     public static final Logger LOG = LoggerFactory.getLogger(ParserHelper.class);
@@ -61,6 +54,9 @@ public class ParserHelper {
     private Scope         currentScope = symbols.getGlobalScope();
     private Stack<String> currentName  = new Stack<>();
     private int dynamicResolution = 0;
+    private boolean featDMN12EnhancedForLoopEnabled = true; // DROOLS-2307 DMN enhanced for loop
+    private boolean featDMN12weekday = true; // DROOLS-2648 DMN v1.2 weekday on 'date', 'date and time'
+    private FEELTypeRegistry typeRegistry = DefaultBuiltinFEELTypeRegistry.INSTANCE;
 
     public ParserHelper() {
         this( null );
@@ -86,6 +82,16 @@ public class ParserHelper {
         currentScope = new ScopeImpl( currentName.peek(), currentScope, type );
     }
 
+    public void setTypeRegistry(FEELTypeRegistry typeRegistry) {
+        this.typeRegistry = typeRegistry;
+    }
+
+    public void pushTypeScope() {
+        LOG.trace("pushTypeScope()");
+        Scope newTypeScope = typeRegistry.getItemDefScope(currentScope);
+        currentScope = newTypeScope;
+    }
+
     public void popScope() {
         LOG.trace("popScope()");
         currentScope = currentScope.getParentScope();
@@ -97,7 +103,15 @@ public class ParserHelper {
     }
 
     public void pushName(ParserRuleContext ctx) {
-        this.currentName.push( getOriginalText( ctx ) );
+        this.currentName.push(getName(ctx));
+    }
+
+    private String getName(ParserRuleContext ctx) {
+        String key = getOriginalText(ctx);
+        if (ctx instanceof FEEL_1_1Parser.KeyStringContext) {
+            key = EvalHelper.unescapeString(key);
+        }
+        return key;
     }
 
     public void popName() {
@@ -119,16 +133,28 @@ public class ParserHelper {
             }
         } else { 
             Symbol resolved = this.currentScope.resolve(name);
-            if ( resolved != null && resolved.getType() instanceof CompositeType ) {
+            Type scopeType = resolved != null ? resolved.getType() : null;
+            if (scopeType instanceof GenListType) {
+                scopeType = ((GenListType) scopeType).getGen();
+            }
+
+            if (resolved != null && scopeType instanceof CompositeType) {
                 pushName(name);
-                pushScope(resolved.getType());
-                CompositeType type = (CompositeType) resolved.getType();
+                pushScope(scopeType);
+                CompositeType type = (CompositeType) scopeType;
                 for ( Map.Entry<String, Type> f : type.getFields().entrySet() ) {
                     this.currentScope.define(new VariableSymbol( f.getKey(), f.getValue() ));
                 }
                 LOG.trace(".. PUSHED, scope name {} with symbols {}", this.currentName.peek(), this.currentScope.getSymbols());
-            } else if ( resolved != null && resolved.getType() instanceof BuiltInType ) {
-                BuiltInType resolvedBIType = (BuiltInType) resolved.getType();
+            } else if (resolved != null && scopeType instanceof SimpleType) {
+                BuiltInType resolvedBIType = null;
+                if (scopeType instanceof BuiltInType) {
+                    resolvedBIType = (BuiltInType) scopeType;
+                } else if (scopeType instanceof AliasFEELType) {
+                    resolvedBIType = ((AliasFEELType) scopeType).getBuiltInType();
+                } else {
+                    throw new UnsupportedOperationException("Unsupported BIType " + scopeType + "!");
+                }
                 pushName(name);
                 pushScope(resolvedBIType);
                 switch (resolvedBIType) {
@@ -137,22 +163,30 @@ public class ParserHelper {
                         this.currentScope.define(new VariableSymbol( "year", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "month", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "day", BuiltInType.NUMBER ));
+                        if (isFeatDMN12weekday()) {
+                            // Table 60 spec DMN v1.2
+                            this.currentScope.define(new VariableSymbol("weekday", BuiltInType.NUMBER));
+                        }
                         break;
                     case TIME:
                         this.currentScope.define(new VariableSymbol( "hour", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "minute", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "second", BuiltInType.NUMBER ));
-                        this.currentScope.define(new VariableSymbol( "time offset", BuiltInType.NUMBER ));
+                        this.currentScope.define(new VariableSymbol("time offset", BuiltInType.DURATION));
                         this.currentScope.define(new VariableSymbol( "timezone", BuiltInType.NUMBER ));
                         break;
                     case DATE_TIME:
                         this.currentScope.define(new VariableSymbol( "year", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "month", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "day", BuiltInType.NUMBER ));
+                        if (isFeatDMN12weekday()) {
+                            // Table 60 spec DMN v1.2
+                            this.currentScope.define(new VariableSymbol("weekday", BuiltInType.NUMBER));
+                        }
                         this.currentScope.define(new VariableSymbol( "hour", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "minute", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "second", BuiltInType.NUMBER ));
-                        this.currentScope.define(new VariableSymbol( "time offset", BuiltInType.NUMBER ));
+                        this.currentScope.define(new VariableSymbol("time offset", BuiltInType.DURATION));
                         this.currentScope.define(new VariableSymbol( "timezone", BuiltInType.NUMBER ));
                         break;
                     case DURATION:
@@ -163,6 +197,12 @@ public class ParserHelper {
                         this.currentScope.define(new VariableSymbol( "hours", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "minutes", BuiltInType.NUMBER ));
                         this.currentScope.define(new VariableSymbol( "seconds", BuiltInType.NUMBER ));
+                        break;
+                    case RANGE:
+                        this.currentScope.define(new VariableSymbol("start included", BuiltInType.BOOLEAN));
+                        this.currentScope.define(new VariableSymbol("start", BuiltInType.UNKNOWN));
+                        this.currentScope.define(new VariableSymbol("end", BuiltInType.UNKNOWN));
+                        this.currentScope.define(new VariableSymbol("end included", BuiltInType.BOOLEAN));
                         break;
                     // table 53 applies only to type(e) is a date/time/duration
                     case UNKNOWN:
@@ -217,7 +257,7 @@ public class ParserHelper {
     }
     
     public void defineVariable(ParserRuleContext ctx) {
-        defineVariable( getOriginalText( ctx ) );
+        defineVariable(getName(ctx));
     }
 
     public void defineVariable(String variable) {
@@ -236,7 +276,14 @@ public class ParserHelper {
     }
 
     public boolean followUp(Token t, boolean isPredict) {
-        boolean follow = ( isDynamicResolution() && FEELParser.isVariableNamePartValid( t.getText() ) ) || this.currentScope.followUp( t.getText(), isPredict );
+        boolean dynamicResolutionResult = isDynamicResolution() && FEELParser.isVariableNamePartValid( t.getText(), currentScope );
+        boolean follow = dynamicResolutionResult || this.currentScope.followUp( t.getText(), isPredict );
+        // in case isPredict == false, will need to followUp in the currentScope, so that the TokenTree currentNode is updated as per expectations,
+        // this is because the `follow` variable above, in the case of short-circuited on `dynamicResolutionResult`,
+        // would skip performing any necessary update in the second part of the || predicate
+        if (dynamicResolutionResult && !isPredict) {
+            this.currentScope.followUp(t.getText(), isPredict);
+        }
         return follow;
     }
 
@@ -261,35 +308,20 @@ public class ParserHelper {
         return tokens;
     }
 
-    public static Type determineTypeFromClass( Class<?> clazz ) {
-        if( clazz == null ) {
-            return BuiltInType.UNKNOWN;
-        } else if( Number.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.NUMBER;
-        } else if( String.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.STRING;
-        } else if( LocalDate.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.DATE;
-        } else if( LocalTime.class.isAssignableFrom(clazz) || OffsetTime.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.TIME;
-        } else if( ZonedDateTime.class.isAssignableFrom(clazz) || OffsetDateTime.class.isAssignableFrom(clazz) || LocalDateTime.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.DATE_TIME;
-        } else if( Duration.class.isAssignableFrom(clazz) || Period.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.DURATION;
-        } else if( Boolean.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.BOOLEAN;
-        } else if( UnaryTest.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.UNARY_TEST;
-        } else if( Range.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.RANGE;
-        } else if( FEELFunction.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.FUNCTION;
-        } else if( List.class.isAssignableFrom(clazz) ) {
-            return BuiltInType.LIST;
-        } else if( Map.class.isAssignableFrom(clazz) ) {     // TODO not so sure about this one..
-            return BuiltInType.CONTEXT;
-        } 
-        return JavaBackedType.of( clazz ); 
+    public boolean isFeatDMN12EnhancedForLoopEnabled() {
+        return featDMN12EnhancedForLoopEnabled;
+    }
+
+    public void setFeatDMN12EnhancedForLoopEnabled(boolean featDMN12EnhancedForLoopEnabled) {
+        this.featDMN12EnhancedForLoopEnabled = featDMN12EnhancedForLoopEnabled;
+    }
+
+    public boolean isFeatDMN12weekday() {
+        return featDMN12weekday;
+    }
+
+    public void setFeatDMN12weekday(boolean featDMN12weekday) {
+        this.featDMN12weekday = featDMN12weekday;
     }
 
 }

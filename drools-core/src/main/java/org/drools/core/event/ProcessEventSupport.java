@@ -17,6 +17,7 @@
 package org.drools.core.event;
 
 import java.util.Iterator;
+import java.util.List;
 
 import org.kie.api.event.process.ProcessCompletedEvent;
 import org.kie.api.event.process.ProcessEventListener;
@@ -24,6 +25,7 @@ import org.kie.api.event.process.ProcessNodeLeftEvent;
 import org.kie.api.event.process.ProcessNodeTriggeredEvent;
 import org.kie.api.event.process.ProcessStartedEvent;
 import org.kie.api.event.process.ProcessVariableChangedEvent;
+import org.kie.api.event.process.SLAViolatedEvent;
 import org.kie.api.runtime.KieRuntime;
 import org.kie.api.runtime.process.NodeInstance;
 import org.kie.api.runtime.process.ProcessInstance;
@@ -128,12 +130,13 @@ public class ProcessEventSupport extends AbstractEventSupport<ProcessEventListen
 
     public void fireBeforeVariableChanged(final String id, final String instanceId, 
             final Object oldValue, final Object newValue,
+            final List<String> tags,
             final ProcessInstance processInstance, KieRuntime kruntime) {
         final Iterator<ProcessEventListener> iter = getEventListenersIterator();
 
         if (iter.hasNext()) {
             final ProcessVariableChangedEvent event = new ProcessVariableChangedEventImpl(
-                id, instanceId, oldValue, newValue, processInstance, kruntime);
+                id, instanceId, oldValue, newValue, tags, processInstance, kruntime);
 
             do {
                 iter.next().beforeVariableChanged(event);
@@ -143,15 +146,70 @@ public class ProcessEventSupport extends AbstractEventSupport<ProcessEventListen
 
     public void fireAfterVariableChanged(final String name, final String id, 
             final Object oldValue, final Object newValue,
+            final List<String> tags,
             final ProcessInstance processInstance, KieRuntime kruntime) {
         final Iterator<ProcessEventListener> iter = getEventListenersIterator();
 
         if (iter.hasNext()) {
             final ProcessVariableChangedEvent event = new ProcessVariableChangedEventImpl(
-                name, id, oldValue, newValue, processInstance, kruntime);
+                name, id, oldValue, newValue, tags, processInstance, kruntime);
 
             do {
                 iter.next().afterVariableChanged(event);
+            } while (iter.hasNext());
+        }
+    }
+
+    /**
+     * Do not use this constructor. It should be used just by deserialization.
+     */
+    public ProcessEventSupport() {
+    }
+
+    public void fireBeforeSLAViolated(final ProcessInstance instance, KieRuntime kruntime ) {
+        final Iterator<ProcessEventListener> iter = getEventListenersIterator();
+
+        if (iter.hasNext()) {
+            final SLAViolatedEvent event = new SLAViolatedEventImpl(instance, kruntime);
+
+            do{
+                iter.next().beforeSLAViolated(event);
+            } while (iter.hasNext());
+        }
+    }
+
+    public void fireAfterSLAViolated(final ProcessInstance instance, KieRuntime kruntime) {
+        final Iterator<ProcessEventListener> iter = getEventListenersIterator();
+
+        if (iter.hasNext()) {
+            final SLAViolatedEvent event = new SLAViolatedEventImpl(instance, kruntime);
+
+            do {
+                iter.next().afterSLAViolated(event);
+            } while (iter.hasNext());
+        }
+    }
+    
+    public void fireBeforeSLAViolated(final ProcessInstance instance, NodeInstance nodeInstance, KieRuntime kruntime ) {
+        final Iterator<ProcessEventListener> iter = getEventListenersIterator();
+
+        if (iter.hasNext()) {
+            final SLAViolatedEvent event = new SLAViolatedEventImpl(instance, nodeInstance, kruntime);
+
+            do{
+                iter.next().beforeSLAViolated(event);
+            } while (iter.hasNext());
+        }
+    }
+
+    public void fireAfterSLAViolated(final ProcessInstance instance, NodeInstance nodeInstance, KieRuntime kruntime) {
+        final Iterator<ProcessEventListener> iter = getEventListenersIterator();
+
+        if (iter.hasNext()) {
+            final SLAViolatedEvent event = new SLAViolatedEventImpl(instance, nodeInstance, kruntime);
+
+            do {
+                iter.next().afterSLAViolated(event);
             } while (iter.hasNext());
         }
     }

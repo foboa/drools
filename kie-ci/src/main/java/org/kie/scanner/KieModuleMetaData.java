@@ -37,6 +37,8 @@ public interface KieModuleMetaData {
 
     Map<String, String> getProcesses();
 
+    Map<String, String> getForms();
+
     TypeMetaInfo getTypeMetaInfo( Class<?> clazz );
 
     Collection<String> getRuleNamesInPackage( String packageName );
@@ -70,6 +72,10 @@ public interface KieModuleMetaData {
 
         public static KieModuleMetaData newKieModuleMetaData( File pomFile, DependencyFilter dependencyFilter ) {
             return new KieModuleMetaDataImpl( pomFile, dependencyFilter );
+        }
+
+        public static KieModuleMetaData newInJarKieModuleMetaData(ReleaseId releaseId, DependencyFilter compileFilter) {
+            return new KieInJarModuleMetaDataImpl(releaseId, compileFilter);
         }
     }
 }

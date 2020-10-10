@@ -29,7 +29,6 @@ import org.drools.core.WorkingMemory;
 import org.drools.core.common.InternalFactHandle;
 import org.drools.core.rule.Declaration;
 import org.drools.core.spi.Accumulator;
-import org.drools.core.spi.CompiledInvoker;
 import org.drools.core.spi.ReturnValueExpression;
 import org.drools.core.spi.ReturnValueExpression.SafeReturnValueExpression;
 import org.drools.core.spi.Tuple;
@@ -66,7 +65,7 @@ public class JavaAccumulatorFunctionExecutor
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
-        if ( this.expression instanceof CompiledInvoker ) {
+        if ( ReturnValueExpression.isCompiledInvoker(this.expression) ) {
             out.writeObject( null );
         } else {
             out.writeObject( this.expression );
@@ -81,7 +80,7 @@ public class JavaAccumulatorFunctionExecutor
         JavaAccumulatorFunctionContext context = new JavaAccumulatorFunctionContext();
         context.context = this.function.createContext();
         if ( this.function.supportsReverse() ) {
-            context.reverseSupport = new HashMap<Integer, Object>();
+            context.reverseSupport = new HashMap<>();
         }
         return context;
     }
@@ -187,7 +186,7 @@ public class JavaAccumulatorFunctionExecutor
         implements
         Externalizable {
         public Serializable               context;
-        public Map<Integer, Object>       reverseSupport;
+        public Map<Long, Object>       reverseSupport;
 
         public JavaAccumulatorFunctionContext() {
         }
@@ -196,7 +195,7 @@ public class JavaAccumulatorFunctionExecutor
         public void readExternal(ObjectInput in) throws IOException,
                                                 ClassNotFoundException {
             context = (Externalizable) in.readObject();
-            reverseSupport = (Map<Integer, Object>) in.readObject();
+            reverseSupport = (Map<Long, Object>) in.readObject();
         }
 
         public void writeExternal(ObjectOutput out) throws IOException {

@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.assertj.core.api.Assertions;
 import org.drools.workbench.models.guided.dtree.shared.model.GuidedDecisionTree;
 import org.junit.After;
 import org.junit.Before;
@@ -29,8 +30,10 @@ import org.kie.soup.project.datamodel.oracle.MethodInfo;
 import org.kie.soup.project.datamodel.oracle.ModelField;
 import org.kie.soup.project.datamodel.oracle.PackageDataModelOracle;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public abstract class AbstractGuidedDecisionTreeDRLPersistenceUnmarshallingTest {
 
@@ -39,22 +42,22 @@ public abstract class AbstractGuidedDecisionTreeDRLPersistenceUnmarshallingTest 
 
     protected PackageDataModelOracle dmo;
     protected Map<String, ModelField[]> packageModelFields = new HashMap<String, ModelField[]>();
-    protected Map<String, String[]> projectJavaEnumDefinitions = new HashMap<String, String[]>();
-    protected Map<String, List<MethodInfo>> projectMethodInformation = new HashMap<String, List<MethodInfo>>();
+    protected Map<String, String[]> moduleJavaEnumDefinitions = new HashMap<String, String[]>();
+    protected Map<String, List<MethodInfo>> moduleMethodInformation = new HashMap<String, List<MethodInfo>>();
 
     @Before
     public void setUp() throws Exception {
         dmo = mock(PackageDataModelOracle.class);
-        when(dmo.getProjectModelFields()).thenReturn(packageModelFields);
-        when(dmo.getProjectJavaEnumDefinitions()).thenReturn(projectJavaEnumDefinitions);
-        when(dmo.getProjectMethodInformation()).thenReturn(projectMethodInformation);
+        when(dmo.getModuleModelFields()).thenReturn(packageModelFields);
+        when(dmo.getModuleJavaEnumDefinitions()).thenReturn(moduleJavaEnumDefinitions);
+        when(dmo.getModuleMethodInformation()).thenReturn(moduleMethodInformation);
     }
 
     @After
     public void cleanUp() throws Exception {
         packageModelFields.clear();
-        projectJavaEnumDefinitions.clear();
-        projectMethodInformation.clear();
+        moduleJavaEnumDefinitions.clear();
+        moduleMethodInformation.clear();
     }
 
     protected void addModelField(final String factName,
@@ -81,8 +84,8 @@ public abstract class AbstractGuidedDecisionTreeDRLPersistenceUnmarshallingTest 
                                          final String fieldName,
                                          final String[] values) {
         final String key = factName + "#" + fieldName;
-        projectJavaEnumDefinitions.put(key,
-                                       values);
+        moduleJavaEnumDefinitions.put(key,
+                                      values);
     }
 
     protected GuidedDecisionTree getAndTestUnmarshalledModel(final String drl,
@@ -100,9 +103,6 @@ public abstract class AbstractGuidedDecisionTreeDRLPersistenceUnmarshallingTest 
 
     protected void assertEqualsIgnoreWhitespace(final String expected,
                                                 final String actual) {
-        final String cleanExpected = expected.replaceAll("\\s+", "");
-        final String cleanActual = actual.replaceAll("\\s+", "");
-
-        assertEquals(cleanExpected, cleanActual);
+        Assertions.assertThat(expected).isEqualToIgnoringWhitespace(actual);
     }
 }

@@ -74,22 +74,20 @@ public class DialectRuntimeRegistry
         }
     }
 
-    public void setDialectData(String name,
-                               DialectRuntimeData data) {
-        this.dialects.put( name,
-                           data );
+    public void setDialectData(String name, DialectRuntimeData data) {
+        this.dialects.put( name, data );
     }
 
     public DialectRuntimeData getDialectData(String dialect) {
         return this.dialects.get( dialect );
     }
 
-    public DialectRuntimeData removeRule(KnowledgePackageImpl pkg,
+    public void removeRule(KnowledgePackageImpl pkg,
                                          RuleImpl rule) {
         DialectRuntimeData dialect = this.dialects.get( rule.getDialect() );
-        dialect.removeRule( pkg,
-                            rule );
-        return dialect;
+        if (dialect != null) {
+            dialect.removeRule( pkg, rule );
+        }
     }
 
     public DialectRuntimeData removeFunction(KnowledgePackageImpl pkg,

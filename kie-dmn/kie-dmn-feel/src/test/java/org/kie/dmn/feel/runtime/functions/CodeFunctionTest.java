@@ -30,9 +30,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.kie.dmn.feel.runtime.Range;
+import org.kie.dmn.feel.runtime.functions.extended.CodeFunction;
 import org.kie.dmn.feel.runtime.impl.RangeImpl;
 
 public class CodeFunctionTest {
@@ -40,7 +42,7 @@ public class CodeFunctionTest {
     private CodeFunction codeFunction;
 
     @Before
-    public void setUp() throws Exception {
+    public void setUp() {
         codeFunction = new CodeFunction();
     }
 
@@ -68,31 +70,31 @@ public class CodeFunctionTest {
     @Test
     public void invokeLocalTime() {
         final LocalTime localTime = LocalTime.now();
-        FunctionTestUtil.assertResult(codeFunction.invoke(localTime), "time( \"" + localTime.toString() + "\" )");
+        FunctionTestUtil.assertResult(codeFunction.invoke(localTime), "time( \"" + TimeFunction.FEEL_TIME.format(localTime) + "\" )");
     }
 
     @Test
     public void invokeOffsetTime() {
         final OffsetTime offsetTime = OffsetTime.now();
-        FunctionTestUtil.assertResult(codeFunction.invoke(offsetTime), "time( \"" + offsetTime.toString() + "\" )");
+        FunctionTestUtil.assertResult(codeFunction.invoke(offsetTime), "time( \"" + TimeFunction.FEEL_TIME.format(offsetTime) + "\" )");
     }
 
     @Test
     public void invokeLocalDateTime() {
         final LocalDateTime localDateTime = LocalDateTime.now();
-        FunctionTestUtil.assertResult(codeFunction.invoke(localDateTime), "date and time( \"" + localDateTime.toString() + "\" )");
+        FunctionTestUtil.assertResult(codeFunction.invoke(localDateTime), "date and time( \"" + DateAndTimeFunction.FEEL_DATE_TIME.format(localDateTime) + "\" )");
     }
 
     @Test
     public void invokeOffsetDateTime() {
         final OffsetDateTime offsetDateTime = OffsetDateTime.now();
-        FunctionTestUtil.assertResult(codeFunction.invoke(offsetDateTime), "date and time( \"" + offsetDateTime.toString() + "\" )");
+        FunctionTestUtil.assertResult(codeFunction.invoke(offsetDateTime), "date and time( \"" + DateAndTimeFunction.FEEL_DATE_TIME.format(offsetDateTime) + "\" )");
     }
 
     @Test
     public void invokeZonedDateTime() {
         final ZonedDateTime zonedDateTime = ZonedDateTime.now();
-        FunctionTestUtil.assertResult(codeFunction.invoke(zonedDateTime), "date and time( \"" + zonedDateTime.toString() + "\" )");
+        FunctionTestUtil.assertResult(codeFunction.invoke(zonedDateTime), "date and time( \"" + DateAndTimeFunction.REGION_DATETIME_FORMATTER.format(zonedDateTime) + "\" )");
     }
 
     @Test

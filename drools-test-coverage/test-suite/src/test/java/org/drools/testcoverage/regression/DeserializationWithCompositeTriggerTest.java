@@ -16,35 +16,38 @@
 
 package org.drools.testcoverage.regression;
 
+import java.util.Collection;
+
 import org.assertj.core.api.Assertions;
-import org.drools.compiler.StockTick;
-import org.drools.compiler.integrationtests.SerializationHelper;
-import org.drools.testcoverage.common.util.KieBaseUtil;
+import org.drools.mvel.compiler.StockTick;
+import org.drools.mvel.integrationtests.SerializationHelper;
+import org.drools.testcoverage.common.util.KieBaseTestConfiguration;
 import org.drools.testcoverage.common.util.KieUtil;
-import org.drools.testcoverage.common.util.TestConstants;
+import org.drools.testcoverage.common.util.TestParametersUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.kie.api.KieBase;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.KieServices;
 import org.kie.api.builder.KieBuilder;
 import org.kie.api.conf.EventProcessingOption;
-import org.kie.api.io.Resource;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.KieSessionConfiguration;
 import org.kie.api.runtime.conf.TimerJobFactoryOption;
 
-import java.io.StringReader;
-
 /**
  * Verifies that serialization and de-serialization of a composite trigger succeeds (BZ 1142914).
  */
+@RunWith(Parameterized.class)
 public class DeserializationWithCompositeTriggerTest {
+
     private static final String DRL =
             "package org.drools.test;\n" +
-            "import org.drools.compiler.StockTick;\n" +
+            "import org.drools.mvel.compiler.StockTick;\n" +
             "global java.util.List list;\n" +
             "\n" +
             "declare StockTick\n" +
@@ -62,11 +65,20 @@ public class DeserializationWithCompositeTriggerTest {
 
     private KieSession ksession;
 
+    private final KieBaseTestConfiguration kieBaseTestConfiguration;
+
+    public DeserializationWithCompositeTriggerTest(final KieBaseTestConfiguration kieBaseTestConfiguration) {
+        this.kieBaseTestConfiguration = kieBaseTestConfiguration;
+    }
+
+    @Parameterized.Parameters(name = "KieBase type={0}")
+    public static Collection<Object[]> getParameters() {
+        return TestParametersUtil.getKieBaseConfigurations();
+    }
+
     @Before
     public void prepare() {
-        final Resource resource = KieServices.Factory.get().getResources().newReaderResource(new StringReader(DRL));
-        resource.setTargetPath(TestConstants.DRL_TEST_TARGET_PATH);
-        final KieBuilder kbuilder = KieUtil.getKieBuilderFromResources(true, resource);
+        final KieBuilder kbuilder = KieUtil.getKieBuilderFromDrls(kieBaseTestConfiguration, true, DRL);
         final KieContainer kcontainer = KieServices.Factory.get().newKieContainer(kbuilder.getKieModule().getReleaseId());
 
         final KieBaseConfiguration kieBaseConfiguration = KieServices.Factory.get().newKieBaseConfiguration();

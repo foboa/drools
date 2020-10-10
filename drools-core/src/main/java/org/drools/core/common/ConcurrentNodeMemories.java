@@ -54,23 +54,25 @@ public class ConcurrentNodeMemories implements NodeMemories {
     }
 
     public void resetAllMemories(StatefulKnowledgeSession session) {
-        InternalKnowledgeBase kBase = (InternalKnowledgeBase)session.getKieBase();
-        Set<SegmentMemory> smems = new HashSet<SegmentMemory>();
+        InternalKnowledgeBase kBase = (InternalKnowledgeBase) session.getKieBase();
+        Set<SegmentMemory> smemSet = new HashSet<>();
 
         for (int i = 0; i < memories.length(); i++) {
             Memory memory = memories.get(i);
             if (memory != null) {
-                if (memory.getSegmentMemory() != null) {
-                    smems.add(memory.getSegmentMemory());
-                }
                 memory.reset();
+                smemSet.add(memory.getSegmentMemory());
             }
         }
 
-        for (SegmentMemory smem : smems) {
+        smemSet.forEach(smem -> resetSegmentMemory(session, kBase, smem));
+    }
+
+    private void resetSegmentMemory(StatefulKnowledgeSession session, InternalKnowledgeBase kBase, SegmentMemory smem) {
+        if (smem != null) {
             smem.reset(kBase.getSegmentPrototype(smem));
-            if ( smem.isSegmentLinked() ) {
-                smem.notifyRuleLinkSegment((InternalWorkingMemory)session);
+            if (smem.isSegmentLinked()) {
+                smem.notifyRuleLinkSegment((InternalWorkingMemory) session);
             }
         }
     }

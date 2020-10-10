@@ -6,13 +6,17 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools-workbench-models</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>drools-workbench-models-guided-scorecard</artifactId>
 
   <name>Drools Workbench - Guided Score Cards Model</name>
   <description>Drools Workbench - Guided Score Cards Model</description>
+
+  <properties>
+    <java.module.name>org.drools.workbench.models.guided.scorecard</java.module.name>
+  </properties>
 
   <dependencies>
 
@@ -23,11 +27,12 @@
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-workbench-models-commons</artifactId>
+      <artifactId>drools-compiler</artifactId>
     </dependency>
     <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-compiler</artifactId>
+      <artifactId>drools-ruleunit</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.kie.soup</groupId>
@@ -38,16 +43,8 @@
       <artifactId>kie-soup-project-datamodel-api</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.kie.soup</groupId>
-      <artifactId>kie-soup-project-datamodel-commons</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.drools</groupId>
-      <artifactId>drools-workbench-models-datamodel-api</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.drools</groupId>
-      <artifactId>drools-pmml</artifactId>
+      <artifactId>kie-pmml</artifactId>
     </dependency>
     <dependency>
       <groupId>com.thoughtworks.xstream</groupId>
@@ -64,6 +61,10 @@
       <artifactId>drools-scorecards</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>org.kie</groupId>
+      <artifactId>kie-api</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

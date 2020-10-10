@@ -30,6 +30,7 @@ import org.kie.dmn.feel.util.Msg;
 
 public class BaseNode
         implements ASTNode {
+    protected final ASTNode[] EMPTY_CHILDREN = new ASTNode[0];
     private int startChar;
     private int endChar;
     private int startLine;
@@ -43,6 +44,7 @@ public class BaseNode
     }
 
     public BaseNode( ParserRuleContext ctx ) {
+        // DO NOT keep the reference to `ParserRuleContext` to avoid unneeded retention of lexer structures.
         this.setStartChar( ctx.getStart().getStartIndex() );
         this.setStartLine( ctx.getStart().getLine() );
         this.setStartColumn( ctx.getStart().getCharPositionInLine() );
@@ -50,6 +52,17 @@ public class BaseNode
         this.setEndLine( ctx.getStop().getLine() );
         this.setEndColumn( ctx.getStop().getCharPositionInLine() + ctx.getStop().getText().length() );
         this.setText( ParserHelper.getOriginalText( ctx ) );
+    }
+
+    public BaseNode copyLocationAttributesFrom(BaseNode from) {
+        this.setStartChar(from.getStartChar());
+        this.setStartLine(from.getStartLine());
+        this.setStartColumn(from.getStartColumn());
+        this.setEndChar(from.getEndChar());
+        this.setEndLine(from.getEndLine());
+        this.setEndColumn(from.getEndColumn());
+        this.setText(from.getText());
+        return this;
     }
 
     @Override
@@ -138,4 +151,13 @@ public class BaseNode
         return null;
     }
 
+    @Override
+    public ASTNode[] getChildrenNode() {
+        return EMPTY_CHILDREN;
+    }
+
+    @Override
+    public <T> T accept(Visitor<T> v) {
+        return v.visit(this);
+    }
 }

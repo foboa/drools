@@ -6,11 +6,15 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools-examples-cdi</artifactId>
-    <version>7.5.0-SNAPSHOT</version>
+    <version>7.45.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>cdi-example</artifactId>
   <name>Drools CDI Example</name>
+
+  <properties>
+    <java.module.name>org.drools.examples.cdi.basic</java.module.name>
+  </properties>
 
   <dependencies>
     <dependency>

@@ -22,13 +22,22 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
-import java.time.Period;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.chrono.ChronoPeriod;
+import java.time.temporal.TemporalAccessor;
+import java.time.temporal.TemporalQueries;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import org.kie.dmn.feel.lang.types.impl.ComparablePeriod;
 import org.kie.dmn.feel.runtime.Range;
+import org.kie.dmn.feel.runtime.functions.DateAndTimeFunction;
+import org.kie.dmn.feel.runtime.functions.DateFunction;
+import org.kie.dmn.feel.runtime.functions.TimeFunction;
 
 public final class TypeUtil {
 
@@ -62,13 +71,29 @@ public final class TypeUtil {
         } else if (val instanceof LocalDate) {
             return formatDate((LocalDate) val, wrapForCodeUsage);
         } else if (val instanceof LocalTime || val instanceof OffsetTime) {
-            return formatTimeString(val.toString(), wrapForCodeUsage);
-        } else if (val instanceof LocalDateTime || val instanceof OffsetDateTime || val instanceof ZonedDateTime) {
-            return formatDateTimeString(val.toString(), wrapForCodeUsage);
+            return formatTimeString(TimeFunction.FEEL_TIME.format((TemporalAccessor) val), wrapForCodeUsage);
+        } else if (val instanceof LocalDateTime || val instanceof OffsetDateTime) {
+            return formatDateTimeString(DateAndTimeFunction.FEEL_DATE_TIME.format((TemporalAccessor) val), wrapForCodeUsage);
+        } else if (val instanceof ZonedDateTime) {
+            TemporalAccessor ta = (TemporalAccessor) val;
+            ZoneId zone = ta.query(TemporalQueries.zone());
+            if (!(zone instanceof ZoneOffset)) {
+                // it is a ZoneRegion
+                return formatDateTimeString(DateAndTimeFunction.REGION_DATETIME_FORMATTER.format((TemporalAccessor) val), wrapForCodeUsage);
+            } else {
+                return formatDateTimeString(DateAndTimeFunction.FEEL_DATE_TIME.format((TemporalAccessor) val), wrapForCodeUsage);
+            }
         } else if (val instanceof Duration) {
             return formatDuration((Duration) val, wrapForCodeUsage);
-        } else if (val instanceof Period) {
-            return formatPeriod((Period) val, wrapForCodeUsage);
+        } else if (val instanceof ChronoPeriod) {
+            return formatPeriod((ChronoPeriod) val, wrapForCodeUsage);
+        } else if (val instanceof TemporalAccessor) {
+            TemporalAccessor ta = (TemporalAccessor) val;
+            if (ta.query(TemporalQueries.localDate()) == null && ta.query(TemporalQueries.localTime()) != null && ta.query(TemporalQueries.zoneId()) != null) {
+                return formatTimeString(TimeFunction.FEEL_TIME.format((TemporalAccessor) val), wrapForCodeUsage);
+            } else {
+                return String.valueOf(val);
+            }
         } else if (val instanceof List) {
             return formatList((List) val, wrapForCodeUsage);
         } else if (val instanceof Range) {
@@ -98,9 +123,9 @@ public final class TypeUtil {
 
     public static String formatDate(final LocalDate date, final boolean wrapForCodeUsage) {
         if (wrapForCodeUsage) {
-            return "date( \"" + date.toString() + "\" )";
+            return "date( \"" + DateFunction.FEEL_DATE.format(date) + "\" )";
         } else {
-            return date.toString();
+            return DateFunction.FEEL_DATE.format(date);
         }
     }
 
@@ -161,8 +186,8 @@ public final class TypeUtil {
         return sb.toString();
     }
 
-    public static String formatPeriod(final Period period, final boolean wrapInDurationFunction) {
-        final long totalMonths = period.toTotalMonths();
+    public static String formatPeriod(final ChronoPeriod period, final boolean wrapInDurationFunction) {
+        final long totalMonths = ComparablePeriod.toTotalMonths(period);
         if (totalMonths == 0) {
             if (wrapInDurationFunction) {
                 return "duration( \"P0M\" )";

@@ -37,12 +37,10 @@ import org.drools.core.reteoo.RuleTerminalNodeLeftTuple;
 import org.drools.core.reteoo.TerminalNode;
 import org.drools.core.spi.Activation;
 import org.drools.core.spi.AgendaGroup;
-import org.drools.core.spi.ConsequenceException;
 import org.drools.core.spi.InternalActivationGroup;
 import org.drools.core.spi.KnowledgeHelper;
 import org.drools.core.spi.PropagationContext;
 import org.drools.core.spi.RuleFlowGroup;
-import org.drools.core.spi.Tuple;
 import org.drools.core.util.CompositeIterator;
 import org.kie.api.runtime.rule.AgendaFilter;
 import org.kie.internal.concurrent.ExecutorProviderFactory;
@@ -424,12 +422,12 @@ public class CompositeDefaultAgenda implements Externalizable, InternalAgenda {
     }
 
     @Override
-    public int fireNextItem( AgendaFilter filter, int fireCount, int fireLimit ) throws ConsequenceException {
+    public int fireNextItem( AgendaFilter filter, int fireCount, int fireLimit ) {
         throw new UnsupportedOperationException( "org.drools.core.common.CompositeDefaultAgenda.fireNextItem -> TODO" );
     }
 
     @Override
-    public void cancelActivation( Tuple leftTuple, PropagationContext context, Activation activation, TerminalNode rtn ) {
+    public void cancelActivation( PropagationContext context, Activation activation ) {
         throw new UnsupportedOperationException( "org.drools.core.common.CompositeDefaultAgenda.cancelActivation -> TODO" );
     }
 

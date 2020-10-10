@@ -78,7 +78,7 @@ public abstract class ObjectSource extends BaseNode
     /**
      * Single parameter constructor that specifies the unique id of the node.
      */
-    ObjectSource(final int id,
+    protected ObjectSource(final int id,
                  final RuleBasePartitionId partitionId,
                  final boolean partitionsEnabled) {
         this( id,
@@ -110,12 +110,14 @@ public abstract class ObjectSource extends BaseNode
         super.readExternal( in );
         sink = (ObjectSinkPropagator) in.readObject();
         alphaNodeHashingThreshold = in.readInt();
+        source = ( ObjectSource ) in.readObject();
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
         super.writeExternal( out );
         out.writeObject( sink );
         out.writeInt( alphaNodeHashingThreshold );
+        out.writeObject( source );
     }
     
     public ObjectSource getParentObjectSource() {
@@ -153,11 +155,11 @@ public abstract class ObjectSource extends BaseNode
             declaredMask = AllSetBitMask.get();
         } else {
             List<String> settableProperties = getAccessibleProperties( context.getKnowledgeBase(), objectClass );
-            declaredMask = calculateDeclaredMask(settableProperties);
+            declaredMask = calculateDeclaredMask(objectClass, settableProperties);
         }
     }
     
-    public abstract BitMask calculateDeclaredMask(List<String> settableProperties);
+    public abstract BitMask calculateDeclaredMask(Class modifiedClass, List<String> settableProperties);
     
     public void resetInferredMask() {
         this.inferredMask = EmptyBitMask.get();
@@ -247,8 +249,7 @@ public abstract class ObjectSource extends BaseNode
     }
     
     protected boolean doRemove(final RuleRemovalContext context,
-                            final ReteooBuilder builder,
-                            final InternalWorkingMemory[] workingMemories) {
+                            final ReteooBuilder builder) {
         if ( !isInUse() && this instanceof ObjectSink ) {
             this.source.removeObjectSink((ObjectSink) this);
             return true;

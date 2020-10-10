@@ -269,17 +269,15 @@ public class WindowNode extends ObjectSource
 
     @Override
     public boolean equals(final Object object) {
-        return this == object ||
-               ( internalEquals( object ) && this.source.thisNodeEquals(((WindowNode) object).source) );
-    }
+        if (this == object) {
+            return true;
+        }
 
-    @Override
-    protected boolean internalEquals( Object object ) {
         if ( object == null || !(object instanceof WindowNode) || this.hashCode() != object.hashCode() ) {
             return false;
         }
         WindowNode other = (WindowNode) object;
-        return this.constraints.equals(other.constraints) && behavior.equals(other.behavior);
+        return this.source.getId() == other.source.getId() && this.constraints.equals(other.constraints) && behavior.equals(other.behavior);
     }
 
     /**
@@ -323,7 +321,7 @@ public class WindowNode extends ObjectSource
     }
 
     @Override
-    public BitMask calculateDeclaredMask(List<String> settableProperties) {
+    public BitMask calculateDeclaredMask(Class modifiedClass, List<String> settableProperties) {
         throw new UnsupportedOperationException();
     }
 

@@ -255,10 +255,16 @@ public class RuleModelVisitor {
     }
 
     private void visitSingleFieldConstraint(SingleFieldConstraint sfc) {
+        if (BaseSingleFieldConstraint.TYPE_PREDICATE == sfc.getConstraintValueType()){
+            parseStringPattern(sfc.getValue());
+            return;
+        }
+
         InterpolationVariable var = new InterpolationVariable(sfc.getValue(),
                                                               sfc.getFieldType(),
                                                               (factPattern == null ? "" : factPattern.getFactType()),
-                                                              sfc.getFieldName());
+                                                              sfc.getFieldName(),
+                                                              sfc.getOperator());
         if (BaseSingleFieldConstraint.TYPE_TEMPLATE == sfc.getConstraintValueType() && !vars.containsKey(var)) {
             vars.put(var,
                      vars.size());

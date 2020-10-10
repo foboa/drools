@@ -16,129 +16,133 @@
 
 package org.kie.dmn.core.impl;
 
-import static org.kie.dmn.api.core.DMNDecisionResult.DecisionEvaluationStatus.EVALUATING;
-import static org.kie.dmn.api.core.DMNDecisionResult.DecisionEvaluationStatus.FAILED;
-import static org.kie.dmn.api.core.DMNDecisionResult.DecisionEvaluationStatus.SKIPPED;
-
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
-import org.drools.core.definitions.InternalKnowledgePackage;
-import org.kie.api.internal.io.ResourceTypePackage;
-import org.kie.api.io.ResourceType;
-import org.kie.api.runtime.KieRuntime;
+import javax.xml.namespace.QName;
+
+import org.drools.core.impl.InternalKnowledgeBase;
+import org.kie.api.runtime.KieRuntimeFactory;
 import org.kie.dmn.api.core.DMNContext;
 import org.kie.dmn.api.core.DMNDecisionResult;
 import org.kie.dmn.api.core.DMNMessage;
 import org.kie.dmn.api.core.DMNModel;
-import org.kie.dmn.api.core.DMNPackage;
 import org.kie.dmn.api.core.DMNResult;
 import org.kie.dmn.api.core.DMNRuntime;
+import org.kie.dmn.api.core.DMNType;
 import org.kie.dmn.api.core.ast.BusinessKnowledgeModelNode;
 import org.kie.dmn.api.core.ast.DMNNode;
 import org.kie.dmn.api.core.ast.DecisionNode;
+import org.kie.dmn.api.core.ast.DecisionServiceNode;
 import org.kie.dmn.api.core.ast.InputDataNode;
+import org.kie.dmn.api.core.event.BeforeEvaluateDecisionEvent;
 import org.kie.dmn.api.core.event.DMNRuntimeEventListener;
 import org.kie.dmn.core.api.DMNFactory;
 import org.kie.dmn.core.api.EvaluatorResult;
 import org.kie.dmn.core.ast.BusinessKnowledgeModelNodeImpl;
 import org.kie.dmn.core.ast.DMNBaseNode;
+import org.kie.dmn.core.ast.DMNDecisionServiceEvaluator;
+import org.kie.dmn.core.ast.DMNFunctionWithReturnType;
 import org.kie.dmn.core.ast.DecisionNodeImpl;
+import org.kie.dmn.core.ast.DecisionServiceNodeImpl;
 import org.kie.dmn.core.ast.InputDataNodeImpl;
+import org.kie.dmn.core.compiler.DMNOption;
 import org.kie.dmn.core.compiler.DMNProfile;
+import org.kie.dmn.core.compiler.RuntimeTypeCheckOption;
 import org.kie.dmn.core.util.Msg;
 import org.kie.dmn.core.util.MsgUtil;
 import org.kie.dmn.feel.runtime.FEELFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.kie.dmn.api.core.DMNDecisionResult.DecisionEvaluationStatus.EVALUATING;
+import static org.kie.dmn.api.core.DMNDecisionResult.DecisionEvaluationStatus.FAILED;
+import static org.kie.dmn.api.core.DMNDecisionResult.DecisionEvaluationStatus.SKIPPED;
+
 public class DMNRuntimeImpl
         implements DMNRuntime {
     private static final Logger logger = LoggerFactory.getLogger( DMNRuntimeImpl.class );
 
-    private KieRuntime                         runtime;
     private DMNRuntimeEventManagerImpl         eventManager;
+    private final DMNRuntimeKB runtimeKB;
 
-    public DMNRuntimeImpl(KieRuntime runtime) {
-        this.runtime = runtime;
+    private boolean overrideRuntimeTypeCheck = false;
+
+    public DMNRuntimeImpl(DMNRuntimeKB runtimeKB) {
+        this.runtimeKB = runtimeKB != null ? runtimeKB : new VoidDMNRuntimeKB();
         this.eventManager = new DMNRuntimeEventManagerImpl();
+        for (DMNRuntimeEventListener listener : this.runtimeKB.getListeners()) {
+            this.addListener(listener);
+        }
     }
 
     @Override
     public List<DMNModel> getModels() {
-        List<DMNModel> models = new ArrayList<>(  );
-        runtime.getKieBase().getKiePackages().forEach( kpkg -> {
-            DMNPackage dmnPkg = (DMNPackage) ((InternalKnowledgePackage) kpkg).getResourceTypePackages().get( ResourceType.DMN );
-            if( dmnPkg != null ) {
-                dmnPkg.getAllModels().values().forEach( model -> models.add( model ) );
-            }
-        } );
-        return models;
+        return runtimeKB.getModels();
     }
 
     @Override
     public DMNModel getModel(String namespace, String modelName) {
-        InternalKnowledgePackage kpkg = (InternalKnowledgePackage) runtime.getKieBase().getKiePackage( namespace );
-        if( kpkg == null ) {
-            return null;
-        }
-        Map<ResourceType, ResourceTypePackage> map = kpkg.getResourceTypePackages();
-        DMNPackage dmnpkg = (DMNPackage) map.get( ResourceType.DMN );
-        return dmnpkg != null ? dmnpkg.getModel( modelName ) : null;
+        Objects.requireNonNull(namespace, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "namespace"));
+        Objects.requireNonNull(modelName, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "modelName"));
+        return runtimeKB.getModel(namespace, modelName);
+    }
+
+    @Override
+    public DMNModel getModelById(String namespace, String modelId) {
+        Objects.requireNonNull(namespace, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "namespace"));
+        Objects.requireNonNull(modelId, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "modelId"));
+        return runtimeKB.getModelById(namespace, modelId);
     }
 
     @Override
     public DMNResult evaluateAll(DMNModel model, DMNContext context) {
+        Objects.requireNonNull(model, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "model"));
+        Objects.requireNonNull(context, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "context"));
+        boolean performRuntimeTypeCheck = performRuntimeTypeCheck(model);
         DMNResultImpl result = createResult( model, context );
-        for( DecisionNode decision : model.getDecisions() ) {
-            evaluateDecision( context, result, decision );
+        DMNRuntimeEventManagerUtils.fireBeforeEvaluateAll( eventManager, model, result );
+        // the engine should evaluate all Decisions belonging to the "local" model namespace, not imported decision explicitly.
+        Set<DecisionNode> decisions = model.getDecisions().stream().filter(d -> d.getModelNamespace().equals(model.getNamespace())).collect(Collectors.toSet());
+        for( DecisionNode decision : decisions ) {
+            evaluateDecision(context, result, decision, performRuntimeTypeCheck);
         }
+        DMNRuntimeEventManagerUtils.fireAfterEvaluateAll( eventManager, model, result );
         return result;
     }
 
     @Override
+    @Deprecated
     public DMNResult evaluateDecisionByName(DMNModel model, String decisionName, DMNContext context) {
-        DMNResultImpl result = createResult( model, context );
-        DecisionNode decision = model.getDecisionByName( decisionName );
-        if( decision != null ) {
-            evaluateDecision( context, result, decision );
-        } else {
-            MsgUtil.reportMessage( logger,
-                                   DMNMessage.Severity.ERROR,
-                                   null,
-                                   result,
-                                   null,
-                                   null,
-                                   Msg.DECISION_NOT_FOUND_FOR_NAME,
-                                   decisionName );
-        }
-        return result;
+        Objects.requireNonNull(model, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "model"));
+        Objects.requireNonNull(decisionName, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "decisionName"));
+        Objects.requireNonNull(context, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "context"));
+        return evaluateByName(model, context, decisionName);
     }
 
     @Override
+    @Deprecated
     public DMNResult evaluateDecisionById(DMNModel model, String decisionId, DMNContext context) {
-        DMNResultImpl result = createResult( model, context );
-        DecisionNode decision = model.getDecisionById( decisionId );
-        if( decision != null ) {
-            evaluateDecision( context, result, decision );
-        } else {
-            MsgUtil.reportMessage( logger,
-                                   DMNMessage.Severity.ERROR,
-                                   null,
-                                   result,
-                                   null,
-                                   null,
-                                   Msg.DECISION_NOT_FOUND_FOR_ID,
-                                   decisionId );
-        }
-        return result;
+        Objects.requireNonNull(model, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "model"));
+        Objects.requireNonNull(decisionId, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "decisionId"));
+        Objects.requireNonNull(context, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "context"));
+        return evaluateById(model, context, decisionId);
     }
 
     @Override
     public DMNResult evaluateByName( DMNModel model, DMNContext context, String... decisionNames ) {
+        Objects.requireNonNull(model, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "model"));
+        Objects.requireNonNull(context, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "context"));
+        Objects.requireNonNull(decisionNames, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "decisionNames"));
+        if (decisionNames.length == 0) {
+            throw new IllegalArgumentException(MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_EMPTY, "decisionNames"));
+        }
         final DMNResultImpl result = createResult( model, context );
         for (String name : decisionNames) {
             evaluateByNameInternal( model, context, result, name );
@@ -146,10 +150,24 @@ public class DMNRuntimeImpl
         return result;
     }
 
+    /**
+     *
+     * @param kieBaseName
+     * @return
+     */
+    public KieRuntimeFactory getKieRuntimeFactory(String kieBaseName) {
+        return runtimeKB.getKieRuntimeFactory(kieBaseName);
+    }
+
     private void evaluateByNameInternal( DMNModel model, DMNContext context, DMNResultImpl result, String name ) {
-        DecisionNode decision = model.getDecisionByName( name );
-        if ( decision != null ) {
-            evaluateDecision( context, result, decision );
+        boolean performRuntimeTypeCheck = performRuntimeTypeCheck(model);
+        Optional<DecisionNode> decision = Optional.ofNullable(model.getDecisionByName(name));
+        if (decision.isPresent()) {
+            final boolean walkingIntoScope = walkIntoImportScopeInternalDecisionInvocation(result, model, decision.get());
+            evaluateDecision(context, result, decision.get(), performRuntimeTypeCheck);
+            if (walkingIntoScope) {
+                result.getContext().popScope();
+            }
         } else {
             MsgUtil.reportMessage( logger,
                                    DMNMessage.Severity.ERROR,
@@ -164,6 +182,12 @@ public class DMNRuntimeImpl
 
     @Override
     public DMNResult evaluateById( DMNModel model, DMNContext context, String... decisionIds ) {
+        Objects.requireNonNull(model, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "model"));
+        Objects.requireNonNull(context, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "context"));
+        Objects.requireNonNull(decisionIds, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "decisionIds"));
+        if (decisionIds.length == 0) {
+            throw new IllegalArgumentException(MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_EMPTY, "decisionIds"));
+        }
         final DMNResultImpl result = createResult( model, context );
         for ( String id : decisionIds ) {
             evaluateByIdInternal( model, context, result, id );
@@ -172,9 +196,14 @@ public class DMNRuntimeImpl
     }
 
     private void evaluateByIdInternal( DMNModel model, DMNContext context, DMNResultImpl result, String id ) {
-        DecisionNode decision = model.getDecisionById( id );
-        if ( decision != null ) {
-            evaluateDecision( context, result, decision );
+        boolean performRuntimeTypeCheck = performRuntimeTypeCheck(model);
+        Optional<DecisionNode> decision = Optional.ofNullable(model.getDecisionById(id));
+        if (decision.isPresent()) {
+            final boolean walkingIntoScope = walkIntoImportScopeInternalDecisionInvocation(result, model, decision.get());
+            evaluateDecision(context, result, decision.get(), performRuntimeTypeCheck);
+            if (walkingIntoScope) {
+                result.getContext().popScope();
+            }
         } else {
             MsgUtil.reportMessage( logger,
                                    DMNMessage.Severity.ERROR,
@@ -198,29 +227,136 @@ public class DMNRuntimeImpl
     }
 
     @Override
+    public boolean hasListeners() {
+        return this.eventManager.hasListeners();
+    }
+
+    @Override
     public Set<DMNRuntimeEventListener> getListeners() {
         return this.eventManager.getListeners();
     }
 
     private DMNResultImpl createResult(DMNModel model, DMNContext context) {
-        DMNResultImpl result = new DMNResultImpl();
-        result.setContext( context.clone() );
+        DMNResultImpl result = createResultImpl(model, context);
 
-        for( DecisionNode decision : model.getDecisions() ) {
-            result.setDecisionResult( decision.getId(), new DMNDecisionResultImpl( decision.getId(), decision.getName() ) );
+        for (DecisionNode decision : model.getDecisions().stream().filter(d -> d.getModelNamespace().equals(model.getNamespace())).collect(Collectors.toSet())) {
+            result.addDecisionResult(new DMNDecisionResultImpl(decision.getId(), decision.getName()));
         }
         return result;
     }
 
-    private void evaluateAllBKM(DMNModel model, DMNContext context, DMNResultImpl result) {
-        for( BusinessKnowledgeModelNode bkm : model.getBusinessKnowledgeModels() ) {
-            evaluateBKM( context, result, bkm );
+    private DMNResultImpl createResultImpl(DMNModel model, DMNContext context) {
+        DMNResultImpl result = new DMNResultImpl(model);
+        result.setContext(context.clone()); // DMNContextFPAImpl.clone() creates DMNContextImpl
+        return result;
+    }
+
+    @Override
+    public DMNResult evaluateDecisionService(DMNModel model, DMNContext context, String decisionServiceName) {
+        Objects.requireNonNull(model, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "model"));
+        Objects.requireNonNull(context, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "context"));
+        Objects.requireNonNull(decisionServiceName, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "decisionServiceName"));
+        boolean typeCheck = performRuntimeTypeCheck(model);
+        DMNResultImpl result = createResultImpl(model, context);
+
+        // the engine should evaluate all belonging to the "local" model namespace, not imported nodes explicitly.
+        Optional<DecisionServiceNode> lookupDS = ((DMNModelImpl) model).getDecisionServices().stream()
+                                                                    .filter(d -> d.getModelNamespace().equals(model.getNamespace()))
+                                                                    .filter(ds -> ds.getName().equals(decisionServiceName))
+                                                                    .findFirst();
+        if (lookupDS.isPresent()) {
+            DecisionServiceNodeImpl decisionService = (DecisionServiceNodeImpl) lookupDS.get();
+            for (DMNNode dep : decisionService.getInputParameters().values()) {
+                if (!isNodeValueDefined(result, decisionService, dep)) {
+                    DMNMessage message = MsgUtil.reportMessage(logger,
+                                                               DMNMessage.Severity.WARN,
+                                                               decisionService.getSource(),
+                                                               result,
+                                                               null,
+                                                               null,
+                                                               Msg.REQ_INPUT_NOT_FOUND_FOR_DS,
+                                                               getDependencyIdentifier(decisionService, dep),
+                                                               getIdentifier(decisionService));
+                    final boolean walkingIntoScope = walkIntoImportScope(result, decisionService, dep);
+                    result.getContext().set(dep.getName(), null);
+                    if (walkingIntoScope) {
+                        result.getContext().popScope();
+                    }
+                } else {
+                    final boolean walkingIntoScope = walkIntoImportScope(result, decisionService, dep);
+                    final Object originalValue = result.getContext().get(dep.getName());
+                    DMNType depType = ((DMNModelImpl) model).getTypeRegistry().unknown();
+                    if (dep instanceof InputDataNode) {
+                        depType = ((InputDataNode) dep).getType();
+                    } else if (dep instanceof DecisionNode) {
+                        depType = ((DecisionNode) dep).getResultType();
+                    }
+                    Object c = coerceUsingType(originalValue,
+                                               depType,
+                                               typeCheck,
+                                               (r, t) -> MsgUtil.reportMessage(logger,
+                                                                               DMNMessage.Severity.WARN,
+                                                                               decisionService.getDecisionService(),
+                                                                               result,
+                                                                               null,
+                                                                               null,
+                                                                               Msg.PARAMETER_TYPE_MISMATCH_DS,
+                                                                               dep.getName(),
+                                                                               t,
+                                                                               MsgUtil.clipString(r.toString(), 50)));
+                    if (c != originalValue) { //intentional by-reference
+                        result.getContext().set(dep.getName(), c);
+                    }
+                    if (walkingIntoScope) {
+                        result.getContext().popScope();
+                    }
+                }
+            }
+            EvaluatorResult evaluate = new DMNDecisionServiceEvaluator(decisionService, true, false).evaluate(this, result); // please note singleton output coercion does not influence anyway when invoked DS on a model.
+        } else {
+            MsgUtil.reportMessage(logger,
+                                  DMNMessage.Severity.ERROR,
+                                  null,
+                                  result,
+                                  null,
+                                  null,
+                                  Msg.DECISION_SERVICE_NOT_FOUND_FOR_NAME,
+                                  decisionServiceName);
+        }
+        return result;
+    }
+
+    private void evaluateDecisionService(DMNContext context, DMNResultImpl result, DecisionServiceNode d, boolean typeCheck) {
+        DecisionServiceNodeImpl ds = (DecisionServiceNodeImpl) d;
+        if (isNodeValueDefined(result, ds, ds)) {
+            // already resolved
+            return;
+        }
+        // Note: a Decision Service is expected to always have an evaluator, it does not depend on an xml expression, it is done always by the compiler.
+        try {
+            // a Decision Service when is evaluated as a function does not require any dependency check, as they will be passed as params.
+
+            EvaluatorResult er = ds.getEvaluator().evaluate(this, result);
+            if (er.getResultType() == EvaluatorResult.ResultType.SUCCESS) {
+                FEELFunction resultFn = (FEELFunction) er.getResult();
+                result.getContext().set(ds.getName(), resultFn);
+            }
+        } catch (Throwable t) {
+            MsgUtil.reportMessage(logger,
+                                  DMNMessage.Severity.ERROR,
+                                  ds.getSource(),
+                                  result,
+                                  t,
+                                  null,
+                                  Msg.ERROR_EVAL_DS_NODE,
+                                  getIdentifier(ds),
+                                  t.getMessage());
         }
     }
 
-    private void evaluateBKM(DMNContext context, DMNResultImpl result, BusinessKnowledgeModelNode b) {
+    private void evaluateBKM(DMNContext context, DMNResultImpl result, BusinessKnowledgeModelNode b, boolean typeCheck) {
         BusinessKnowledgeModelNodeImpl bkm = (BusinessKnowledgeModelNodeImpl) b;
-        if( result.getContext().isDefined( bkm.getName() ) ) {
+        if (isNodeValueDefined(result, bkm, bkm)) {
             // already resolved
             // TODO: do we need to check if the defined variable is a function as it should?
             return;
@@ -240,7 +376,7 @@ public class DMNRuntimeImpl
         try {
             DMNRuntimeEventManagerUtils.fireBeforeEvaluateBKM( eventManager, bkm, result );
             for( DMNNode dep : bkm.getDependencies().values() ) {
-                if ( !checkDependencyValueIsValid(dep, result ) ) {
+                if (typeCheck && !checkDependencyValueIsValid(dep, result)) {
                     MsgUtil.reportMessage( logger,
                                            DMNMessage.Severity.ERROR,
                                            ((DMNBaseNode) dep).getSource(),
@@ -249,15 +385,18 @@ public class DMNRuntimeImpl
                                            null,
                                            Msg.ERROR_EVAL_NODE_DEP_WRONG_TYPE,
                                            getIdentifier( bkm ),
-                                           getIdentifier( dep ),
-                                           result.getContext().get(dep.getName()),
+                                           getDependencyIdentifier(bkm, dep),
+                                           MsgUtil.clipString(Objects.toString(result.getContext().get(dep.getName())), 50),
                                            ((DMNBaseNode) dep).getType()
                                            );
                     return;
                 }
-                if( ! result.getContext().isDefined( dep.getName() ) ) {
+                if (!isNodeValueDefined(result, bkm, dep)) {
+                    boolean walkingIntoScope = walkIntoImportScope(result, bkm, dep);
                     if( dep instanceof BusinessKnowledgeModelNode ) {
-                        evaluateBKM( context, result, (BusinessKnowledgeModelNode) dep );
+                        evaluateBKM(context, result, (BusinessKnowledgeModelNode) dep, typeCheck);
+                    } else if (dep instanceof DecisionServiceNode) {
+                        evaluateDecisionService(context, result, (DecisionServiceNode) dep, typeCheck);
                     } else {
                         MsgUtil.reportMessage( logger,
                                                DMNMessage.Severity.ERROR,
@@ -266,19 +405,26 @@ public class DMNRuntimeImpl
                                                null,
                                                null,
                                                Msg.REQ_DEP_NOT_FOUND_FOR_NODE,
-                                               getIdentifier( dep ),
+                                               getDependencyIdentifier(bkm, dep),
                                                getIdentifier( bkm )
                         );
                         return;
+                    }
+                    if (walkingIntoScope) {
+                        result.getContext().popScope();
                     }
                 }
             }
 
             EvaluatorResult er = bkm.getEvaluator().evaluate( this, result );
             if( er.getResultType() == EvaluatorResult.ResultType.SUCCESS ) {
-                FEELFunction resultFn = (FEELFunction) er.getResult();
-                // TODO check of the return type will need calculation/inference of function return type.
-                result.getContext().set( bkm.getBusinessKnowledModel().getVariable().getName(), resultFn );
+                final FEELFunction original_fn = (FEELFunction) er.getResult();
+                FEELFunction resultFn = original_fn;
+                if (typeCheck) {
+                    DMNType resultType = b.getResultType();
+                    resultFn = new DMNFunctionWithReturnType(original_fn, resultType, result, b);
+                }
+                result.getContext().set(bkm.getBusinessKnowledModel().getVariable().getName(), resultFn);
             }
         } catch( Throwable t ) {
             MsgUtil.reportMessage( logger,
@@ -295,26 +441,146 @@ public class DMNRuntimeImpl
         }
     }
 
-    private boolean evaluateDecision(DMNContext context, DMNResultImpl result, DecisionNode d) {
+    public static Object coerceUsingType(Object value, DMNType type, boolean typeCheck, BiConsumer<Object, DMNType> nullCallback) {
+        Object result = value;
+        if (!type.isCollection() && value instanceof Collection && ((Collection<?>) value).size() == 1) {
+            // as per Decision evaluation result.
+            result = ((Collection<?>) value).toArray()[0];
+        }
+        if (!typeCheck) {
+            return result;
+        }
+        if (type.isAssignableValue(result)) {
+            return result;
+        } else {
+            nullCallback.accept(value, type);
+            return null;
+        }
+    }
+
+    private boolean isNodeValueDefined(DMNResultImpl result, DMNNode callerNode, DMNNode node) {
+        if (node.getModelNamespace().equals(result.getContext().scopeNamespace().orElse(result.getModel().getNamespace()))) {
+            return result.getContext().isDefined(node.getName());
+        } else {
+            Optional<String> importAlias = callerNode.getModelImportAliasFor(node.getModelNamespace(), node.getModelName());
+            if (importAlias.isPresent()) {
+                Object aliasContext = result.getContext().get(importAlias.get());
+                if (aliasContext != null && (aliasContext instanceof Map<?, ?>)) {
+                    Map<?, ?> map = (Map<?, ?>) aliasContext;
+                    return map.containsKey(node.getName());
+                }
+            }
+            return false;
+        }
+    }
+
+    private boolean walkIntoImportScopeInternalDecisionInvocation(DMNResultImpl result, DMNModel dmnModel, DMNNode destinationNode) {
+        if (destinationNode.getModelNamespace().equals(dmnModel.getNamespace())) {
+            return false;
+        } else {
+            DMNModelImpl model = (DMNModelImpl) dmnModel;
+            Optional<String> importAlias = model.getImportAliasFor(destinationNode.getModelNamespace(), destinationNode.getModelName());
+            if (importAlias.isPresent()) {
+                result.getContext().pushScope(importAlias.get(), destinationNode.getModelNamespace());
+                return true;
+            } else {
+                MsgUtil.reportMessage(logger,
+                                      DMNMessage.Severity.ERROR,
+                                      dmnModel.getDefinitions(),
+                                      result,
+                                      null,
+                                      null,
+                                      Msg.IMPORT_NOT_FOUND_FOR_NODE_MISSING_ALIAS,
+                                      new QName(destinationNode.getModelNamespace(), destinationNode.getModelName()),
+                                      dmnModel.getName());
+                return false;
+            }
+        }
+    }
+
+    private boolean walkIntoImportScope(DMNResultImpl result, DMNNode callerNode, DMNNode destinationNode) {
+        if (!result.getContext().scopeNamespace().isPresent()) {
+            if (destinationNode.getModelNamespace().equals(result.getModel().getNamespace())) {
+                return false;
+            } else {
+                Optional<String> importAlias = callerNode.getModelImportAliasFor(destinationNode.getModelNamespace(), destinationNode.getModelName());
+                if (importAlias.isPresent()) {
+                    result.getContext().pushScope(importAlias.get(), destinationNode.getModelNamespace());
+                    return true;
+                } else {
+                    MsgUtil.reportMessage(logger,
+                                          DMNMessage.Severity.ERROR,
+                                          ((DMNBaseNode) callerNode).getSource(),
+                                          result,
+                                          null,
+                                          null,
+                                          Msg.IMPORT_NOT_FOUND_FOR_NODE_MISSING_ALIAS,
+                                          new QName(destinationNode.getModelNamespace(), destinationNode.getModelName()),
+                                          callerNode.getName()
+                                          );
+                    return false;
+                }
+            }
+        } else {
+            if (destinationNode.getModelNamespace().equals(result.getContext().scopeNamespace().get())) {
+                return false;
+            } else {
+                Optional<String> importAlias = callerNode.getModelImportAliasFor(destinationNode.getModelNamespace(), destinationNode.getModelName());
+                if (importAlias.isPresent()) {
+                    result.getContext().pushScope(importAlias.get(), destinationNode.getModelNamespace());
+                    return true;
+                } else {
+                    MsgUtil.reportMessage(logger,
+                                          DMNMessage.Severity.ERROR,
+                                          ((DMNBaseNode) callerNode).getSource(),
+                                          result,
+                                          null,
+                                          null,
+                                          Msg.IMPORT_NOT_FOUND_FOR_NODE_MISSING_ALIAS,
+                                          new QName(destinationNode.getModelNamespace(), destinationNode.getModelName()),
+                                          callerNode.getName());
+                    return false;
+                }
+            }
+        }
+
+    }
+
+    private boolean evaluateDecision(DMNContext context, DMNResultImpl result, DecisionNode d, boolean typeCheck) {
         DecisionNodeImpl decision = (DecisionNodeImpl) d;
-        if( result.getContext().isDefined( decision.getName() ) ) {
+        String decisionId = d.getModelNamespace().equals(result.getModel().getNamespace()) ? decision.getId() : decision.getModelNamespace() + "#" + decision.getId();
+        if (isNodeValueDefined(result, decision, decision)) {
             // already resolved
             return true;
         } else {
             // check if the decision was already evaluated before and returned error
-            DMNDecisionResult.DecisionEvaluationStatus status = result.getDecisionResultById( decision.getId() ).getEvaluationStatus();
+            DMNDecisionResult.DecisionEvaluationStatus status = Optional.ofNullable(result.getDecisionResultById(decisionId))
+                                                                        .map(DMNDecisionResult::getEvaluationStatus)
+                                                                        .orElse(DMNDecisionResult.DecisionEvaluationStatus.NOT_EVALUATED); // it might be an imported Decision.
             if ( FAILED == status || SKIPPED == status || EVALUATING == status ) {
                 return false;
             }
         }
+        BeforeEvaluateDecisionEvent beforeEvaluateDecisionEvent = null;
         try {
-            DMNRuntimeEventManagerUtils.fireBeforeEvaluateDecision( eventManager, decision, result );
+            beforeEvaluateDecisionEvent = DMNRuntimeEventManagerUtils.fireBeforeEvaluateDecision(eventManager, decision, result);
             boolean missingInput = false;
-            DMNDecisionResultImpl dr = (DMNDecisionResultImpl) result.getDecisionResultById( decision.getId() );
+            DMNDecisionResultImpl dr = (DMNDecisionResultImpl) result.getDecisionResultById(decisionId);
+            if (dr == null) { // an imported Decision now evaluated, requires the creation of the decision result:
+                String decisionResultName = d.getName();
+                Optional<String> importAliasFor = ((DMNModelImpl) result.getModel()).getImportAliasFor(d.getModelNamespace(), d.getModelName());
+                if (importAliasFor.isPresent()) {
+                    decisionResultName = importAliasFor.get() + "." + d.getName();
+                }
+                dr = new DMNDecisionResultImpl(decisionId, decisionResultName);
+                if (importAliasFor.isPresent()) { // otherwise is a transitive, skipped and not to be added to the results:
+                    result.addDecisionResult(dr);
+                }
+            }
             dr.setEvaluationStatus(DMNDecisionResult.DecisionEvaluationStatus.EVALUATING);
             for( DMNNode dep : decision.getDependencies().values() ) {
                 try {
-                    if ( !checkDependencyValueIsValid(dep, result ) ) {
+                    if (typeCheck && !checkDependencyValueIsValid(dep, result)) {
                         missingInput = true;
                         DMNMessage message = MsgUtil.reportMessage( logger,
                                 DMNMessage.Severity.ERROR,
@@ -324,9 +590,9 @@ public class DMNRuntimeImpl
                                 null,
                                 Msg.ERROR_EVAL_NODE_DEP_WRONG_TYPE,
                                 getIdentifier( decision ),
-                                getIdentifier( dep ),
-                                result.getContext().get( dep.getName() ),
-                                                                   ((DMNBaseNode) dep).getType()
+                                getDependencyIdentifier(decision, dep),
+                                MsgUtil.clipString(Objects.toString(result.getContext().get(dep.getName())), 50),
+                                ((DMNBaseNode) dep).getType()
                                 );
                         reportFailure( dr, message, DMNDecisionResult.DecisionEvaluationStatus.SKIPPED );
                     }
@@ -338,12 +604,13 @@ public class DMNRuntimeImpl
                                            e,
                                            null,
                                            Msg.ERROR_CHECKING_ALLOWED_VALUES,
-                                           getIdentifier( dep ),
+                                           getDependencyIdentifier(decision, dep),
                                            e.getMessage() );
                 }
-                if( ! result.getContext().isDefined( dep.getName() ) ) {
+                if (!isNodeValueDefined(result, decision, dep)) {
+                    boolean walkingIntoScope = walkIntoImportScope(result, decision, dep);
                     if( dep instanceof DecisionNode ) {
-                        if( ! evaluateDecision( context, result, (DecisionNode) dep ) ) {
+                        if (!evaluateDecision(context, result, (DecisionNode) dep, typeCheck)) {
                             missingInput = true;
                             DMNMessage message = MsgUtil.reportMessage( logger,
                                                                         DMNMessage.Severity.ERROR,
@@ -353,11 +620,13 @@ public class DMNRuntimeImpl
                                                                         null,
                                                                         Msg.UNABLE_TO_EVALUATE_DECISION_REQ_DEP,
                                                                         getIdentifier( decision ),
-                                                                        getIdentifier( dep ) );
+                                                                        getDependencyIdentifier(decision, dep) );
                             reportFailure( dr, message, DMNDecisionResult.DecisionEvaluationStatus.SKIPPED );
                         }
                     } else if( dep instanceof BusinessKnowledgeModelNode ) {
-                        evaluateBKM( context, result, (BusinessKnowledgeModelNode) dep );
+                        evaluateBKM(context, result, (BusinessKnowledgeModelNode) dep, typeCheck);
+                    } else if (dep instanceof DecisionServiceNode) {
+                        evaluateDecisionService(context, result, (DecisionServiceNode) dep, typeCheck);
                     } else {
                         missingInput = true;
                         DMNMessage message = MsgUtil.reportMessage( logger,
@@ -367,10 +636,13 @@ public class DMNRuntimeImpl
                                                                     null,
                                                                     null,
                                                                     Msg.REQ_DEP_NOT_FOUND_FOR_NODE,
-                                                                    getIdentifier( dep ),
+                                                                    getDependencyIdentifier(decision, dep),
                                                                     getIdentifier( decision )
                                                                     );
                         reportFailure( dr, message, DMNDecisionResult.DecisionEvaluationStatus.SKIPPED );
+                    }
+                    if (walkingIntoScope) {
+                        result.getContext().popScope();
                     }
                 }
             }
@@ -402,7 +674,7 @@ public class DMNRuntimeImpl
                     }
 
                     try {
-                        if ( !d.getResultType().isAssignableValue(value) ) {
+                        if (typeCheck && !d.getResultType().isAssignableValue(value)) {
                             DMNMessage message = MsgUtil.reportMessage( logger,
                                     DMNMessage.Severity.ERROR,
                                     decision.getSource(),
@@ -429,7 +701,7 @@ public class DMNRuntimeImpl
                         return false;
                     }
 
-                    result.getContext().set( decision.getDecision().getVariable().getName(), value );
+                    result.getContext().set(decision.getDecision().getVariable().getName(), value);
                     dr.setResult( value );
                     dr.setEvaluationStatus( DMNDecisionResult.DecisionEvaluationStatus.SUCCEEDED );
                 } else {
@@ -451,7 +723,7 @@ public class DMNRuntimeImpl
             }
             return true;
         } finally {
-            DMNRuntimeEventManagerUtils.fireAfterEvaluateDecision( eventManager, decision, result );
+            DMNRuntimeEventManagerUtils.fireAfterEvaluateDecision( eventManager, decision, result, beforeEvaluateDecisionEvent);
         }
     }
 
@@ -465,8 +737,33 @@ public class DMNRuntimeImpl
         return true;
     }
 
-    private String getIdentifier(DMNNode node) {
+    private static String getIdentifier(DMNNode node) {
         return node.getName() != null ? node.getName() : node.getId();
+    }
+
+    private static String getDependencyIdentifier(DMNNode callerNode, DMNNode node) {
+        if (node.getModelNamespace().equals(callerNode.getModelNamespace())) {
+            return getIdentifier(node);
+        } else {
+            Optional<String> importAlias = callerNode.getModelImportAliasFor(node.getModelNamespace(), node.getModelName());
+            String prefix = "{" + node.getModelNamespace() + "}";
+            if (importAlias.isPresent()) {
+                prefix = importAlias.get();
+            }
+            return prefix + "." + getIdentifier(node);
+        }
+
+    }
+
+    public boolean performRuntimeTypeCheck(DMNModel model) {
+        Objects.requireNonNull(model, () -> MsgUtil.createMessage(Msg.PARAM_CANNOT_BE_NULL, "model"));
+        return overrideRuntimeTypeCheck || ((DMNModelImpl) model).isRuntimeTypeCheck();
+    }
+
+    public final <T extends DMNOption> void setOption(T option) {
+        if (option instanceof RuntimeTypeCheckOption) {
+            this.overrideRuntimeTypeCheck = ((RuntimeTypeCheckOption) option).isRuntimeTypeCheck();
+        }
     }
 
     private void reportFailure(DMNDecisionResultImpl dr, DMNMessage message, DMNDecisionResult.DecisionEvaluationStatus status) {
@@ -485,18 +782,15 @@ public class DMNRuntimeImpl
     }
 
     public List<DMNProfile> getProfiles() {
-        // need list to preserve ordering
-        List<DMNProfile> profiles = new ArrayList<>();
-        runtime.getKieBase().getKiePackages().forEach(kpkg -> {
-            DMNPackageImpl dmnPkg = (DMNPackageImpl) ((InternalKnowledgePackage) kpkg).getResourceTypePackages().get(ResourceType.DMN);
-            if (dmnPkg != null) {
-                for (DMNProfile p : dmnPkg.getProfiles()) {
-                    if (!profiles.contains(p)) {
-                        profiles.add(p);
-                    }
-                }
-            }
-        });
-        return profiles;
+        return runtimeKB.getProfiles();
+    }
+
+    @Override
+    public ClassLoader getRootClassLoader() {
+        return runtimeKB.getRootClassLoader();
+    }
+
+    public InternalKnowledgeBase getInternalKnowledgeBase() {
+        return runtimeKB.getInternalKnowledgeBase();
     }
 }

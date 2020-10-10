@@ -30,17 +30,15 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.drools.core.SessionConfiguration;
 import org.drools.core.base.MapGlobalResolver;
 import org.drools.core.command.impl.ContextImpl;
-import org.drools.core.command.impl.ExecutableCommand;
-import org.drools.core.command.impl.RegistryContext;
 import org.drools.core.command.runtime.BatchExecutionCommandImpl;
 import org.drools.core.command.runtime.rule.FireAllRulesCommand;
 import org.drools.core.common.InternalFactHandle;
-import org.drools.core.common.WorkingMemoryFactory;
 import org.drools.core.management.DroolsManagementAgent;
 import org.drools.core.runtime.impl.ExecutionResultImpl;
 import org.kie.api.KieBase;
 import org.kie.api.command.BatchExecutionCommand;
 import org.kie.api.command.Command;
+import org.kie.api.command.ExecutableCommand;
 import org.kie.api.event.process.ProcessEventListener;
 import org.kie.api.event.rule.AgendaEventListener;
 import org.kie.api.event.rule.RuleRuntimeEventListener;
@@ -52,6 +50,7 @@ import org.kie.api.runtime.KieSessionConfiguration;
 import org.kie.api.runtime.ObjectFilter;
 import org.kie.api.runtime.StatelessKieSession;
 import org.kie.api.runtime.rule.FactHandle;
+import org.kie.internal.command.RegistryContext;
 import org.kie.internal.runtime.StatefulKnowledgeSession;
 import org.kie.internal.runtime.StatelessKnowledgeSession;
 
@@ -60,61 +59,75 @@ public class StatelessKnowledgeSessionImpl extends AbstractRuntime
         StatelessKnowledgeSession,
         StatelessKieSession {
 
-    private InternalKnowledgeBase kBase;
+    private KnowledgeBaseImpl    kBase;
     private MapGlobalResolver    sessionGlobals = new MapGlobalResolver();
     private Map<String, Channel> channels       = new HashMap<String, Channel>();
 
     private final List<ListnerHolder> listeners = new CopyOnWriteArrayList<ListnerHolder>();
 
-    private KieSessionConfiguration conf;
+    private SessionConfiguration    conf;
     private Environment             environment;
 
-    private WorkingMemoryFactory wmFactory;
-    
     private AtomicBoolean mbeanRegistered = new AtomicBoolean(false);
     private DroolsManagementAgent.CBSKey mbeanRegisteredCBSKey;
-    private AtomicLong wmCreated = new AtomicLong(0);
+    private final AtomicLong wmCreated;
+
+    private final StatefulSessionPool pool;
 
     public StatelessKnowledgeSessionImpl() {
+        pool = null;
+        wmCreated = new AtomicLong(0);
     }
 
-    public StatelessKnowledgeSessionImpl(final InternalKnowledgeBase kBase,
-                                         final KieSessionConfiguration conf) {
-        this.kBase = kBase;
-        this.conf = (conf != null) ? conf : kBase.getSessionConfiguration();
+    public StatelessKnowledgeSessionImpl(InternalKnowledgeBase kBase,
+                                         KieSessionConfiguration conf) {
+        this.kBase = (KnowledgeBaseImpl)kBase;
+        this.conf = conf != null ? (SessionConfiguration) conf : kBase.getSessionConfiguration();
         this.environment = EnvironmentFactory.newEnvironment();
-        this.wmFactory = kBase.getConfiguration().getComponentFactory().getWorkingMemoryFactory();
+        this.pool = null;
+        wmCreated = new AtomicLong(0);
+    }
+
+    public StatelessKnowledgeSessionImpl(KieSessionConfiguration conf,
+                                         StatefulSessionPool pool) {
+        this.kBase = pool.getKieBase();
+        this.conf = conf != null ? (SessionConfiguration) conf : kBase.getSessionConfiguration();
+        this.environment = null;
+        this.pool = pool;
+        wmCreated = new AtomicLong(1);
     }
 
     public InternalKnowledgeBase getKnowledgeBase() {
         return this.kBase;
     }
 
+    private StatefulKnowledgeSession newWorkingMemory() {
+        StatefulKnowledgeSessionImpl ksession = pool != null ? pool.get() : createWorkingMemory();
 
-    public StatefulKnowledgeSession newWorkingMemory() {
+        ((Globals ) ksession.getGlobalResolver()).setDelegate(this.sessionGlobals);
+
+        registerListeners( ksession );
+
+        for( Map.Entry<String, Channel> entry : this.channels.entrySet() ) {
+            ksession.registerChannel( entry.getKey(), entry.getValue() );
+        }
+
+        return ksession;
+    }
+
+    private StatefulKnowledgeSessionImpl createWorkingMemory() {
         this.kBase.readLock();
         try {
-            StatefulKnowledgeSession ksession = (StatefulKnowledgeSession) wmFactory.createWorkingMemory(this.kBase.nextWorkingMemoryCounter(),
-                                                                                                         this.kBase,
-                                                                                                         (SessionConfiguration) this.conf,
-                                                                                                         this.environment);
-            StatefulKnowledgeSessionImpl ksessionImpl = (StatefulKnowledgeSessionImpl) ksession;
-
-            ((Globals) ksessionImpl.getGlobalResolver()).setDelegate(this.sessionGlobals);
-
-            registerListeners( ksessionImpl );
-
-            for( Map.Entry<String, Channel> entry : this.channels.entrySet() ) {
-                ksession.registerChannel( entry.getKey(), entry.getValue() );
-            }
-            
+            StatefulKnowledgeSessionImpl ksession = kBase
+                    .internalCreateStatefulKnowledgeSession( this.environment, this.conf, false )
+                    .setStateless( true );
             wmCreated.incrementAndGet();
             return ksession;
         } finally {
             this.kBase.readUnlock();
         }
     }
-    
+
     public void initMBeans(String containerId, String kbaseId, String ksessionName) {
         if (kBase.getConfiguration() != null && kBase.getConfiguration().isMBeansEnabled() && mbeanRegistered.compareAndSet(false, true)) {
             this.mbeanRegisteredCBSKey = new DroolsManagementAgent.CBSKey(containerId, kbaseId, ksessionName);
@@ -301,11 +314,7 @@ public class StatelessKnowledgeSessionImpl extends AbstractRuntime
         return list;
     }
 
-    public Environment getEnvironment() {
-        return environment;
-    }
-
-    protected void dispose(StatefulKnowledgeSession ksession) {
+    private void dispose(StatefulKnowledgeSession ksession) {
         ksession.dispose();
     }
 
@@ -325,7 +334,7 @@ public class StatelessKnowledgeSessionImpl extends AbstractRuntime
             if ( this == obj ) {
                 return true;
             }
-            if ( obj == null || !(obj instanceof ListnerHolder) ) {
+            if ( !(obj instanceof ListnerHolder) ) {
                 return false;
             }
 

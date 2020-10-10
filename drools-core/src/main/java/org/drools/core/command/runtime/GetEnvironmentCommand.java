@@ -16,15 +16,15 @@
 
 package org.drools.core.command.runtime;
 
-import org.drools.core.command.impl.ExecutableCommand;
-import org.drools.core.command.impl.RegistryContext;
+import org.drools.core.command.impl.NotTransactionalCommand;
+import org.kie.api.runtime.Context;
 import org.kie.api.runtime.Environment;
 import org.kie.api.runtime.KieSession;
-import org.kie.api.runtime.Context;
+import org.kie.internal.command.RegistryContext;
 
 public class GetEnvironmentCommand
     implements
-    ExecutableCommand<Environment> {
+    NotTransactionalCommand<Environment> {
 
     public Environment execute(Context context) {
         KieSession ksession = ((RegistryContext) context).lookup( KieSession.class );

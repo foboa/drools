@@ -16,16 +16,12 @@
 
 package org.kie.dmn.core;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.notNullValue;
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.junit.Assert.*;
-import static org.kie.dmn.core.util.DynamicTypeUtils.entry;
-import static org.kie.dmn.core.util.DynamicTypeUtils.prototype;
-
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
+
 import org.junit.Test;
 import org.kie.dmn.api.core.DMNContext;
 import org.kie.dmn.api.core.DMNDecisionResult;
@@ -34,11 +30,27 @@ import org.kie.dmn.api.core.DMNMessageType;
 import org.kie.dmn.api.core.DMNModel;
 import org.kie.dmn.api.core.DMNResult;
 import org.kie.dmn.api.core.DMNRuntime;
+import org.kie.dmn.api.core.ast.BusinessKnowledgeModelNode;
+import org.kie.dmn.api.core.ast.DecisionNode;
+import org.kie.dmn.api.core.ast.DecisionServiceNode;
 import org.kie.dmn.api.core.ast.InputDataNode;
+import org.kie.dmn.api.core.ast.ItemDefNode;
 import org.kie.dmn.core.api.DMNFactory;
 import org.kie.dmn.core.util.DMNRuntimeUtil;
 
-public class DMNInputRuntimeTest {
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.hamcrest.CoreMatchers.nullValue;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.kie.dmn.core.util.DynamicTypeUtils.entry;
+import static org.kie.dmn.core.util.DynamicTypeUtils.prototype;
+
+public class DMNInputRuntimeTest extends BaseInterpretedVsCompiledTest {
+
+    public DMNInputRuntimeTest(final boolean useExecModelCompiler ) {
+        super( useExecModelCompiler );
+    }
 
     @Test
     public void testInputStringEvaluateAll() {
@@ -147,7 +159,7 @@ public class DMNInputRuntimeTest {
         testInputStringNotAllowedValuesEvaluateAll(new Object());
     }
 
-    public void testInputStringNotAllowedValuesEvaluateAll(final Object inputValue) {
+    private void testInputStringNotAllowedValuesEvaluateAll(final Object inputValue) {
         final DMNRuntime runtime = DMNRuntimeUtil.createRuntime( "0003-input-data-string-allowed-values.dmn", this.getClass() );
         final DMNModel dmnModel = runtime.getModel( "https://github.com/kiegroup/kie-dmn", "0003-input-data-string-allowed-values" );
         assertThat( dmnModel, notNullValue() );
@@ -240,13 +252,13 @@ public class DMNInputRuntimeTest {
         assertThat( DMNRuntimeUtil.formatMessages( dmnModel.getMessages() ), dmnModel.hasErrors(), is( false ) );
 
         final DMNContext ctx1 = runtime.newContext();
-        ctx1.set("p1", prototype(entry("Name", "P1"), entry("Interests", Arrays.asList("Golf"))));
+        ctx1.set("p1", prototype(entry("Name", "P1"), entry("Interests", Collections.singletonList("Golf"))));
         final DMNResult dmnResult1 = runtime.evaluateAll( dmnModel, ctx1 );
         assertThat( DMNRuntimeUtil.formatMessages( dmnResult1.getMessages() ), dmnResult1.hasErrors(), is( false ) );
         assertThat( dmnResult1.getContext().get( "MyDecision" ), is( "The Person P1 likes 1 thing(s)." ) );
 
         final DMNContext ctx2 = runtime.newContext();
-        ctx2.set("p1", prototype(entry("Name", "P2"), entry("Interests", Arrays.asList("x"))));
+        ctx2.set("p1", prototype(entry("Name", "P2"), entry("Interests", Collections.singletonList("x"))));
         final DMNResult dmnResult2 = runtime.evaluateAll( dmnModel, ctx2 );
         assertThat( DMNRuntimeUtil.formatMessages( dmnResult2.getMessages() ), dmnResult2.hasErrors(), is( true ) );
         assertThat( dmnResult2.getMessages().stream().anyMatch( m -> m.getMessageType().equals( DMNMessageType.ERROR_EVAL_NODE ) ), is( true ) );
@@ -269,7 +281,7 @@ public class DMNInputRuntimeTest {
         // DROOLS-1569
         final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("DMNInputDataNodeTypeTest.dmn", this.getClass());
         final String MODEL_NAMESPACE = "http://www.trisotech.com/definitions/_17396034-163a-48aa-9a7f-c6eb17f9cc6c";
-        final String FEEL_NAMESPACE = "http://www.omg.org/spec/FEEL/20140401";
+        final String FEEL_NAMESPACE = org.kie.dmn.model.v1_2.KieDMNModelInstrumentedBase.URI_FEEL;
         final DMNModel dmnModel = runtime.getModel(MODEL_NAMESPACE, "DMNInputDataNodeTypeTest");
         assertThat(dmnModel, notNullValue());
         assertThat(DMNRuntimeUtil.formatMessages(dmnModel.getMessages()), dmnModel.hasErrors(), is(false));
@@ -340,10 +352,39 @@ public class DMNInputRuntimeTest {
 
     @Test
     public void testMissingInputData() {
-        final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("missing_input_data.dmn", getClass());
-        final DMNModel dmnModel = runtime.getModel("http://www.trisotech.com/definitions/_4047acf3-fce2-42f3-abf2-fb06282c1ea0", "Upgrade Based On Promotions");
-        assertThat(dmnModel, notNullValue());
-        assertThat(DMNRuntimeUtil.formatMessages(dmnModel.getMessages()), dmnModel.hasErrors(), is(true));
-        assertThat(dmnModel.getMessages().get(0).getMessageType(), is(DMNMessageType.ERR_COMPILING_FEEL));
+        final List<DMNMessage> messages = DMNRuntimeUtil.createExpectingDMNMessages("missing_input_data.dmn", getClass());
+        assertThat(messages.get(0).getMessageType(), is(DMNMessageType.ERR_COMPILING_FEEL));
+    }
+    
+    
+    @Test
+    public void testOrdering() {
+        final DMNRuntime runtime = DMNRuntimeUtil.createRuntime("Order.dmn", this.getClass());
+        final DMNModel dmnModel = runtime	.getModel("http://www.trisotech.com/definitions/_6318588b-c32f-4070-848b-bd8017e6b94e", "Drawing 1");
+
+        int index = 1;
+        for (InputDataNode node : dmnModel.getInputs()) {
+            assertTrue(node.getName().endsWith("" + index++));
+        }
+
+        index = 1;
+        for (DecisionNode node : dmnModel.getDecisions()) {
+            assertTrue(node.getName().endsWith("" + index++));
+        }
+
+        index = 1;
+        for (BusinessKnowledgeModelNode node : dmnModel.getBusinessKnowledgeModels()) {
+            assertTrue(node.getName().endsWith("" + index++));
+        }
+
+        index = 1;
+        for (ItemDefNode node : dmnModel.getItemDefinitions()) {
+            assertTrue(node.getName().endsWith("" + index++));
+        }
+
+        index = 1;
+        for (DecisionServiceNode node : dmnModel.getDecisionServices()) {
+            assertTrue(node.getName().endsWith("" + index++));
+        }
     }
 }

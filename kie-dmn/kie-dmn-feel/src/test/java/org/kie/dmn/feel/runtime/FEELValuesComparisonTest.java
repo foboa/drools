@@ -16,13 +16,14 @@
 
 package org.kie.dmn.feel.runtime;
 
-import java.util.Arrays;
 import java.util.Collection;
+
 import org.junit.runners.Parameterized;
+import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 
 public class FEELValuesComparisonTest extends BaseFEELTest {
 
-    @Parameterized.Parameters(name = "{index}: {0} ({1}) = {2}")
+    @Parameterized.Parameters(name = "{3}: {0} ({1}) = {2}")
     public static Collection<Object[]> data() {
         final Object[][] cases = new Object[][] {
                 // number comparisons
@@ -54,6 +55,10 @@ public class FEELValuesComparisonTest extends BaseFEELTest {
                 { "false != false", Boolean.FALSE , null},
                 { "false != true", Boolean.TRUE , null},
                 { "true != false", Boolean.TRUE , null},
+                
+                // other comparisons
+                { "duration(\"P1Y\") < duration(\"P2Y\")", Boolean.TRUE , null},
+                { "duration(\"P1Y\") > duration(\"P2Y\")", Boolean.FALSE , null},
 
                 // other types of equalities
                 { "[ 1..3 ] = [ 1..3 ]", Boolean.TRUE , null},
@@ -91,8 +96,15 @@ public class FEELValuesComparisonTest extends BaseFEELTest {
                 { "12 = null", Boolean.FALSE, null},
                 { "12 != null", Boolean.TRUE, null},
                 { "null = null", Boolean.TRUE , null},
-                { "null != null", Boolean.FALSE , null}
+                { "null != null", Boolean.FALSE , null},
+
+                // RHDM-1119 
+                { "{ m: <18 }.m(16)", true, null}, // Working expression, for the expr raising compilation Warn test have been moved.
+                { "{list : 1, r: list < 3}.r", Boolean.TRUE , null}, // strange name for a number literal, intended this way.
+                { "{list : 1, r: list< 3}.r", Boolean.TRUE , null}, 
+                { "{context : 1, r: context < 3}.r", Boolean.TRUE , null}, // strange name for a number literal, intended this way.
+                { "{context : 1, r: context< 3}.r", Boolean.TRUE , null}, 
         };
-        return Arrays.asList( cases );
+        return addAdditionalParameters(cases, false);
     }
 }

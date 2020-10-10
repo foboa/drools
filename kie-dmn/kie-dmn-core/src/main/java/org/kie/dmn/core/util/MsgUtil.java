@@ -1,21 +1,35 @@
+/*
+ * Copyright 2017 Red Hat, Inc. and/or its affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.kie.dmn.core.util;
 
 import org.kie.dmn.api.core.DMNMessage;
+import org.kie.dmn.api.core.DMNMessage.Severity;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 import org.kie.dmn.core.api.DMNMessageManager;
-import org.kie.dmn.core.impl.DMNResultImpl;
 import org.kie.dmn.core.util.Msg.Message;
 import org.kie.dmn.core.util.Msg.Message0;
 import org.kie.dmn.core.util.Msg.Message1;
 import org.kie.dmn.core.util.Msg.Message2;
 import org.kie.dmn.core.util.Msg.Message3;
 import org.kie.dmn.core.util.Msg.Message4;
-import org.kie.dmn.api.core.DMNMessage.Severity;
-import org.kie.dmn.model.v1_1.DMNElement;
-import org.kie.dmn.model.v1_1.DMNModelInstrumentedBase;
+import org.kie.dmn.model.api.DMNModelInstrumentedBase;
 import org.slf4j.Logger;
 
-public class MsgUtil {
+public final class MsgUtil {
 
     public static String createMessage( Message0 message) {
         return MsgUtil.buildMessage(message);
@@ -68,6 +82,9 @@ public class MsgUtil {
             case WARN: logger.warn( message ); break;
             default: logger.info( message );
         }
+        if (logger.isDebugEnabled() && exception != null) {
+            logger.debug(message, exception);
+        }
         if( event != null ) {
             return result.addMessage(
                     severity,
@@ -85,4 +102,17 @@ public class MsgUtil {
         }
     }
 
+    private MsgUtil() {
+        // Constructing instances is not allowed for this class
+    }
+
+    public static String clipString(String source, int maxChars) {
+        if (source.length() <= maxChars) {
+            return source;
+        } else {
+            return new StringBuilder().append(source.substring(0, maxChars))
+                                      .append(String.format("... [string clipped after %s chars, total length is %s]", maxChars, source.length()))
+                                      .toString();
+        }
+    }
 }

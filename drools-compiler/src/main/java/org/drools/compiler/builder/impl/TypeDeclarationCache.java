@@ -33,7 +33,6 @@ import org.drools.compiler.lang.descr.PackageDescr;
 import org.drools.core.factmodel.ClassDefinition;
 import org.drools.core.factmodel.FieldDefinition;
 import org.drools.core.factmodel.traits.Thing;
-import org.drools.core.factmodel.traits.Trait;
 import org.drools.core.rule.Annotated;
 import org.drools.core.rule.TypeDeclaration;
 import org.drools.core.util.ClassUtils;
@@ -42,8 +41,10 @@ import org.kie.api.definition.type.Position;
 import org.kie.api.io.Resource;
 import org.kie.api.runtime.rule.Match;
 
+import static org.drools.compiler.builder.impl.ClassDefinitionFactory.createClassDefinition;
 import static org.drools.compiler.builder.impl.TypeDeclarationConfigurator.processMvelBasedAccessors;
 import static org.drools.core.util.BitMaskUtil.isSet;
+import static org.drools.core.util.Drools.hasMvel;
 
 public class TypeDeclarationCache {
 
@@ -52,7 +53,9 @@ public class TypeDeclarationCache {
 
     TypeDeclarationCache( KnowledgeBuilderImpl kbuilder ) {
         this.kbuilder = kbuilder;
-        initBuiltinTypeDeclarations();
+        if ( hasMvel() ) {
+            initBuiltinTypeDeclarations();
+        }
     }
 
     private void initBuiltinTypeDeclarations() {
@@ -190,8 +193,7 @@ public class TypeDeclarationCache {
     }
 
     private ClassDefinition setClassDefinitionOnTypeDeclaration( Class<?> cls, TypeDeclaration typeDeclaration ) {
-        ClassDefinition clsDef = new ClassDefinition();
-        ClassDefinitionFactory.populateDefinitionFromClass( clsDef, typeDeclaration.getResource(), cls, cls.getAnnotation( Trait.class ) != null );
+        ClassDefinition clsDef = createClassDefinition( cls, typeDeclaration.getResource() );
         typeDeclaration.setTypeClassDef(clsDef);
         return clsDef;
     }
@@ -326,7 +328,7 @@ public class TypeDeclarationCache {
     }
 
 
-    void removeTypesGeneratedFromResource(Resource resource) {
+    Collection<String> removeTypesGeneratedFromResource(Resource resource) {
         if (cacheTypes != null) {
             List<String> typesToBeRemoved = new ArrayList<String>();
             for (Map.Entry<String, TypeDeclaration> type : cacheTypes.entrySet()) {
@@ -337,6 +339,8 @@ public class TypeDeclarationCache {
             for (String type : typesToBeRemoved) {
                 cacheTypes.remove(type);
             }
+            return typesToBeRemoved;
         }
+        return Collections.emptyList();
     }
 }

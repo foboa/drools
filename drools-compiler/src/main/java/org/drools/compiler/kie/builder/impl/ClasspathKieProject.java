@@ -24,14 +24,20 @@ import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
+import org.appformer.maven.support.PomModel;
 import org.drools.compiler.kie.builder.impl.event.KieModuleDiscovered;
 import org.drools.compiler.kie.builder.impl.event.KieServicesEventListerner;
 import org.drools.compiler.kproject.ReleaseIdImpl;
@@ -42,12 +48,12 @@ import org.kie.api.KieServices;
 import org.kie.api.builder.KieRepository;
 import org.kie.api.builder.ReleaseId;
 import org.kie.api.builder.model.KieModuleModel;
-import org.appformer.maven.support.PomModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.drools.compiler.kie.builder.impl.KieBuilderImpl.setDefaultsforEmptyKieModule;
-import static org.drools.core.common.ProjectClassLoader.createProjectClassLoader;
+import static org.drools.compiler.kproject.models.KieModuleModelImpl.KMODULE_JAR_PATH;
+import static org.drools.reflective.classloader.ProjectClassLoader.createProjectClassLoader;
 
 /**
  * Discovers all KieModules on the classpath, via the kmodule.xml file.
@@ -61,9 +67,9 @@ public class ClasspathKieProject extends AbstractKieProject {
 
     public static final String OSGI_KIE_MODULE_CLASS_NAME     = "org.kie.osgi.compiler.OsgiKieModule";
 
-    private Map<ReleaseId, InternalKieModule>     kieModules  = new HashMap<ReleaseId, InternalKieModule>();
+    private Map<ReleaseId, InternalKieModule>     kieModules  = new HashMap<>();
 
-    private Map<String, InternalKieModule>  kJarFromKBaseName = new HashMap<String, InternalKieModule>();
+    private Map<String, InternalKieModule>  kJarFromKBaseName = new HashMap<>();
 
     private final KieRepository kieRepository;
     
@@ -73,10 +79,17 @@ public class ClasspathKieProject extends AbstractKieProject {
 
     private final WeakReference<KieServicesEventListerner> listener;
 
-    ClasspathKieProject(ClassLoader parentCL, WeakReference<KieServicesEventListerner> listener) {
+    private ReleaseId classPathreleaseId;
+
+    ClasspathKieProject(ClassLoader parentCL, WeakReference<KieServicesEventListerner> listener, ReleaseId classPathreleaseId) {
         this.kieRepository = KieServices.Factory.get().getRepository();
         this.listener = listener;
         this.parentCL = parentCL;
+        this.classPathreleaseId = classPathreleaseId;
+    }
+
+    ClasspathKieProject(ClassLoader parentCL, WeakReference<KieServicesEventListerner> listener) {
+        this(parentCL, listener, null);
     }
 
     public void init() {
@@ -86,7 +99,7 @@ public class ClasspathKieProject extends AbstractKieProject {
     }
 
     public ReleaseId getGAV() {
-        return null;
+        return classPathreleaseId;
     }
 
     public long getCreationTimestamp() {
@@ -96,17 +109,25 @@ public class ClasspathKieProject extends AbstractKieProject {
     public void discoverKieModules() {
         String[] configFiles = {KieModuleModelImpl.KMODULE_JAR_PATH, KieModuleModelImpl.KMODULE_SPRING_JAR_PATH};
         for ( String configFile : configFiles) {
-            final Enumeration<URL> e;
+            final Set<URL> resources = new HashSet<>();
             try {
-                e = classLoader.getResources(configFile );
+                ClassLoader currentClassLoader = classLoader;
+                while (currentClassLoader != null) {
+                    Enumeration<URL> list = currentClassLoader.getResources(configFile);
+                    while (list.hasMoreElements()) {
+                        resources.add(list.nextElement());
+                    }
+                    currentClassLoader = currentClassLoader.getParent();
+                }
             } catch ( IOException exc ) {
                 log.error( "Unable to find and build index of "+configFile+"." + exc.getMessage() );
                 return;
             }
 
             // Map of kmodule urls
-            while ( e.hasMoreElements() ) {
-                URL url = e.nextElement();
+            Iterator<URL> e = resources.iterator();
+            while (e.hasNext()) {
+                URL url = e.next();
                 notifyKieModuleFound(url);
                 try {
                     InternalKieModule kModule = fetchKModule(url);
@@ -135,6 +156,9 @@ public class ClasspathKieProject extends AbstractKieProject {
     }
 
     public static InternalKieModule fetchKModule(URL url) {
+        if (url.toString().equals( "resource:" + KMODULE_JAR_PATH )) {
+            return InternalKieModuleProvider.getFromClasspath();
+        }
         if (url.toString().startsWith("bundle:") || url.toString().startsWith("bundleresource:")) {
             return fetchOsgiKModule(url);
         }
@@ -198,10 +222,7 @@ public class ClasspathKieProject extends AbstractKieProject {
     }
 
     public static InternalKieModule createInternalKieModule(KieModuleModel kieProject, ReleaseId releaseId, String rootPath) {
-        File file = new File( rootPath );
-        return file.isDirectory() ?
-               new FileKieModule( releaseId, kieProject, file ) :
-               new ZipKieModule( releaseId, kieProject, file );
+        return InternalKieModuleProvider.get( releaseId, kieProject, new File( rootPath ) );
     }
 
     public static String getPomProperties(String urlPathToAdd) {
@@ -212,7 +233,12 @@ public class ClasspathKieProject extends AbstractKieProject {
         }
 
         if ( urlPathToAdd.endsWith( ".apk" ) || isJarFile( urlPathToAdd, rootPath ) || urlPathToAdd.endsWith( "/content" ) ) {
-            pomProperties = getPomPropertiesFromZipFile(rootPath);
+            
+            if (rootPath.indexOf(".jar!") > 0) {
+                pomProperties = getPomPropertiesFromZipStream(rootPath);
+            } else {
+                pomProperties = getPomPropertiesFromZipFile(rootPath);
+            }
         } else {
             pomProperties = getPomPropertiesFromFileSystem(rootPath);
             if (pomProperties == null) {
@@ -239,23 +265,26 @@ public class ClasspathKieProject extends AbstractKieProject {
             File actualZipFile = new File( rootPath );
             if (actualZipFile.exists() && actualZipFile.isFile()) {
                 result = true;
+            } else if (urlPathToAdd.indexOf( ".jar!" ) > 0) {
+                // nested jar inside uberjar if the path includes .jar!
+                result = true;
             }
-        }
+        } 
         return result;
     }
 
     private static String getPomPropertiesFromZipFile(String rootPath) {
         File actualZipFile = new File( rootPath );
         if ( !actualZipFile.exists() ) {
+            if (rootPath.indexOf(".jar!") > 0) {
+                return getPomPropertiesFromZipStream(rootPath);
+            }
+            
             log.error( "Unable to load pom.properties from" + rootPath + " as jarPath cannot be found\n" + rootPath );
             return null;
         }
 
-        ZipFile zipFile = null;
-
-        try {
-            zipFile = new ZipFile( actualZipFile );
-
+        try (ZipFile zipFile = new ZipFile( actualZipFile )) {
             String file = KieBuilderImpl.findPomProperties( zipFile );
             if ( file == null ) {
                 log.warn( "Unable to find pom.properties in " + rootPath );
@@ -269,39 +298,57 @@ public class ClasspathKieProject extends AbstractKieProject {
             return pomProps;
         } catch ( Exception e ) {
             log.error( "Unable to load pom.properties from " + rootPath + "\n" + e.getMessage() );
+        }
+        return null;
+    }
+    
+    private static String getPomPropertiesFromZipStream(String rootPath) {
+       
+        rootPath = rootPath.substring( rootPath.lastIndexOf( '!' ) + 1 );
+        // read jar file from uber-jar
+        InputStream in = ClasspathKieProject.class.getResourceAsStream(rootPath);
+        ZipInputStream zipIn = new ZipInputStream(in);
+        try {
+            ZipEntry entry = zipIn.getNextEntry();
+            while (entry != null) {
+                // process each entry
+                String fileName = entry.getName();
+                if ( fileName.endsWith( "pom.properties" ) && fileName.startsWith( "META-INF/maven/" ) ) {
+                    String pomProps = StringUtils.readFileAsString( new InputStreamReader( zipIn, IoUtils.UTF8_CHARSET ) );
+                    //zipIn.closeEntry();
+                    
+                    return pomProps;
+                }
+                
+                // get next entry if needed
+                entry = zipIn.getNextEntry();
+            }
+        } catch ( Exception e ) {
+            log.error( "Unable to load pom.properties from zip input stream " + rootPath + "\n" + e.getMessage() );
         } finally {
             try {
-                if (zipFile != null) {
-                    zipFile.close();
+                if (zipIn != null) {
+                    zipIn.close();
                 }
             } catch ( IOException e ) {
-                log.error( "Error when closing InputStream to " + rootPath + "\n" + e.getMessage() );
+                log.error( "Error when closing zip InputStream to " + rootPath + "\n" + e.getMessage() );
             }
-        }
+        }   
+        
         return null;
     }
 
     private static String getPomPropertiesFromFileSystem(String rootPath) {
-        Reader reader = null;
-        try {
-            File file = KieBuilderImpl.findPomProperties( new File( rootPath ) );
-            if ( file == null ) {
-                log.warn( "Unable to find pom.properties in " + rootPath );
-                return null;
-            }
-            reader = new InputStreamReader( new FileInputStream( file ), IoUtils.UTF8_CHARSET );
-            log.debug( "Found and used pom.properties " + file);
+        File file = KieBuilderImpl.findPomProperties( new File( rootPath ) );
+        if ( file == null ) {
+            log.warn( "Unable to find pom.properties in " + rootPath );
+            return null;
+        }
+        log.debug( "Found and used pom.properties " + file);
+        try (Reader reader = new InputStreamReader( new FileInputStream( file ), IoUtils.UTF8_CHARSET )) {
             return StringUtils.toString( reader );
         } catch ( Exception e ) {
             log.warn( "Unable to load pom.properties tried recursing down from " + rootPath + "\n" + e.getMessage() );
-        } finally {
-            if ( reader != null ) {
-                try {
-                    reader.close();
-                } catch ( IOException e ) {
-                    log.error( "Error when closing InputStream to " + rootPath + "\n" + e.getMessage() );
-                }
-            }
         }
         return null;
     }
@@ -318,9 +365,7 @@ public class ClasspathKieProject extends AbstractKieProject {
         }
 
         if ( file != null ) {
-            FileInputStream fis = null;
-            try {
-                fis = new FileInputStream( file ) ;
+            try (FileInputStream fis = new FileInputStream( file )) {
                 PomModel pomModel = PomModel.Parser.parse( rootPath + "/pom.xml", fis);
 
                 KieBuilderImpl.validatePomModel( pomModel ); // throws an exception if invalid
@@ -333,14 +378,6 @@ public class ClasspathKieProject extends AbstractKieProject {
                 return str;
             } catch ( Exception e ) {
                 log.error( "As folder project tried to fall back to pom.xml " + file + "\nbut failed with exception:\n" + e.getMessage() );
-            } finally {
-                if ( fis != null ) {
-                    try {
-                        fis.close();
-                    } catch ( IOException e ) {
-                        log.error( "Error when closing InputStream to " + file + "\n" + e.getMessage() );
-                    }
-                }
             }
         } else {
             log.warn( "As folder project tried to fall back to pom.xml, but could not find one" );
@@ -365,7 +402,7 @@ public class ClasspathKieProject extends AbstractKieProject {
             // switch to using getPath() instead of toExternalForm()
             if ( urlPath.indexOf( '!' ) > 0 ) {
                 urlPath = urlPath.substring( 0,
-                                             urlPath.indexOf( '!' ) );
+                                             urlPath.lastIndexOf( '!' ) );
             }
         } else if ( "vfs".equals( urlType ) ) {
             urlPath = getPathForVFS(url);
@@ -415,15 +452,26 @@ public class ClasspathKieProject extends AbstractKieProject {
                 log.warn( "Found virtual file " + url + " but org.jboss.vfs.VirtualFile is not available on the classpath" );
             }
         }
+        Method m2 = null;
+        try {
+            m2 = Class.forName("org.jboss.vfs.VFS").getMethod("getChild", URI.class);
+        } catch (Exception e) {
+            try {
+                // Try to retrieve the org.jboss.vfs.VFS class also on TCCL
+                m2 = Class.forName("org.jboss.vfs.VFS", true, Thread.currentThread().getContextClassLoader()).getMethod("getChild", URI.class);
+            } catch (Exception e1) {
+                // VFS is not available on the classpath - ignore
+                log.warn( "Found virtual file " + url + " but org.jboss.vfs.VFS is not available on the classpath" );
+            }
+        }
 
-        if (m == null) {
+        if (m == null || m2 == null) {
             return url.getPath();
         }
 
         String path = null;
         try {
-            Object content = url.openConnection().getContent();
-            File f = (File)m.invoke(content);
+            File f = (File)m.invoke( m2.invoke(null, url.toURI()) );
             path = f.getPath();
         } catch (Exception e) {
             log.error( "Error when reading virtual file from " + url.toString(), e );

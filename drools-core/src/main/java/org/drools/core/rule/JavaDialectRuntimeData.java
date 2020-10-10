@@ -40,14 +40,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 
-import org.drools.core.common.ProjectClassLoader;
 import org.drools.core.definitions.impl.KnowledgePackageImpl;
 import org.drools.core.definitions.rule.impl.RuleImpl;
 import org.drools.core.spi.Constraint;
@@ -55,6 +53,7 @@ import org.drools.core.spi.Wireable;
 import org.drools.core.util.ClassUtils;
 import org.drools.core.util.KeyStoreHelper;
 import org.drools.core.util.StringUtils;
+import org.drools.reflective.classloader.ProjectClassLoader;
 import org.kie.internal.concurrent.ExecutorProviderFactory;
 import org.kie.internal.utils.FastClassLoader;
 
@@ -70,7 +69,7 @@ public class JavaDialectRuntimeData
 
     private static final ProtectionDomain  PROTECTION_DOMAIN;
 
-    private final Map<String, Object>      invokerLookups = new ConcurrentHashMap<>();
+    private final Map<String, Wireable>    invokerLookups = new ConcurrentHashMap<>();
 
     private final Map<String, byte[]>      classLookups = new ConcurrentHashMap<>();
 
@@ -128,7 +127,7 @@ public class JavaDialectRuntimeData
         }
 
         stream.writeInt( this.invokerLookups.size() );
-        for (Entry<String, Object> entry : this.invokerLookups.entrySet()) {
+        for (Entry<String, Wireable> entry : this.invokerLookups.entrySet()) {
             stream.writeObject(entry.getKey());
             stream.writeObject(entry.getValue());
         }
@@ -193,7 +192,7 @@ public class JavaDialectRuntimeData
 
         for (int i = 0, length = stream.readInt(); i < length; i++) {
             this.invokerLookups.put( (String) stream.readObject(),
-                                     stream.readObject() );
+                                     (Wireable) stream.readObject() );
         }
 
         for (int i = 0, length = stream.readInt(); i < length; i++) {
@@ -276,7 +275,7 @@ public class JavaDialectRuntimeData
         }
     }
 
-    private static void wireAll(ClassLoader classLoader, Map<String, Object> invokerLookups, List<String> wireList) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
+    private static void wireAll(ClassLoader classLoader, Map<String, Wireable> invokerLookups, List<String> wireList) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
         for (String resourceName : wireList) {
             wire( classLoader, invokerLookups, convertResourceToClassName( resourceName ) );
         }
@@ -284,10 +283,10 @@ public class JavaDialectRuntimeData
 
     private static class WiringExecutor implements Callable<Boolean> {
         private final ClassLoader classLoader;
-        private final Map<String, Object> invokerLookups;
+        private final Map<String, Wireable> invokerLookups;
         private final List<String> wireList;
 
-        private WiringExecutor(ClassLoader classLoader, Map<String, Object> invokerLookups, List<String> wireList) {
+        private WiringExecutor(ClassLoader classLoader, Map<String, Wireable> invokerLookups, List<String> wireList) {
             this.classLoader = classLoader;
             this.invokerLookups = invokerLookups;
             this.wireList = wireList;
@@ -360,7 +359,7 @@ public class JavaDialectRuntimeData
         if (store != null) {
             bytecode = store.get(resourceName);
         }
-        if (bytecode == null && rootClassLoader instanceof ProjectClassLoader) {
+        if (bytecode == null && rootClassLoader instanceof ProjectClassLoader ) {
             bytecode = ((ProjectClassLoader)rootClassLoader).getBytecode(resourceName);
         }
         return bytecode;
@@ -445,25 +444,21 @@ public class JavaDialectRuntimeData
         }
     }
 
-    public void wire( final String className ) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
-        wire(className, invokerLookups.get(className));
+    private static void wire( ClassLoader classLoader, Map<String, Wireable> invokerLookups, String className ) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
+        Wireable invoker = invokerLookups.get(className);
+        if (invoker != null) {
+            wire( classLoader, className, invoker, false );
+        }
     }
 
-    private static void wire( ClassLoader classLoader, Map<String, Object> invokerLookups, String className ) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
-        wire( classLoader, className, invokerLookups.get(className) );
-    }
+    private static void wire( ClassLoader classLoader, String className, Wireable invoker, boolean reload ) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
+        if (reload && invoker instanceof Wireable.Immutable && (( Wireable.Immutable ) invoker).isInitialized()) {
+            return;
+        }
 
-    public void wire( final String className, final Object invoker ) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
-        wire( classLoader, className, invoker );
-    }
-
-    private static void wire( ClassLoader classLoader, String className, Object invoker ) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
         final Class clazz = classLoader.loadClass( className );
-
         if (clazz != null) {
-            if (invoker instanceof Wireable) {
-                ( (Wireable) invoker ).wire( clazz.newInstance() );
-            }
+            invoker.wire( clazz.newInstance() );
         } else {
             throw new ClassNotFoundException( className );
         }
@@ -490,10 +485,8 @@ public class JavaDialectRuntimeData
 
         // Wire up invokers
         try {
-            for (final Object object : invokerLookups.entrySet()) {
-                Entry entry = (Entry) object;
-                wire( (String) entry.getKey(),
-                      entry.getValue() );
+            for (Entry<String, Wireable> entry : invokerLookups.entrySet()) {
+                wire( classLoader, entry.getKey(), entry.getValue(), true );
             }
         } catch (final ClassNotFoundException e) {
             throw new RuntimeException( e );
@@ -508,22 +501,15 @@ public class JavaDialectRuntimeData
         this.dirty = false;
     }
 
-    public void clear() {
-        getStore().clear();
-        invokerLookups.clear();
-        reload();
-    }
-
     public String toString() {
         return this.getClass().getName() + getStore().toString();
     }
 
-    public void putInvoker( final String className,
-            final Object invoker ) {
+    public void putInvoker( String className, Wireable invoker ) {
         invokerLookups.put(className, invoker);
     }
 
-    public void putAllInvokers( final Map<String, Object> invokers ) {
+    public void putAllInvokers( final Map<String, Wireable> invokers ) {
         invokerLookups.putAll( invokers );
     }
 
@@ -639,27 +625,15 @@ public class JavaDialectRuntimeData
 
         public InputStream getResourceAsStream( final String name ) {
             final byte[] clsBytes = this.store.read( name );
-            if (clsBytes != null) {
-                return new ByteArrayInputStream( clsBytes );
-            }
-            return null;
+            return clsBytes != null ? new ByteArrayInputStream( clsBytes ) : getParent().getResourceAsStream( name );
         }
 
         public URL getResource( String name ) {
-            return null;
+            return getParent().getResource( name );
         }
 
         public Enumeration<URL> getResources( String name ) throws IOException {
-            return new Enumeration<URL>() {
-
-                public boolean hasMoreElements() {
-                    return false;
-                }
-
-                public URL nextElement() {
-                    throw new NoSuchElementException();
-                }
-            };
+            return getParent().getResources( name );
         }
 
         private Object getLockObject(String className) {

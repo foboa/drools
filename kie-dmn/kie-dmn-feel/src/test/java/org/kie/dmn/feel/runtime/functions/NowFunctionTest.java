@@ -18,10 +18,12 @@ package org.kie.dmn.feel.runtime.functions;
 
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAccessor;
+
 import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.kie.dmn.feel.runtime.functions.extended.NowFunction;
 
 public class NowFunctionTest {
 
@@ -39,7 +41,7 @@ public class NowFunctionTest {
         // Note: We cannot guarantee any part of the date to be the same. E.g. in case when the test is executed
         // at the exact moment when the year is flipped to the next one, we cannot guarantee the year will be the same.
 
-        FEELFnResult<TemporalAccessor> nowResult = nowFunction.invoke();
+        final FEELFnResult<TemporalAccessor> nowResult = nowFunction.invoke();
         Assert.assertThat(nowResult.isRight(), Matchers.is(true));
         final TemporalAccessor result = nowResult.cata(left -> null, right -> right);
         Assert.assertThat(result, Matchers.notNullValue());

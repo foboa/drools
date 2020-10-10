@@ -16,7 +16,11 @@
 
 package org.drools.core.command.impl;
 
-import org.kie.api.runtime.ExecutableRunner;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.drools.core.command.GetSessionClockCommand;
 import org.drools.core.command.runtime.AddEventListenerCommand;
 import org.drools.core.command.runtime.DestroySessionCommand;
@@ -48,6 +52,7 @@ import org.drools.core.command.runtime.process.RegisterWorkItemHandlerCommand;
 import org.drools.core.command.runtime.process.SignalEventCommand;
 import org.drools.core.command.runtime.process.StartCorrelatedProcessCommand;
 import org.drools.core.command.runtime.process.StartProcessCommand;
+import org.drools.core.command.runtime.process.StartProcessFromNodeIdsCommand;
 import org.drools.core.command.runtime.process.StartProcessInstanceCommand;
 import org.drools.core.command.runtime.rule.AgendaGroupSetFocusCommand;
 import org.drools.core.command.runtime.rule.ClearActivationGroupCommand;
@@ -81,6 +86,7 @@ import org.kie.api.event.rule.RuleRuntimeEventListener;
 import org.kie.api.runtime.Calendars;
 import org.kie.api.runtime.Channel;
 import org.kie.api.runtime.Environment;
+import org.kie.api.runtime.ExecutableRunner;
 import org.kie.api.runtime.Globals;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.KieSessionConfiguration;
@@ -98,13 +104,12 @@ import org.kie.api.runtime.rule.QueryResults;
 import org.kie.api.runtime.rule.RuleFlowGroup;
 import org.kie.api.runtime.rule.ViewChangedEventListener;
 import org.kie.api.time.SessionClock;
+import org.kie.internal.command.RegistryContext;
 import org.kie.internal.process.CorrelationAwareProcessRuntime;
 import org.kie.internal.process.CorrelationKey;
 import org.kie.internal.runtime.StatefulKnowledgeSession;
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
+import static java.util.Arrays.stream;
 
 public class CommandBasedStatefulKnowledgeSession extends AbstractRuntime
     implements
@@ -251,19 +256,26 @@ public class CommandBasedStatefulKnowledgeSession extends AbstractRuntime
     }
 
     public ProcessInstance startProcess(String processId) {
-        return startProcess( processId,
-                             null );
+        return startProcess( processId, (Map) null, (AgendaFilter) null );
     }
 
-    public ProcessInstance startProcess(String processId,
-                                        Map<String, Object> parameters) {
+    public ProcessInstance startProcess(String processId, Map<String, Object> parameters) {
+        return startProcess( processId, parameters, (AgendaFilter) null );
+    }
+
+    public ProcessInstance startProcess(String processId, AgendaFilter agendaFilter) {
+        return startProcess( processId, (Map) null, agendaFilter );
+    }
+
+    public ProcessInstance startProcess(String processId, Map<String, Object> parameters, AgendaFilter agendaFilter) {
         StartProcessCommand command = new StartProcessCommand();
         command.setProcessId( processId );
         command.setParameters( parameters );
+        command.setAgendaFilter( agendaFilter );
         return runner.execute( command );
     }
 
-	public ProcessInstance createProcessInstance(String processId,
+    public ProcessInstance createProcessInstance(String processId,
 			                                     Map<String, Object> parameters) {
         CreateProcessInstanceCommand command = new CreateProcessInstanceCommand();
         command.setProcessId( processId );
@@ -556,7 +568,7 @@ public class CommandBasedStatefulKnowledgeSession extends AbstractRuntime
     }
     
     public KieSessionConfiguration getSessionConfiguration() {
-        return ((RegistryContext) runner.createContext()).lookup( KieSession.class ).getSessionConfiguration();
+        return ((RegistryContext) runner.createContext()).lookup(KieSession.class ).getSessionConfiguration();
     }
 
     @Override
@@ -578,5 +590,21 @@ public class CommandBasedStatefulKnowledgeSession extends AbstractRuntime
     public ProcessInstance getProcessInstance(CorrelationKey correlationKey) {
         
         return this.runner.execute(new GetProcessInstanceByCorrelationKeyCommand(correlationKey));
+    }
+
+
+    @Override
+    public ProcessInstance startProcessFromNodeIds(String processId, CorrelationKey key, Map<String, Object> params, String... nodeIds) {
+        StartProcessFromNodeIdsCommand command = new StartProcessFromNodeIdsCommand();
+        command.setProcessId(processId);
+        command.setParameters(params);
+        command.setNodeIds(stream(nodeIds).collect(Collectors.toList()));
+        command.setCorrelationKey(key);
+        return runner.execute(command);
+    }
+
+    @Override
+    public ProcessInstance startProcessFromNodeIds(String processId, Map<String, Object> params, String... nodeIds) {
+        return startProcessFromNodeIds(processId, null, params, nodeIds);
     }
 }

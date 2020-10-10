@@ -21,12 +21,21 @@ import java.io.Reader;
 import java.util.List;
 
 import org.kie.dmn.api.core.DMNMessage;
-import org.kie.dmn.model.v1_1.Definitions;
+import org.kie.dmn.model.api.Definitions;
 
 public interface DMNValidator {
 
     enum Validation {
-        VALIDATE_SCHEMA, VALIDATE_MODEL, VALIDATE_COMPILATION
+        /** Perform DMN XSD schema validation */
+        VALIDATE_SCHEMA,
+        /** Perform static analysis validation */
+        VALIDATE_MODEL,
+        /** Perform standard compilation of the DMN model, reporting any error and other messages as part of validation */
+        VALIDATE_COMPILATION,
+        /** Perform static Decision Table Analysis on all the decision tables */
+        ANALYZE_DECISION_TABLE,
+        /** Experimental flag: compute MC/DC Analysis on decision tables, as part of Decision Table Analysis */
+        COMPUTE_DECISION_TABLE_MCDC
     }
 
     /**
@@ -118,4 +127,73 @@ public interface DMNValidator {
      * Release all resources associated with this DMNValidator.
      */
     void dispose();
+
+    public static interface ValidatorBuilder {
+
+        /**
+         * A DMN Import Reader resolver, when using the Validator to {@link DMNValidator.Validation#VALIDATE_COMPILATION}
+         * and the compilation requires to resolve non-DMN models by means of the Import's locationURI.
+         * 
+         * @return a reference to this, so the API can be used fluently
+         */
+        public ValidatorBuilder usingImports(ValidatorImportReaderResolver r);
+
+        /**
+         * Validate the models and return the results. 
+         * 
+         * @see DMNValidator#validateUsing(Validation...)
+         * 
+         * @param files the DMN models to validate
+         *
+         * @return returns a list of messages from the validation, or an empty
+         *         list otherwise.
+         */
+        List<DMNMessage> theseModels(File... files);
+
+        /**
+         * Validate the models and return the results. 
+         * 
+         * @see DMNValidator#validateUsing(Validation...)
+         * 
+         * @param readers the DMN models to validate
+         *
+         * @return returns a list of messages from the validation, or an empty
+         *         list otherwise.
+         */
+        List<DMNMessage> theseModels(Reader... readers);
+
+        /**
+         * Validate the models and return the results. 
+         * 
+         * @see DMNValidator#validateUsing(Validation...)
+         * 
+         * @param models the DMN models to validate
+         *
+         * @return returns a list of messages from the validation, or an empty
+         *         list otherwise.
+         */
+        List<DMNMessage> theseModels(Definitions... models);
+
+        @FunctionalInterface
+        public static interface ValidatorImportReaderResolver {
+
+            /**
+             * @see DMNValidator.ValidatorBuilder#usingImports(ValidatorImportReaderResolver)
+             */
+            Reader newReader(String modelNamespace, String modelName, String locationURI);
+        }
+    }
+
+    /**
+     * Fluent interface to validate several models using the specified options.
+     * This API is specifically designed to validate Models which DMN-Import other DMN Models.
+     * The options field defines which validations to apply. E.g.:
+     *
+     * <code>validateUsing( VALIDATE_MODEL, VALIDATE_COMPILATION ).theseModels(reader0, reader1)</code>
+     *
+     * @param options selects which validations to apply
+     *
+     * @return a fluent interface builder to validate several models with.
+     */
+    ValidatorBuilder validateUsing(Validation... options);
 }

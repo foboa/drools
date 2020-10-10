@@ -16,8 +16,22 @@
 
 package org.drools.core.command.runtime;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.thoughtworks.xstream.annotations.XStreamAsAttribute;
-import org.drools.core.command.impl.ExecutableCommand;
+import javax.xml.bind.annotation.XmlAccessType;
+import javax.xml.bind.annotation.XmlAccessorType;
+import javax.xml.bind.annotation.XmlAttribute;
+import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlElements;
+import javax.xml.bind.annotation.XmlRootElement;
+import javax.xml.bind.annotation.XmlType;
+import org.drools.core.base.RuleNameEndsWithAgendaFilter;
+import org.drools.core.base.RuleNameEqualsAgendaFilter;
+import org.drools.core.base.RuleNameMatchesAgendaFilter;
+import org.drools.core.base.RuleNameStartsWithAgendaFilter;
+import org.drools.core.command.runtime.pmml.ApplyPmmlModelCommand;
 import org.drools.core.command.runtime.process.AbortWorkItemCommand;
 import org.drools.core.command.runtime.process.CompleteWorkItemCommand;
 import org.drools.core.command.runtime.process.SignalEventCommand;
@@ -37,20 +51,11 @@ import org.drools.core.command.runtime.rule.InsertElementsCommand;
 import org.drools.core.command.runtime.rule.InsertObjectCommand;
 import org.drools.core.command.runtime.rule.ModifyCommand;
 import org.drools.core.command.runtime.rule.QueryCommand;
-import org.kie.api.command.Command;
-import org.kie.api.runtime.ExecutionResults;
-import org.kie.api.runtime.Context;
 import org.drools.core.fluent.impl.Batch;
-
-import javax.xml.bind.annotation.XmlAccessType;
-import javax.xml.bind.annotation.XmlAccessorType;
-import javax.xml.bind.annotation.XmlAttribute;
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlElements;
-import javax.xml.bind.annotation.XmlRootElement;
-import javax.xml.bind.annotation.XmlType;
-import java.util.ArrayList;
-import java.util.List;
+import org.kie.api.command.Command;
+import org.kie.api.command.ExecutableCommand;
+import org.kie.api.runtime.Context;
+import org.kie.api.runtime.ExecutionResults;
 
 
 /**
@@ -94,7 +99,12 @@ public class BatchExecutionCommandImpl implements Batch, ExecutableCommand<Execu
                          @XmlElement(name = "clear-agenda", type = ClearAgendaCommand.class),
                          @XmlElement(name = "clear-agenda-group", type = ClearAgendaGroupCommand.class),
                          @XmlElement(name = "clear-ruleflow-group", type = ClearRuleFlowGroupCommand.class),
-                         @XmlElement(name = "get-fact-handles", type = GetFactHandlesCommand.class)
+                         @XmlElement(name = "get-fact-handles", type = GetFactHandlesCommand.class),
+                         @XmlElement(name = "apply-pmml-model-command", type = ApplyPmmlModelCommand.class),
+                         @XmlElement(name = "rule-name-ends-with-agenda-filter", type = RuleNameEndsWithAgendaFilter.class),
+                         @XmlElement(name = "rule-name-starts-with-agenda-filter", type = RuleNameStartsWithAgendaFilter.class),
+                         @XmlElement(name = "rule-name-equals-agenda-filter", type = RuleNameEqualsAgendaFilter.class),
+                         @XmlElement(name = "rule-name-matches-agenda-filter", type = RuleNameMatchesAgendaFilter.class)
                  })
     protected List<Command> commands;
 

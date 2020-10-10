@@ -16,26 +16,47 @@
 
 package org.drools.testcoverage.functional;
 
+import java.util.Collection;
+
 import org.assertj.core.api.Assertions;
 import org.drools.testcoverage.common.model.Person;
+import org.drools.testcoverage.common.util.KieBaseTestConfiguration;
 import org.drools.testcoverage.common.util.KieBaseUtil;
 import org.drools.testcoverage.common.util.KieUtil;
+import org.drools.testcoverage.common.util.TestParametersUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.kie.api.KieBase;
 import org.kie.api.builder.KieBuilder;
 import org.kie.api.builder.Message.Level;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.rule.QueryResults;
 
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 /**
  * Tests bad using and accessing to queries.
  */
+@RunWith(Parameterized.class)
 public class QueryBadResultTest {
+
+    private final KieBaseTestConfiguration kieBaseTestConfiguration;
+
+    public QueryBadResultTest(final KieBaseTestConfiguration kieBaseTestConfiguration) {
+        this.kieBaseTestConfiguration = kieBaseTestConfiguration;
+    }
+
+    @Parameterized.Parameters(name = "KieBase type={0}")
+    public static Collection<Object[]> getParameters() {
+        return TestParametersUtil.getKieBaseConfigurations();
+    }
 
     @Test
     public void testQueriesWithSameNameInOneFile() {
         final KieBuilder kieBuilder =
-                KieUtil.getKieBuilderFromClasspathResources(getClass(), false, "query-two-same-names.drl");
+                KieUtil.getKieBuilderFromClasspathResources(kieBaseTestConfiguration, getClass(), false, "query-two-same-names.drl");
         Assertions.assertThat(kieBuilder.getResults().getMessages(Level.ERROR).isEmpty()).isFalse();
     }
 
@@ -43,6 +64,7 @@ public class QueryBadResultTest {
     public void testQueriesWithSameNameInTwoFiles() {
         final KieBuilder kieBuilder =
                 KieUtil.getKieBuilderFromClasspathResources(
+                        kieBaseTestConfiguration,
                         getClass(),
                         false,
                         "query-same-name-1.drl",
@@ -54,29 +76,34 @@ public class QueryBadResultTest {
     @Test
     public void testQueryWithoutName() {
         final KieBuilder kieBuilder =
-                KieUtil.getKieBuilderFromClasspathResources(getClass(), false, "query-without-name.drl");
+                KieUtil.getKieBuilderFromClasspathResources(kieBaseTestConfiguration, getClass(), false, "query-without-name.drl");
         Assertions.assertThat(kieBuilder.getResults().getMessages(Level.ERROR).isEmpty()).isFalse();
     }
 
-    @Test(expected = RuntimeException.class)
+    @Test
     public void testQueryCalledWithoutParamsButItHasParams() {
-        final KieBase kieBase = KieBaseUtil.getKieBaseFromClasspathResources(getClass(), true, "query.drl");
+        final KieBase kieBase = KieBaseUtil.getKieBaseFromClasspathResources(getClass(), kieBaseTestConfiguration, "query.drl");
         final KieSession ksession = kieBase.newKieSession();
         ksession.insert(new Person("Petr"));
 
-        ksession.getQueryResults("personWithName");
+        try {
+            ksession.getQueryResults("personWithName");
+            fail("invocation with wrong number of arguments must fail");
+        } catch (RuntimeException e) {
+            assertTrue( e.getMessage().contains( "wrong number of arguments" ) );
+        }
     }
 
     @Test
     public void testBadAccessToParameterWithoutType() {
         final KieBuilder kieBuilder =
-                KieUtil.getKieBuilderFromClasspathResources(getClass(), false, "query-bad-parametr-access.drl");
+                KieUtil.getKieBuilderFromClasspathResources(kieBaseTestConfiguration, getClass(), false, "query-bad-parametr-access.drl");
         Assertions.assertThat(kieBuilder.getResults().getMessages(Level.ERROR).isEmpty()).isFalse();
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void testAccessToNotExistingVariable() {
-        final KieBase kieBase = KieBaseUtil.getKieBaseFromClasspathResources(getClass(), true, "query.drl");
+        final KieBase kieBase = KieBaseUtil.getKieBaseFromClasspathResources(getClass(), kieBaseTestConfiguration,"query.drl");
         final KieSession ksession = kieBase.newKieSession();
         ksession.insert(new Person("Petr"));
 

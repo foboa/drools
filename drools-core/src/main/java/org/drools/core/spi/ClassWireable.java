@@ -19,10 +19,10 @@ package org.drools.core.spi;
 
 public interface ClassWireable {
 
-    public void wire( Class<?> klass );
+    void wire( Class<?> klass );
 
-    public String getClassName();
+    String getClassName();
 
-    public Class<?> getClassType();
+    Class<?> getClassType();
 
 }

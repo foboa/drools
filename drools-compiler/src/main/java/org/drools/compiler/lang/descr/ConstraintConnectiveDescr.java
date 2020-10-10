@@ -31,6 +31,8 @@ public class ConstraintConnectiveDescr extends AnnotatedBaseDescr {
     private ConnectiveType     connective       = ConnectiveType.AND;
     private List<BaseDescr>    descrs           = new ArrayList<BaseDescr>();
 
+    private boolean negated;
+
     public ConstraintConnectiveDescr() { }
     
     public ConstraintConnectiveDescr( ConnectiveType connective ) {
@@ -110,5 +112,30 @@ public class ConstraintConnectiveDescr extends AnnotatedBaseDescr {
         if (descrs.size() == 1 && descrs.get(0) instanceof BindingDescr) {
             descrs.get(0).copyLocation(d);
         }
+    }
+
+    @Override
+    public boolean isNegated() {
+        return negated;
+    }
+
+    public void setNegated( boolean negated ) {
+        this.negated = negated;
+    }
+
+    @Override
+    public BaseDescr negate() {
+        if (connective == ConnectiveType.OR) {
+            connective = ConnectiveType.AND;
+        } else if (connective == ConnectiveType.AND) {
+            connective = ConnectiveType.OR;
+        } else {
+            throw new UnsupportedOperationException();
+        }
+
+        for (BaseDescr descr : descrs) {
+            descr.negate();
+        }
+        return this;
     }
 }

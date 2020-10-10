@@ -16,6 +16,17 @@
 
 package org.drools.core.reteoo;
 
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+
 import org.drools.core.WorkingMemoryEntryPoint;
 import org.drools.core.common.DroolsObjectInputStream;
 import org.drools.core.common.InternalFactHandle;
@@ -28,16 +39,6 @@ import org.drools.core.rule.EntryPointId;
 import org.drools.core.spi.ObjectType;
 import org.drools.core.spi.PropagationContext;
 import org.drools.core.util.bitmask.BitMask;
-
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
 
 /**
  * The Rete-OO network.
@@ -173,8 +174,7 @@ public class Rete extends ObjectSource
     }
 
     protected boolean doRemove(final RuleRemovalContext context,
-                               final ReteooBuilder builder,
-                               final InternalWorkingMemory[] workingMemories) {
+                               final ReteooBuilder builder) {
         // for now, we don't remove EntryPointNodes because they might be referenced by external sources
         return false;
     }
@@ -204,12 +204,12 @@ public class Rete extends ObjectSource
         return this.entryPoints.hashCode();
     }
 
-    public boolean equals(final Object object) {
-        return this == object || internalEquals( object );
-    }
-
     @Override
-    protected boolean internalEquals( Object object ) {
+    public boolean equals(final Object object) {
+        if (this == object) {
+            return true;
+        }
+
         if ( object == null || !(object instanceof Rete) || this.hashCode() != object.hashCode() ) {
             return false;
         }
@@ -252,7 +252,7 @@ public class Rete extends ObjectSource
     }   
     
     @Override
-    public BitMask calculateDeclaredMask(List<String> settableProperties) {
+    public BitMask calculateDeclaredMask(Class modifiedClass, List<String> settableProperties) {
         throw new UnsupportedOperationException();
     }    
 }

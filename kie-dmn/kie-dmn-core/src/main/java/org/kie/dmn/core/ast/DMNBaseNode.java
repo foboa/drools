@@ -17,24 +17,31 @@
 package org.kie.dmn.core.ast;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+
+import javax.xml.namespace.QName;
 
 import org.kie.dmn.api.core.DMNType;
 import org.kie.dmn.api.core.ast.DMNNode;
-import org.kie.dmn.model.v1_1.BusinessKnowledgeModel;
-import org.kie.dmn.model.v1_1.Decision;
-import org.kie.dmn.model.v1_1.InformationRequirement;
-import org.kie.dmn.model.v1_1.KnowledgeRequirement;
-import org.kie.dmn.model.v1_1.NamedElement;
+import org.kie.dmn.model.api.BusinessKnowledgeModel;
+import org.kie.dmn.model.api.DMNModelInstrumentedBase;
+import org.kie.dmn.model.api.Decision;
+import org.kie.dmn.model.api.Definitions;
+import org.kie.dmn.model.api.InformationRequirement;
+import org.kie.dmn.model.api.KnowledgeRequirement;
+import org.kie.dmn.model.api.NamedElement;
 
-public abstract class DMNBaseNode
-        implements DMNNode {
+public abstract class DMNBaseNode implements DMNNode {
 
     private NamedElement source;
     // need to retain dependencies order, so need to use LinkedHashMap
     private Map<String, DMNNode> dependencies = new LinkedHashMap<>();
+
+    private Map<String, QName> importAliases = new HashMap<>();
 
     public DMNBaseNode() {
     }
@@ -51,6 +58,30 @@ public abstract class DMNBaseNode
 
     public String getName() {
         return source != null ? source.getName() : null;
+    }
+
+    private Optional<Definitions> getParentDefinitions() {
+        if (source != null) {
+            DMNModelInstrumentedBase parent = source.getParent();
+            while (!(parent instanceof Definitions)) {
+                if (parent == null) {
+                    return Optional.empty();
+                }
+                parent = parent.getParent();
+            }
+            return Optional.of((Definitions) parent);
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public String getModelNamespace() {
+        return getParentDefinitions().map(Definitions::getNamespace).orElse(null);
+    }
+
+    @Override
+    public String getModelName() {
+        return getParentDefinitions().map(Definitions::getName).orElse(null);
     }
 
     public String getIdentifierString() {
@@ -94,4 +125,26 @@ public abstract class DMNBaseNode
             return Collections.emptyList();
         }
     }
+
+    public void addModelImportAliases(Map<String, QName> importAliases) {
+        this.importAliases.putAll(importAliases);
+    }
+
+    @Override
+    public Optional<String> getModelImportAliasFor(String ns, String iModelName) {
+        QName lookup = new QName(ns, iModelName);
+        return this.importAliases.entrySet().stream().filter(kv -> kv.getValue().equals(lookup)).map(kv -> kv.getKey()).findFirst();
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("DMNBaseNode [getName()=");
+        builder.append(getName());
+        builder.append(", getModelNamespace()=");
+        builder.append(getModelNamespace());
+        builder.append("]");
+        return builder.toString();
+    }
+
 }

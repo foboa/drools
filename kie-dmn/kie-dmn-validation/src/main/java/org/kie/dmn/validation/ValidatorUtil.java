@@ -18,14 +18,24 @@ package org.kie.dmn.validation;
 
 import java.util.List;
 import java.util.stream.Collectors;
+
 import org.kie.dmn.api.core.DMNMessage;
-import org.kie.dmn.model.v1_1.Definitions;
-import org.kie.dmn.model.v1_1.ItemDefinition;
+import org.kie.dmn.model.api.Association;
+import org.kie.dmn.model.api.AuthorityRequirement;
+import org.kie.dmn.model.api.DMNElement;
+import org.kie.dmn.model.api.Definitions;
+import org.kie.dmn.model.api.InformationRequirement;
+import org.kie.dmn.model.api.ItemDefinition;
+import org.kie.dmn.model.api.KnowledgeRequirement;
 
 public final class ValidatorUtil {
 
     public static String rightOfHash(final String input) {
         return input.substring(input.indexOf("#") + 1);
+    }
+
+    public static String leftOfHash(final String input) {
+        return input.substring(0, input.indexOf("#"));
     }
 
     public static ItemDefinition getRootItemDef(final ItemDefinition id) {
@@ -38,6 +48,19 @@ public final class ValidatorUtil {
 
     public static String formatMessages(final List<DMNMessage> messages) {
         return messages.stream().map(Object::toString).collect( Collectors.joining( System.lineSeparator() ) );
+    }
+
+    public static boolean doesDefinitionsContainIdForDMNEdge(Definitions definitions, String id) {
+        boolean result = definitions.getArtifact().stream().anyMatch(a -> (a.getId().equals(id) && a instanceof Association));
+        if (result) {
+            return true;
+        }
+        return definitions.getDrgElement()
+                          .stream()
+                          .flatMap(e -> e.getChildren().stream())
+                          .filter(e -> (e instanceof InformationRequirement || e instanceof KnowledgeRequirement || e instanceof AuthorityRequirement))
+                          .map(e -> (DMNElement) e)
+                          .anyMatch(e -> (e.getId().equals(id)));
     }
 
     private ValidatorUtil() {

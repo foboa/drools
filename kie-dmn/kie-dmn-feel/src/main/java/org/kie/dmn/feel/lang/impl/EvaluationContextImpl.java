@@ -16,38 +16,66 @@
 
 package org.kie.dmn.feel.lang.impl;
 
+import java.util.ArrayDeque;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.function.Supplier;
+
 import org.kie.dmn.api.core.DMNRuntime;
 import org.kie.dmn.api.feel.runtime.events.FEELEvent;
 import org.kie.dmn.api.feel.runtime.events.FEELEventListener;
 import org.kie.dmn.feel.lang.EvaluationContext;
 import org.kie.dmn.feel.util.EvalHelper;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Stack;
-import java.util.function.Supplier;
-
 public class EvaluationContextImpl implements EvaluationContext {
 
     private final FEELEventListenersManager eventsManager;
-    private       Stack<ExecutionFrame> stack;
+    private ArrayDeque<ExecutionFrame> stack;
     private DMNRuntime dmnRuntime;
+    private boolean performRuntimeTypeCheck = false;
+    private ClassLoader rootClassLoader;
 
-    public EvaluationContextImpl(FEELEventListenersManager eventsManager) {
+    private EvaluationContextImpl(ClassLoader cl, FEELEventListenersManager eventsManager, Deque<ExecutionFrame> stack) {
         this.eventsManager = eventsManager;
-        this.stack = new Stack<>();
+        this.rootClassLoader = cl;
+        this.stack = new ArrayDeque<>(stack);
+    }
+
+    public EvaluationContextImpl(ClassLoader cl, FEELEventListenersManager eventsManager) {
+        this(cl, eventsManager, 32);
+    }
+
+    public EvaluationContextImpl(ClassLoader cl, FEELEventListenersManager eventsManager, int size) {
+        this(cl, eventsManager, new ArrayDeque<>());
         // we create a rootFrame to hold all the built in functions
         push( RootExecutionFrame.INSTANCE );
         // and then create a global frame to be the starting frame
         // for function evaluation
-        ExecutionFrameImpl global = new ExecutionFrameImpl( RootExecutionFrame.INSTANCE );
+        ExecutionFrameImpl global = new ExecutionFrameImpl(RootExecutionFrame.INSTANCE, size);
         push( global );
     }
 
+    @Deprecated
     public EvaluationContextImpl(FEELEventListenersManager eventsManager, DMNRuntime dmnRuntime) {
-        this(eventsManager);
+        this(dmnRuntime.getRootClassLoader(), eventsManager);
         this.dmnRuntime = dmnRuntime;
+    }
+
+    private EvaluationContextImpl(FEELEventListenersManager eventsManager) {
+        this.eventsManager = eventsManager;
+    }
+
+    @Override
+    public EvaluationContext current() {
+        EvaluationContextImpl ec = new EvaluationContextImpl(eventsManager);
+        ec.stack = stack.clone();
+        ec.rootClassLoader = this.rootClassLoader;
+        ec.dmnRuntime = this.dmnRuntime;
+        ec.performRuntimeTypeCheck = this.performRuntimeTypeCheck;
+        return ec;
     }
 
     public void push(ExecutionFrame obj) {
@@ -62,13 +90,17 @@ public class EvaluationContextImpl implements EvaluationContext {
         return stack.peek();
     }
 
-    public Stack<ExecutionFrame> getStack() {
+    public Deque<ExecutionFrame> getStack() {
         return this.stack;
     }
 
     @Override
     public void enterFrame() {
         push( new ExecutionFrameImpl( peek() /*, symbols, scope*/ ) );
+    }
+
+    public void enterFrame(int size) {
+        push(new ExecutionFrameImpl(peek(), size));
     }
 
     @Override
@@ -135,9 +167,14 @@ public class EvaluationContextImpl implements EvaluationContext {
 
     @Override
     public Map<String, Object> getAllValues() {
-        Map<String, Object> values = new HashMap<>(  );
-        for( int i = 0; i < stack.size(); i++ ) {
-            values.putAll( stack.get( i ).getAllValues() );
+        if (stack.peek().getRootObject() != null) {
+            throw new RuntimeException();
+        }
+        int initialCapacity = (stack.peek().getAllValues().size() + stack.peekLast().getAllValues().size()) * 2;
+        Map<String, Object> values = new HashMap<>(initialCapacity);
+        Iterator<ExecutionFrame> it = stack.descendingIterator();
+        while ( it.hasNext() ) {
+            values.putAll( it.next().getAllValues() );
         }
         return values;
     }
@@ -152,8 +189,36 @@ public class EvaluationContextImpl implements EvaluationContext {
         return eventsManager.getListeners();
     }
 
+    @Override
     public DMNRuntime getDMNRuntime() {
         return dmnRuntime;
+    }
+
+    public void setDMNRuntime(DMNRuntime runtime) {
+        this.dmnRuntime = runtime;
+    }
+
+    @Override
+    public ClassLoader getRootClassLoader() {
+        return this.rootClassLoader;
+    }
+
+    public void setPerformRuntimeTypeCheck(boolean performRuntimeTypeCheck) {
+        this.performRuntimeTypeCheck = performRuntimeTypeCheck;
+    }
+
+    public boolean isPerformRuntimeTypeCheck() {
+        return performRuntimeTypeCheck;
+    }
+
+    @Override
+    public void setRootObject(Object v) {
+        peek().setRootObject(v);
+    }
+
+    @Override
+    public Object getRootObject() {
+        return peek().getRootObject();
     }
 
 }

@@ -3,7 +3,7 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -11,9 +11,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
 package org.drools.core.definitions;
+
+import java.io.Externalizable;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.drools.core.base.ClassFieldAccessorCache;
 import org.drools.core.base.ClassFieldAccessorStore;
@@ -25,20 +30,13 @@ import org.drools.core.rule.Function;
 import org.drools.core.rule.ImportDeclaration;
 import org.drools.core.rule.TypeDeclaration;
 import org.drools.core.rule.WindowDeclaration;
-import org.drools.core.ruleunit.RuleUnitRegistry;
+import org.drools.core.ruleunit.RuleUnitDescriptionLoader;
 import org.kie.api.definition.KiePackage;
 import org.kie.api.definition.process.Process;
 import org.kie.api.definition.type.FactType;
-import org.kie.api.internal.io.ResourceTypePackage;
 import org.kie.api.io.Resource;
-import org.kie.api.io.ResourceType;
 import org.kie.api.runtime.rule.AccumulateFunction;
-import org.kie.soup.project.datamodel.commons.types.TypeResolver;
-
-import java.io.Externalizable;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import org.drools.core.addon.TypeResolver;
 
 public interface InternalKnowledgePackage extends KiePackage,
                                                   Externalizable {
@@ -55,10 +53,11 @@ public interface InternalKnowledgePackage extends KiePackage,
 
     void setError(String summary);
 
-    Map<ResourceType, ResourceTypePackage> getResourceTypePackages();
+    ResourceTypePackageRegistry getResourceTypePackages();
 
-    Map<String, String> getGlobals();
+    Map<String, Class<?>> getGlobals();
 
+    @Deprecated
     Map<String, Process> getRuleFlows();
 
     Map<String, TypeDeclaration> getTypeDeclarations();
@@ -85,6 +84,7 @@ public interface InternalKnowledgePackage extends KiePackage,
 
     void addRule(RuleImpl rule);
 
+    @Deprecated
     void addProcess(Process process);
 
     void addTypeDeclaration(TypeDeclaration typeDecl);
@@ -99,20 +99,25 @@ public interface InternalKnowledgePackage extends KiePackage,
 
     void removeFunction(String functionName);
 
+    @Deprecated
     void removeRuleFlow(String id);
 
     void removeRule(RuleImpl rule);
 
     void removeGlobal(String identifier);
 
+    void removeTypeDeclaration(String type);
+
     boolean removeObjectsGeneratedFromResource(Resource resource);
 
     List<TypeDeclaration> removeTypesGeneratedFromResource(Resource resource);
 
+    List<RuleImpl> getRulesGeneratedFromResource(Resource resource);
     List<RuleImpl> removeRulesGeneratedFromResource(Resource resource);
 
     List<Function> removeFunctionsGeneratedFromResource(Resource resource);
 
+    @Deprecated
     List<Process> removeProcessesGeneratedFromResource(Resource resource);
 
     boolean removeFromResourceTypePackageGeneratedFromResource(Resource resource);
@@ -135,9 +140,9 @@ public interface InternalKnowledgePackage extends KiePackage,
 
     TypeResolver getTypeResolver();
 
-    void setTypeResolver(TypeResolver typeResolver);
+    void setClassLoader(ClassLoader classLoader);
 
-    RuleUnitRegistry getRuleUnitRegistry();
+    RuleUnitDescriptionLoader getRuleUnitDescriptionLoader();
 
     ClassFieldAccessorStore getClassFieldAccessorStore();
 
